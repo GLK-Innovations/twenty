@@ -1,22 +1,24 @@
+import { createOneSelectFieldMetadataForIntegrationTests } from 'test/integration/metadata/suites/field-metadata/utils/create-one-select-field-metadata-for-integration-tests.util';
 import { createOneObjectMetadata } from 'test/integration/metadata/suites/object-metadata/utils/create-one-object-metadata.util';
 import { deleteOneObjectMetadata } from 'test/integration/metadata/suites/object-metadata/utils/delete-one-object-metadata.util';
 import { updateOneObjectMetadata } from 'test/integration/metadata/suites/object-metadata/utils/update-one-object-metadata.util';
-import { destroyOneCoreView } from 'test/integration/metadata/suites/view/utils/destroy-one-core-view.util';
+import { destroyOneView } from 'test/integration/metadata/suites/view/utils/destroy-one-view.util';
 import { makeRestAPIRequest } from 'test/integration/rest/utils/make-rest-api-request.util';
 import {
+  assertMetadataRestListResponse,
   assertRestApiErrorNotFoundResponse,
   assertRestApiSuccessfulResponse,
 } from 'test/integration/rest/utils/rest-test-assertions.util';
 import { createTestViewWithRestApi } from 'test/integration/rest/utils/view-rest-api.util';
 import { generateRecordName } from 'test/integration/utils/generate-record-name';
 import { assertViewStructure } from 'test/integration/utils/view-test.util';
+import { ViewOpenRecordIn, ViewType } from 'twenty-shared/types';
 
-import { ViewKey } from 'src/engine/metadata-modules/view/enums/view-key.enum';
-import { ViewOpenRecordIn } from 'src/engine/metadata-modules/view/enums/view-open-record-in';
-import { ViewType } from 'src/engine/metadata-modules/view/enums/view-type.enum';
+import { type ViewDTO } from 'src/engine/metadata-modules/view/dtos/view.dto';
 
 describe('View REST API', () => {
   let testObjectMetadataId: string;
+  let testSelectFieldMetadataId: string;
   let testViewId: string | undefined;
 
   beforeAll(async () => {
@@ -35,6 +37,15 @@ describe('View REST API', () => {
     });
 
     testObjectMetadataId = objectMetadataId;
+
+    const { selectFieldMetadataId } =
+      await createOneSelectFieldMetadataForIntegrationTests({
+        input: {
+          objectMetadataId,
+        },
+      });
+
+    testSelectFieldMetadataId = selectFieldMetadataId;
   });
 
   afterAll(async () => {
@@ -55,7 +66,7 @@ describe('View REST API', () => {
   afterEach(async () => {
     if (!testViewId) return;
 
-    await destroyOneCoreView({
+    await destroyOneView({
       viewId: testViewId,
       expectToFail: false,
     });
@@ -70,8 +81,7 @@ describe('View REST API', () => {
         bearer: APPLE_JANE_ADMIN_ACCESS_TOKEN,
       });
 
-      assertRestApiSuccessfulResponse(response);
-      expect(Array.isArray(response.body)).toBe(true);
+      assertMetadataRestListResponse<ViewDTO>(response);
     });
 
     it('should return views filtered by objectMetadataId', async () => {
@@ -81,11 +91,10 @@ describe('View REST API', () => {
         bearer: APPLE_JANE_ADMIN_ACCESS_TOKEN,
       });
 
-      assertRestApiSuccessfulResponse(response);
-      expect(Array.isArray(response.body)).toBe(true);
+      const views = assertMetadataRestListResponse<ViewDTO>(response);
 
-      if (response.body.length > 0) {
-        assertViewStructure(response.body[0]);
+      if (views.length > 0) {
+        assertViewStructure(views[0]);
       }
     });
   });
@@ -97,7 +106,7 @@ describe('View REST API', () => {
         name: viewName,
         icon: 'IconTable',
         type: ViewType.TABLE,
-        key: ViewKey.INDEX,
+        key: null,
         position: 0,
         isCompact: false,
         openRecordIn: ViewOpenRecordIn.SIDE_PANEL,
@@ -111,7 +120,7 @@ describe('View REST API', () => {
         objectMetadataId: testObjectMetadataId,
         icon: 'IconTable',
         type: ViewType.TABLE,
-        key: ViewKey.INDEX,
+        key: null,
         position: 0,
         isCompact: false,
         openRecordIn: ViewOpenRecordIn.SIDE_PANEL,
@@ -129,6 +138,7 @@ describe('View REST API', () => {
         isCompact: true,
         openRecordIn: ViewOpenRecordIn.SIDE_PANEL,
         objectMetadataId: testObjectMetadataId,
+        mainGroupByFieldMetadataId: testSelectFieldMetadataId,
       });
 
       testViewId = kanbanView.id;
@@ -150,7 +160,7 @@ describe('View REST API', () => {
         name: viewName,
         icon: 'IconTable',
         type: ViewType.TABLE,
-        key: ViewKey.INDEX,
+        key: null,
         position: 0,
         isCompact: false,
         openRecordIn: ViewOpenRecordIn.SIDE_PANEL,
@@ -191,7 +201,7 @@ describe('View REST API', () => {
         name: viewName,
         icon: 'IconTable',
         type: ViewType.TABLE,
-        key: ViewKey.INDEX,
+        key: null,
         position: 0,
         isCompact: false,
         openRecordIn: ViewOpenRecordIn.SIDE_PANEL,
@@ -206,6 +216,7 @@ describe('View REST API', () => {
         type: ViewType.KANBAN,
         isCompact: true,
         openRecordIn: ViewOpenRecordIn.SIDE_PANEL,
+        mainGroupByFieldMetadataId: testSelectFieldMetadataId,
       };
 
       const response = await makeRestAPIRequest({
@@ -250,7 +261,7 @@ describe('View REST API', () => {
         name: viewName,
         icon: 'IconTable',
         type: ViewType.TABLE,
-        key: ViewKey.INDEX,
+        key: null,
         position: 0,
         isCompact: false,
         openRecordIn: ViewOpenRecordIn.SIDE_PANEL,

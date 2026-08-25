@@ -1,52 +1,53 @@
-import { isPageLayoutInEditModeComponentState } from '@/page-layout/states/isPageLayoutInEditModeComponentState';
+import { useIsPageLayoutInEditMode } from '@/page-layout/hooks/useIsPageLayoutInEditMode';
+import { type PageLayoutWidget } from '@/page-layout/types/PageLayoutWidget';
 import { PageLayoutWidgetNoDataDisplay } from '@/page-layout/widgets/components/PageLayoutWidgetNoDataDisplay';
-import { ChartSkeletonLoader } from '@/page-layout/widgets/graph/components/ChartSkeletonLoader';
-import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
-import styled from '@emotion/styled';
+import { WidgetSkeletonLoader } from '@/page-layout/widgets/components/WidgetSkeletonLoader';
+import { styled } from '@linaria/react';
 import { useState } from 'react';
-import { isDefined } from 'twenty-shared/utils';
-import { type PageLayoutWidget } from '~/generated-metadata/graphql';
+import { getSafeUrl, isDefined } from 'twenty-shared/utils';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 const StyledContainer = styled.div<{ $isEditMode: boolean }>`
-  border-radius: ${({ theme }) => theme.border.radius.md};
-  background: ${({ theme }) => theme.background.primary};
+  background: ${themeCssVariables.background.primary};
+  border-radius: ${themeCssVariables.border.radius.md};
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  pointer-events: ${({ $isEditMode }) => ($isEditMode ? 'none' : 'auto')};
   position: relative;
   width: 100%;
-  pointer-events: ${({ $isEditMode }) => ($isEditMode ? 'none' : 'auto')};
 `;
 
 const StyledIframe = styled.iframe<{ $isEditMode: boolean }>`
   border: none;
   flex: 1;
   height: 100%;
-  width: 100%;
   pointer-events: ${({ $isEditMode }) => ($isEditMode ? 'none' : 'auto')};
+  width: 100%;
 `;
 
 const StyledLoadingContainer = styled.div`
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  background: ${themeCssVariables.background.primary};
   bottom: 0;
-  padding-top: ${({ theme }) => theme.spacing(2)};
-  padding-left: ${({ theme }) => theme.spacing(2)};
-  background: ${({ theme }) => theme.background.primary};
+  left: 0;
+  padding-left: ${themeCssVariables.spacing[2]};
+  padding-top: ${themeCssVariables.spacing[2]};
   pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: 0;
   z-index: 1;
 `;
 
 const StyledErrorContainer = styled.div`
+  align-items: center;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
   height: 100%;
-  padding: ${({ theme }) => theme.spacing(4)};
+  justify-content: center;
+  padding: ${themeCssVariables.spacing[4]};
   text-align: center;
 `;
 
@@ -55,13 +56,11 @@ export type IframeWidgetProps = {
 };
 
 export const IframeWidget = ({ widget }: IframeWidgetProps) => {
-  const isPageLayoutInEditMode = useRecoilComponentValue(
-    isPageLayoutInEditModeComponentState,
-  );
+  const isPageLayoutInEditMode = useIsPageLayoutInEditMode();
 
   const configuration = widget.configuration;
 
-  if (!configuration || !('url' in configuration)) {
+  if (!isDefined(configuration) || !('url' in configuration)) {
     throw new Error(`Invalid configuration for widget ${widget.id}`);
   }
 
@@ -80,11 +79,14 @@ export const IframeWidget = ({ widget }: IframeWidgetProps) => {
     setHasError(true);
   };
 
-  if (hasError || !isDefined(url)) {
+  const safeUrl = isDefined(url) ? getSafeUrl(url) : undefined;
+  const isHttpUrl = isDefined(safeUrl) && /^https?:\/\//i.test(safeUrl);
+
+  if (hasError || !isHttpUrl) {
     return (
       <StyledContainer $isEditMode={isPageLayoutInEditMode}>
         <StyledErrorContainer>
-          <PageLayoutWidgetNoDataDisplay widgetId={widget.id} />
+          <PageLayoutWidgetNoDataDisplay />
         </StyledErrorContainer>
       </StyledContainer>
     );
@@ -94,16 +96,16 @@ export const IframeWidget = ({ widget }: IframeWidgetProps) => {
     <StyledContainer $isEditMode={isPageLayoutInEditMode}>
       {isLoading && (
         <StyledLoadingContainer>
-          <ChartSkeletonLoader />
+          <WidgetSkeletonLoader />
         </StyledLoadingContainer>
       )}
       <StyledIframe
         $isEditMode={isPageLayoutInEditMode}
-        src={url}
+        src={safeUrl}
         title={title}
         onLoad={handleIframeLoad}
         onError={handleIframeError}
-        sandbox="allow-scripts allow-forms allow-popups"
+        sandbox="allow-scripts allow-forms allow-popups allow-same-origin"
         allow="encrypted-media"
         allowFullScreen
       />

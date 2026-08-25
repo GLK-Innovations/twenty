@@ -1,9 +1,10 @@
-import { FeatureFlagKey } from 'src/engine/core-modules/feature-flag/enums/feature-flag-key.enum';
+import { FeatureFlagKey } from 'twenty-shared/types';
 
 type FeatureFlagMetadata = {
   label: string;
   description: string;
-  imagePath: string;
+  icon: string;
+  imagePath?: string;
 };
 
 export type PublicFeatureFlag = {
@@ -13,30 +14,30 @@ export type PublicFeatureFlag = {
 
 export const PUBLIC_FEATURE_FLAGS: PublicFeatureFlag[] = [
   {
-    key: FeatureFlagKey.IS_IMAP_SMTP_CALDAV_ENABLED,
+    key: FeatureFlagKey.IS_CALENDAR_WEEK_VIEW_ENABLED,
     metadata: {
-      label: 'IMAP, SMTP, CalDAV',
+      label: 'Calendar Day and Week Views',
       description:
-        'Easily add email accounts from any provider that supports IMAP, send emails with SMTP (and soon, sync calendars with CalDAV)',
-      imagePath:
-        'https://twenty.com/images/lab/is-imap-smtp-caldav-enabled.png',
+        'Display calendar records in daily or weekly layouts with optional end dates',
+      icon: 'IconCalendarWeek',
     },
   },
   {
-    key: FeatureFlagKey.IS_MESSAGE_FOLDER_CONTROL_ENABLED,
+    key: FeatureFlagKey.IS_JUNCTION_RELATIONS_ENABLED,
     metadata: {
-      label: 'Message Folder Control',
-      description: 'Control which folders are synced',
-      imagePath:
-        'https://twenty.com/images/lab/is-message-folder-control-enabled.png',
+      label: 'Junction Relations',
+      description:
+        'Enable many-to-many relations through junction tables configuration',
+      icon: 'IconRelationManyToMany',
     },
   },
   {
-    key: FeatureFlagKey.IS_PAGE_LAYOUT_ENABLED,
+    key: FeatureFlagKey.IS_LIST_VIEW_ENABLED,
     metadata: {
-      label: 'Dashboards',
-      description: 'Enable dashboards',
-      imagePath: 'https://twenty.com/images/lab/is-dashboards-enabled.png',
+      label: 'List View',
+      description:
+        'Display records in a list layout with collapsible groups and inline fields',
+      icon: 'IconList',
     },
   },
   ...(process.env.CLOUDFLARE_API_KEY

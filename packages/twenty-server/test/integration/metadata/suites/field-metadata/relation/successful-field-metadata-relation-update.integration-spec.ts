@@ -1,4 +1,5 @@
 import { createOneFieldMetadata } from 'test/integration/metadata/suites/field-metadata/utils/create-one-field-metadata.util';
+import { findManyFieldsMetadata } from 'test/integration/metadata/suites/field-metadata/utils/find-many-fields-metadata.util';
 import { updateOneFieldMetadata } from 'test/integration/metadata/suites/field-metadata/utils/update-one-field-metadata.util';
 import { createOneObjectMetadata } from 'test/integration/metadata/suites/object-metadata/utils/create-one-object-metadata.util';
 import { createRelationBetweenObjects } from 'test/integration/metadata/suites/object-metadata/utils/create-relation-between-objects.util';
@@ -103,6 +104,93 @@ describe('Field metadata relation update should succeed', () => {
     expect(errors).toBeUndefined();
     expect(data).toBeDefined();
     expect(data.updateOneField.isActive).toBe(false);
+  });
+
+  it('should successfully update the name of a relation field', async () => {
+    const { fields } = await findManyFieldsMetadata({
+      input: {
+        filter: {
+          id: { eq: globalTestContext.employerFieldMetadataId },
+        },
+        paging: { first: 1 },
+      },
+      gqlFields: `
+        id
+        name
+      `,
+    });
+
+    const field = fields[0]?.node;
+
+    expect(field?.name).toBe('employer');
+
+    const { data, errors } = await updateOneFieldMetadata({
+      expectToFail: false,
+      input: {
+        idToUpdate: globalTestContext.employerFieldMetadataId,
+        updatePayload: {
+          name: 'leadEmployer',
+        },
+      },
+      gqlFields: `
+        id
+        name
+      `,
+    });
+
+    expect(errors).toBeUndefined();
+    expect(data).toBeDefined();
+    expect(data.updateOneField.name).toBe('leadEmployer');
+  });
+
+  // Regression test for https://github.com/twentyhq/twenty/issues/21751: a non-nullable relation has no literal defaultValue and must still be updatable.
+  it('should successfully update a non-nullable relation field', async () => {
+    const {
+      data: {
+        createOneField: { id: nonNullableRelationFieldId, isNullable },
+      },
+    } = await createOneFieldMetadata({
+      input: {
+        objectMetadataId: globalTestContext.employeeObjectId,
+        name: 'mandatoryEmployer',
+        label: 'Mandatory employer',
+        isLabelSyncedWithName: false,
+        isNullable: false,
+        type: FieldMetadataType.RELATION,
+        relationCreationPayload: {
+          targetFieldLabel: 'mandatoryEmployees',
+          type: RelationType.MANY_TO_ONE,
+          targetObjectMetadataId: globalTestContext.enterpriseObjectId,
+          targetFieldIcon: 'IconBuildingSkyscraper',
+        },
+      },
+      gqlFields: `
+        id
+        isNullable
+      `,
+    });
+
+    expect(isNullable).toBe(false);
+
+    const { data, errors } = await updateOneFieldMetadata({
+      expectToFail: false,
+      input: {
+        idToUpdate: nonNullableRelationFieldId,
+        updatePayload: {
+          description: 'Updated description for a required relation',
+        },
+      },
+      gqlFields: `
+        id
+        description
+      `,
+    });
+
+    expect(errors).toBeUndefined();
+    expect(data).toBeDefined();
+    expect(data.updateOneField.description).toBe(
+      'Updated description for a required relation',
+    );
   });
 });
 
@@ -228,7 +316,6 @@ describe('Field metadata self-relation update should succeed', () => {
     const mentorFieldId = createdField.id;
     const menteesFieldId = createdField.relation.targetFieldMetadata.id;
 
-    // Update the MANY_TO_ONE side
     const { data: mentorUpdateData } = await updateOneFieldMetadata({
       expectToFail: false,
       input: {
@@ -251,7 +338,6 @@ describe('Field metadata self-relation update should succeed', () => {
       description: 'The mentor of this person',
     });
 
-    // Update the ONE_TO_MANY side
     const { data: menteesUpdateData } = await updateOneFieldMetadata({
       expectToFail: false,
       input: {

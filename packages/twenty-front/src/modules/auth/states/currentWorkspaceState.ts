@@ -1,5 +1,9 @@
-import { createState } from 'twenty-ui/utilities';
-import { type Role, type Workspace } from '~/generated/graphql';
+import { createAtomState } from '@/ui/utilities/state/jotai/utils/createAtomState';
+import {
+  type Application,
+  type Role,
+  type Workspace,
+} from '~/generated-metadata/graphql';
 
 export type CurrentWorkspace = Pick<
   Workspace,
@@ -11,9 +15,12 @@ export type CurrentWorkspace = Pick<
   | 'featureFlags'
   | 'activationStatus'
   | 'billingSubscriptions'
+  | 'billingEntitlements'
+  | 'billingCustomer'
   | 'currentBillingSubscription'
   | 'workspaceMembersCount'
   | 'isPublicInviteLinkEnabled'
+  | 'workspaceDiscoverability'
   | 'isGoogleAuthEnabled'
   | 'isGoogleAuthBypassEnabled'
   | 'isMicrosoftAuthEnabled'
@@ -21,20 +28,33 @@ export type CurrentWorkspace = Pick<
   | 'isPasswordAuthEnabled'
   | 'isPasswordAuthBypassEnabled'
   | 'isCustomDomainEnabled'
-  | 'hasValidEnterpriseKey'
+  | 'hasValidSignedEnterpriseKey'
+  | 'hasValidEnterpriseValidityToken'
   | 'subdomain'
   | 'customDomain'
   | 'workspaceUrls'
-  | 'metadataVersion'
   | 'isTwoFactorAuthenticationEnforced'
   | 'trashRetentionDays'
-  | 'routerModel'
+  | 'eventLogRetentionDays'
+  | 'fastModel'
+  | 'smartModel'
+  | 'aiAdditionalInstructions'
   | 'editableProfileFields'
+  | 'enabledAiModelIds'
+  | 'useRecommendedModels'
+  | 'isInternalMessagesImportEnabled'
 > & {
   defaultRole?: Omit<Role, 'workspaceMembers' | 'agents' | 'apiKeys'> | null;
+  workspaceCustomApplication: Pick<Application, 'id'> | null;
+  installedApplications: Pick<
+    Application,
+    'id' | 'name' | 'universalIdentifier' | 'logoUrl'
+  >[];
 };
 
-export const currentWorkspaceState = createState<CurrentWorkspace | null>({
+export const currentWorkspaceState = createAtomState<CurrentWorkspace | null>({
   key: 'currentWorkspaceState',
   defaultValue: null,
+  useLocalStorage: true,
+  localStorageOptions: { getOnInit: true },
 });

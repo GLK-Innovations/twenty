@@ -1,14 +1,17 @@
-import styled from '@emotion/styled';
-import { plural } from '@lingui/core/macro';
-import { useMemo, useRef, useState, type MouseEvent } from 'react';
+import { styled } from '@linaria/react';
+import { plural, t } from '@lingui/core/macro';
+import { Fragment, useMemo, useRef, useState, type MouseEvent } from 'react';
 
 import { Dropdown } from '@/ui/layout/dropdown/components/Dropdown';
 import { DropdownMenuItemsContainer } from '@/ui/layout/dropdown/components/DropdownMenuItemsContainer';
 import { DropdownMenuSearchInput } from '@/ui/layout/dropdown/components/DropdownMenuSearchInput';
+import { DropdownMenuSectionLabel } from '@/ui/layout/dropdown/components/DropdownMenuSectionLabel';
 import { DropdownMenuSeparator } from '@/ui/layout/dropdown/components/DropdownMenuSeparator';
 
 import { useFilteredObjectMetadataItems } from '@/object-metadata/hooks/useFilteredObjectMetadataItems';
-import { isObjectMetadataAvailableForRelation } from '@/object-metadata/utils/isObjectMetadataAvailableForRelation';
+import { useObjectMetadataSelectHelpers } from '@/object-metadata/hooks/useObjectMetadataSelectHelpers';
+import { isAdvancedRelationTargetObjectMetadata } from '@/object-metadata/utils/isAdvancedRelationTargetObjectMetadata';
+import { isObjectMetadataEligibleAsRelationTarget } from '@/object-metadata/utils/isObjectMetadataEligibleAsRelationTarget';
 import { MultiSelectControl } from '@/ui/input/components/MultiSelectControl';
 import { DropdownContent } from '@/ui/layout/dropdown/components/DropdownContent';
 import { GenericDropdownContentWidth } from '@/ui/layout/dropdown/constants/GenericDropdownContentWidth';
@@ -18,10 +21,12 @@ import { SelectableList } from '@/ui/layout/selectable-list/components/Selectabl
 import { SelectableListItem } from '@/ui/layout/selectable-list/components/SelectableListItem';
 import { useSelectableList } from '@/ui/layout/selectable-list/hooks/useSelectableList';
 import { selectedItemIdComponentState } from '@/ui/layout/selectable-list/states/selectedItemIdComponentState';
-import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import { isNonEmptyString } from '@sniptt/guards';
 import { isDefined } from 'twenty-shared/utils';
-import { IconBox, useIcons, type IconComponent } from 'twenty-ui/display';
+import { IconBox, type IconComponent } from 'twenty-ui/icon';
 import { MenuItem, MenuItemMultiSelect } from 'twenty-ui/navigation';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 export type SelectSizeVariant = 'small' | 'default';
 
@@ -49,6 +54,7 @@ export type SettingsMorphRelationMultiSelectProps = {
   callToActionButton?: CallToActionButton;
   dropdownOffset?: DropdownOffset;
   hasRightElement?: boolean;
+  error?: string;
 };
 
 const StyledContainer = styled.div<{ fullWidth?: boolean }>`
@@ -56,16 +62,24 @@ const StyledContainer = styled.div<{ fullWidth?: boolean }>`
 `;
 
 const StyledLabel = styled.span`
-  color: ${({ theme }) => theme.font.color.light};
+  color: ${themeCssVariables.font.color.light};
   display: block;
-  font-size: ${({ theme }) => theme.font.size.xs};
-  font-weight: ${({ theme }) => theme.font.weight.semiBold};
-  margin-bottom: ${({ theme }) => theme.spacing(1)};
+  font-size: ${themeCssVariables.font.size.xs};
+  font-weight: ${themeCssVariables.font.weight.semiBold};
+  margin-bottom: ${themeCssVariables.spacing[1]};
 `;
 
 const StyledDescription = styled.span`
-  color: ${({ theme }) => theme.font.color.light};
-  font-size: ${({ theme }) => theme.font.size.sm};
+  color: ${themeCssVariables.font.color.light};
+  font-size: ${themeCssVariables.font.size.sm};
+  line-height: ${themeCssVariables.text.lineHeight.lg};
+`;
+
+const StyledError = styled.span`
+  color: ${themeCssVariables.color.red};
+  display: block;
+  font-size: ${themeCssVariables.font.size.xs};
+  margin-top: ${themeCssVariables.spacing[1]};
 `;
 
 export const SettingsMorphRelationMultiSelect = ({
@@ -85,37 +99,50 @@ export const SettingsMorphRelationMultiSelect = ({
   callToActionButton,
   dropdownOffset,
   hasRightElement,
+  error,
 }: SettingsMorphRelationMultiSelectProps) => {
   const selectContainerRef = useRef<HTMLDivElement>(null);
 
   const [searchInputValue, setSearchInputValue] = useState('');
 
+  const { getSelectIconPropsFromObjectMetadataItem } =
+    useObjectMetadataSelectHelpers();
   const { activeObjectMetadataItems } = useFilteredObjectMetadataItems();
 
-  const { getIcon } = useIcons();
+  const [localSelectedObjectMetadataIds, setLocalSelectedObjectMetadataIds] =
+    useState<string[]>(selectedObjectMetadataIds);
+
   const options = activeObjectMetadataItems
-    .filter(isObjectMetadataAvailableForRelation)
+    .filter(isObjectMetadataEligibleAsRelationTarget)
     .sort((item1, item2) =>
       item1.labelSingular.localeCompare(item2.labelSingular),
     )
     .map((objectMetadataItem) => ({
       label: objectMetadataItem.labelSingular,
-      Icon: getIcon(objectMetadataItem.icon),
       objectMetadataId: objectMetadataItem.id,
+      isAdvanced: isAdvancedRelationTargetObjectMetadata(objectMetadataItem),
+      ...getSelectIconPropsFromObjectMetadataItem(objectMetadataItem),
     }));
 
   const selectedOptions = options.filter((option) =>
-    selectedObjectMetadataIds.includes(option.objectMetadataId),
+    localSelectedObjectMetadataIds.includes(option.objectMetadataId),
   );
 
-  const filteredOptions = useMemo(
-    () =>
-      searchInputValue
-        ? options.filter(({ label }) =>
-            label.toLowerCase().includes(searchInputValue.toLowerCase()),
-          )
-        : options,
-    [options, searchInputValue],
+  const filteredOptions = useMemo(() => {
+    const matchingOptions = searchInputValue
+      ? options.filter(({ label }) =>
+          label.toLowerCase().includes(searchInputValue.toLowerCase()),
+        )
+      : options;
+
+    return [
+      ...matchingOptions.filter(({ isAdvanced }) => !isAdvanced),
+      ...matchingOptions.filter(({ isAdvanced }) => isAdvanced),
+    ];
+  }, [options, searchInputValue]);
+
+  const advancedSectionStartIndex = filteredOptions.findIndex(
+    ({ isAdvanced }) => isAdvanced,
   );
 
   const isDisabled =
@@ -129,9 +156,11 @@ export const SettingsMorphRelationMultiSelect = ({
       ? selectContainerRef.current?.clientWidth
       : dropdownWidth;
 
-  const selectableItemIdArray = filteredOptions.map((option) => option.label);
+  const selectableItemIdArray = filteredOptions.map(
+    (option) => option.objectMetadataId,
+  );
 
-  const selectedItemId = useRecoilComponentValue(
+  const selectedItemId = useAtomComponentStateValue(
     selectedItemIdComponentState,
     dropdownId,
   );
@@ -139,8 +168,8 @@ export const SettingsMorphRelationMultiSelect = ({
   const { setSelectedItemId } = useSelectableList(dropdownId);
 
   const handleDropdownOpen = () => {
-    if (selectedOptions && selectedOptions.length > 0 && !searchInputValue) {
-      setSelectedItemId(selectedOptions[0].label);
+    if (selectedOptions.length > 0 && !searchInputValue) {
+      setSelectedItemId(selectedOptions[0].objectMetadataId);
     }
   };
 
@@ -221,43 +250,58 @@ export const SettingsMorphRelationMultiSelect = ({
                     focusId={dropdownId}
                     selectableItemIdArray={selectableItemIdArray}
                   >
-                    {filteredOptions.map((option) => (
-                      <SelectableListItem
-                        key={`${option.objectMetadataId}-${option.label}`}
-                        itemId={option.label}
-                        onEnter={() => {
-                          const newSelectedObjectMetadataIds =
-                            addOrRemoveFromArray(
-                              selectedObjectMetadataIds,
-                              option.objectMetadataId,
-                            );
-                          onChange?.(newSelectedObjectMetadataIds);
-                          onBlur?.();
-                          closeDropdown(dropdownId);
-                        }}
-                      >
-                        <MenuItemMultiSelect
-                          className=""
-                          LeftIcon={option.Icon ?? undefined}
-                          text={option.label}
-                          selected={selectedObjectMetadataIds.some(
-                            (selectedObjectMetadataId) =>
-                              selectedObjectMetadataId ===
-                              option.objectMetadataId,
-                          )}
-                          isKeySelected={selectedItemId === option.label}
-                          onSelectChange={() => {
-                            let newSelectedObjectMetadataIds =
+                    {filteredOptions.map((option, optionIndex) => (
+                      <Fragment key={option.objectMetadataId}>
+                        {optionIndex === advancedSectionStartIndex && (
+                          <>
+                            {optionIndex > 0 && <DropdownMenuSeparator />}
+                            <DropdownMenuSectionLabel label={t`Advanced`} />
+                          </>
+                        )}
+                        <SelectableListItem
+                          itemId={option.objectMetadataId}
+                          onEnter={() => {
+                            const newSelectedObjectMetadataIds =
                               addOrRemoveFromArray(
-                                selectedObjectMetadataIds,
+                                localSelectedObjectMetadataIds,
                                 option.objectMetadataId,
                               );
-
+                            setLocalSelectedObjectMetadataIds(
+                              newSelectedObjectMetadataIds,
+                            );
                             onChange?.(newSelectedObjectMetadataIds);
                             onBlur?.();
+                            closeDropdown(dropdownId);
                           }}
-                        />{' '}
-                      </SelectableListItem>
+                        >
+                          <MenuItemMultiSelect
+                            className=""
+                            LeftIcon={option.Icon ?? undefined}
+                            iconThemeColor={option.iconThemeColor}
+                            text={option.label}
+                            selected={selectedObjectMetadataIds.some(
+                              (selectedObjectMetadataId) =>
+                                selectedObjectMetadataId ===
+                                option.objectMetadataId,
+                            )}
+                            isKeySelected={
+                              selectedItemId === option.objectMetadataId
+                            }
+                            onSelectChange={() => {
+                              const newSelectedObjectMetadataIds =
+                                addOrRemoveFromArray(
+                                  localSelectedObjectMetadataIds,
+                                  option.objectMetadataId,
+                                );
+                              setLocalSelectedObjectMetadataIds(
+                                newSelectedObjectMetadataIds,
+                              );
+                              onChange?.(newSelectedObjectMetadataIds);
+                              onBlur?.();
+                            }}
+                          />
+                        </SelectableListItem>
+                      </Fragment>
                     ))}
                   </SelectableList>
                 </DropdownMenuItemsContainer>
@@ -278,7 +322,10 @@ export const SettingsMorphRelationMultiSelect = ({
           }
         />
       )}
-      {!!description && <StyledDescription>{description}</StyledDescription>}
+      {isNonEmptyString(description) && (
+        <StyledDescription>{description}</StyledDescription>
+      )}
+      {isNonEmptyString(error) && <StyledError>{error}</StyledError>}
     </StyledContainer>
   );
 };

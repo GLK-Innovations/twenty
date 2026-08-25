@@ -1,7 +1,11 @@
 import { type CurrentUserWorkspace } from '@/auth/states/currentUserWorkspaceState';
+import { CUSTOM_WORKSPACE_APPLICATION_MOCK } from '@/object-metadata/hooks/__tests__/constants/CustomWorkspaceApplicationMock.test.constant';
 import { type WorkspaceMember } from '@/workspace-member/types/WorkspaceMember';
 import {
-  FeatureFlagKey,
+  AUTO_SELECT_FAST_MODEL_ID,
+  AUTO_SELECT_SMART_MODEL_ID,
+} from 'twenty-shared/constants';
+import {
   OnboardingStatus,
   PermissionFlagType,
   SubscriptionInterval,
@@ -9,11 +13,12 @@ import {
   type User,
   type Workspace,
   WorkspaceActivationStatus,
+  WorkspaceDiscoverability,
   WorkspaceMemberDateFormatEnum,
   WorkspaceMemberTimeFormatEnum,
-} from '~/generated/graphql';
+} from '~/generated-metadata/graphql';
 import { mockBillingPlans } from '~/testing/mock-data/billing-plans';
-import { generatedMockObjectMetadataItems } from '~/testing/utils/generatedMockObjectMetadataItems';
+import { getTestEnrichedObjectMetadataItemsMock } from '~/testing/utils/getTestEnrichedObjectMetadataItemsMock';
 
 type MockedUser = Pick<
   User,
@@ -43,9 +48,8 @@ export const avatarUrl =
 export const workspaceLogoUrl =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAA7EAAAOxAGVKw4bAAACb0lEQVR4nO2VO4taQRTHr3AblbjxEVlwCwVhg7BoqqCIjy/gAyyFWNlYBOxsfH0KuxgQGwXRUkGuL2S7i1barGAgiwbdW93SnGOc4BonPiKahf3DwXFmuP/fPM4ZlvmlTxAhCBdzHnEQWYiv7Mr4C3NeuVYhQYDPzOUUQgDLBQGcLHNhvQK8DACPx8PTxiqVyvISG43GbyaT6Qfpn06n0m63e/tPAPF4vJ1MJu8kEsnWTCkWi1yr1RKGw+GDRqPBOTfr44vFQvD7/Q/lcpmaaVQAr9fLp1IpO22c47hGOBz+MB6PH+Vy+VYDAL8qlUoGtVotzOfzq4MAgsHgE/6KojiQyWR/bKVSqbSszHFM8Pl8z1YK48JsNltCOBwOnrYLO+8AAIjb+nHbycoTiUQfDJ7tFq4YAHiVSmXBxcD41u8flQU8z7fhzO0r83atVns3Go3u9Xr9x0O/RQXo9/tsIBBg6vX606a52Wz+bZ7P5/WwG29gxSJzhKgA6XTaDoFNF+krFAocmC//4yWEcSf2wTm7mCO19xFgSsKOLI16vV7b7XY7mRNoLwA0JymJ5uQIzgIAuX5PzDElT2m+E8BqtQ4ymcx7Yq7T6a6ZE4sKgOadTucaCwkxp1UzlEKh0GDxIXOwDWHAdi6Xe3swQDQa/Q7mywoolUpvsaptymazDWKxmBHTlWXZm405BFZoNpuGgwEmk4mE2SGtVivii4f1AO7J3ZopkQCQj7Ar1FeRChCJRJzVapX6DKNIfSc1Ax+wtQWQ55h6bH8FWDfYV4fO3wlwDr0C/BcADYiTPCxHqIEA2QsCZAkAKnRGkMbKN/sTX5YHPQ1e7SkAAAAASUVORK5CYII=';
 
-// Extract Pro monthly base product from mockBillingPlans to use in workspace billing mocks
 const PRO_PLAN = mockBillingPlans.listPlans.find((p) => p.planKey === 'PRO')!;
-const PRO_BASE_LICENSED_PRODUCT = PRO_PLAN?.licensedProducts?.[0]!;
+const PRO_BASE_LICENSED_PRODUCT = PRO_PLAN?.baseProducts?.[0]!;
 const PRO_BASE_MONTHLY_PRICE = PRO_BASE_LICENSED_PRODUCT?.prices?.find(
   (pr) => pr.recurringInterval === 'Month',
 )!;
@@ -54,16 +58,21 @@ const PRO_METERED_MONTHLY_PRICE = PRO_METERED_PRODUCT?.prices?.find(
   (pr) => pr.recurringInterval === 'Month',
 )!;
 
-export const mockCurrentWorkspace: Workspace = {
+export const mockCurrentWorkspace = {
+  workspaceCustomApplication: CUSTOM_WORKSPACE_APPLICATION_MOCK,
+  workspaceCustomApplicationId: CUSTOM_WORKSPACE_APPLICATION_MOCK.id,
+  installedApplications: [CUSTOM_WORKSPACE_APPLICATION_MOCK],
   subdomain: 'acme.twenty.com',
   id: '7dfbc3f7-6e5e-4128-957e-8d86808cdf6w',
   displayName: 'Twenty',
   inviteHash: 'twenty.com-invite-hash',
   logo: workspaceLogoUrl,
   isPublicInviteLinkEnabled: true,
+  workspaceDiscoverability: WorkspaceDiscoverability.PUBLIC,
   allowImpersonation: true,
   activationStatus: WorkspaceActivationStatus.ACTIVE,
-  hasValidEnterpriseKey: false,
+  hasValidSignedEnterpriseKey: false,
+  hasValidEnterpriseValidityToken: false,
   isGoogleAuthEnabled: true,
   isPasswordAuthEnabled: true,
   isMicrosoftAuthEnabled: false,
@@ -75,21 +84,17 @@ export const mockCurrentWorkspace: Workspace = {
     customUrl: undefined,
     subdomainUrl: 'twenty.twenty.com',
   },
-  featureFlags: [
-    {
-      key: FeatureFlagKey.IS_AIRTABLE_INTEGRATION_ENABLED,
-      value: true,
-    },
-    {
-      key: FeatureFlagKey.IS_POSTGRESQL_INTEGRATION_ENABLED,
-      value: true,
-    },
-  ],
+  featureFlags: [],
   createdAt: '2023-04-26T10:23:42.33625+00:00',
   updatedAt: '2023-04-26T10:23:42.33625+00:00',
   metadataVersion: 1,
   trashRetentionDays: 14,
+  fastModel: AUTO_SELECT_FAST_MODEL_ID,
+  smartModel: AUTO_SELECT_SMART_MODEL_ID,
   routerModel: 'auto',
+  enabledAiModelIds: [],
+  useRecommendedModels: true,
+  isInternalMessagesImportEnabled: false,
   currentBillingSubscription: {
     __typename: 'BillingSubscription',
     id: '7efbc3f7-6e5e-4128-957e-8d86808cdf6a',
@@ -102,7 +107,7 @@ export const mockCurrentWorkspace: Workspace = {
     phases: [],
     billingSubscriptionItems: [
       {
-        __typename: 'BillingSubscriptionItemDTO',
+        __typename: 'BillingSubscriptionItem',
         id: '11111111-1111-4111-8111-111111111111',
         hasReachedCurrentPeriodCap: false,
         quantity: 1,
@@ -115,7 +120,7 @@ export const mockCurrentWorkspace: Workspace = {
         },
       },
       {
-        __typename: 'BillingSubscriptionItemDTO',
+        __typename: 'BillingSubscriptionItem',
         id: '11111111-1111-4111-8111-111111111112',
         hasReachedCurrentPeriodCap: false,
         quantity: null,
@@ -129,6 +134,7 @@ export const mockCurrentWorkspace: Workspace = {
       },
     ],
   },
+  billingEntitlements: [],
   billingSubscriptions: [
     {
       __typename: 'BillingSubscription',
@@ -138,7 +144,7 @@ export const mockCurrentWorkspace: Workspace = {
       phases: [],
       billingSubscriptionItems: [
         {
-          __typename: 'BillingSubscriptionItemDTO',
+          __typename: 'BillingSubscriptionItem',
           id: '22222222-2222-4222-8222-222222222222',
           hasReachedCurrentPeriodCap: false,
           quantity: 1,
@@ -154,11 +160,11 @@ export const mockCurrentWorkspace: Workspace = {
     },
   ],
   workspaceMembersCount: 1,
-  databaseSchema: '',
-  databaseUrl: '',
+  databaseSchema: null,
   isTwoFactorAuthenticationEnforced: false,
+  eventLogRetentionDays: 90,
   __typename: 'Workspace',
-};
+} as const satisfies Workspace;
 
 export const mockedWorkspaceMemberData: WorkspaceMember = {
   __typename: 'WorkspaceMember',
@@ -193,16 +199,23 @@ export const mockedUserData: MockedUser = {
   workspaceMember: mockedWorkspaceMemberData,
   currentWorkspace: mockCurrentWorkspace,
   currentUserWorkspace: {
-    permissionFlags: [PermissionFlagType.WORKSPACE_MEMBERS],
+    permissionFlags: [
+      PermissionFlagType.WORKSPACE_MEMBERS,
+      PermissionFlagType.CONNECTED_ACCOUNTS,
+    ],
     twoFactorAuthenticationMethodSummary: [],
-    objectsPermissions: generatedMockObjectMetadataItems.map((item) => ({
-      objectMetadataId: item.id,
-      canReadObjectRecords: true,
-      canUpdateObjectRecords: true,
-      canSoftDeleteObjectRecords: true,
-      canDestroyObjectRecords: true,
-      restrictedFields: {},
-    })),
+    objectsPermissions: getTestEnrichedObjectMetadataItemsMock().map(
+      (item) => ({
+        objectMetadataId: item.id,
+        canReadObjectRecords: true,
+        canUpdateObjectRecords: true,
+        canSoftDeleteObjectRecords: true,
+        canDestroyObjectRecords: true,
+        restrictedFields: {},
+        rowLevelPermissionPredicates: [],
+        rowLevelPermissionPredicateGroups: [],
+      }),
+    ),
   },
   locale: 'en',
   workspaces: [{ workspace: mockCurrentWorkspace }],
@@ -219,7 +232,7 @@ export const mockedLimitedPermissionsUserData: MockedUser = {
   ...mockedUserData,
   currentUserWorkspace: {
     ...mockedUserData.currentUserWorkspace,
-    objectsPermissions: generatedMockObjectMetadataItems
+    objectsPermissions: getTestEnrichedObjectMetadataItemsMock()
       .filter(
         (objectMetadata) =>
           objectMetadata.nameSingular !== 'task' &&
@@ -232,6 +245,8 @@ export const mockedLimitedPermissionsUserData: MockedUser = {
         canSoftDeleteObjectRecords: true,
         canDestroyObjectRecords: true,
         restrictedFields: {},
+        rowLevelPermissionPredicates: [],
+        rowLevelPermissionPredicateGroups: [],
       })),
   },
 };
@@ -255,14 +270,18 @@ export const mockedOnboardingUserData = (
     currentWorkspace: mockCurrentWorkspace,
     currentUserWorkspace: {
       permissionFlags: [PermissionFlagType.WORKSPACE_MEMBERS],
-      objectPermissions: generatedMockObjectMetadataItems.map((item) => ({
-        objectMetadataId: item.id,
-        canReadObjectRecords: true,
-        canUpdateObjectRecords: true,
-        canSoftDeleteObjectRecords: true,
-        canDestroyObjectRecords: true,
-        restrictedFields: {},
-      })),
+      objectPermissions: getTestEnrichedObjectMetadataItemsMock().map(
+        (item) => ({
+          objectMetadataId: item.id,
+          canReadObjectRecords: true,
+          canUpdateObjectRecords: true,
+          canSoftDeleteObjectRecords: true,
+          canDestroyObjectRecords: true,
+          restrictedFields: {},
+          rowLevelPermissionPredicates: [],
+          rowLevelPermissionPredicateGroups: [],
+        }),
+      ),
     },
     locale: 'en',
     workspaces: [{ workspace: mockCurrentWorkspace }],

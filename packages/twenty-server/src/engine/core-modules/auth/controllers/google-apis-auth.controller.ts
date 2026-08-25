@@ -9,7 +9,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 
 import { Response } from 'express';
-import { SettingsPath } from 'twenty-shared/types';
+import { ApiPath, SettingsPath } from 'twenty-shared/types';
 import { getSettingsPath } from 'twenty-shared/utils';
 import { Repository } from 'typeorm';
 
@@ -22,7 +22,7 @@ import { GoogleAPIsOauthExchangeCodeForTokenGuard } from 'src/engine/core-module
 import { GoogleAPIsOauthRequestCodeGuard } from 'src/engine/core-modules/auth/guards/google-apis-oauth-request-code.guard';
 import { GoogleAPIsService } from 'src/engine/core-modules/auth/services/google-apis.service';
 import { TransientTokenService } from 'src/engine/core-modules/auth/token/services/transient-token.service';
-import { GoogleAPIsRequest } from 'src/engine/core-modules/auth/types/google-api-request.type';
+import { APIsOAuthRequest } from 'src/engine/core-modules/auth/types/apis-oauth-request.type';
 import { WorkspaceDomainsService } from 'src/engine/core-modules/domain/workspace-domains/services/workspace-domains.service';
 import { GuardRedirectService } from 'src/engine/core-modules/guard-redirect/services/guard-redirect.service';
 import { OnboardingService } from 'src/engine/core-modules/onboarding/onboarding.service';
@@ -31,7 +31,7 @@ import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.ent
 import { NoPermissionGuard } from 'src/engine/guards/no-permission.guard';
 import { PublicEndpointGuard } from 'src/engine/guards/public-endpoint.guard';
 
-@Controller('auth/google-apis')
+@Controller(`${ApiPath.Auth}/google-apis`)
 @UseFilters(AuthRestApiExceptionFilter)
 export class GoogleAPIsAuthController {
   constructor(
@@ -63,7 +63,7 @@ export class GoogleAPIsAuthController {
     NoPermissionGuard,
   )
   async googleAuthGetAccessToken(
-    @Req() req: GoogleAPIsRequest,
+    @Req() req: APIsOAuthRequest,
     @Res() res: Response,
   ) {
     let workspace: WorkspaceEntity | null = null;
@@ -79,6 +79,7 @@ export class GoogleAPIsAuthController {
         redirectLocation,
         calendarVisibility,
         messageVisibility,
+        skipMessageChannelConfiguration,
       } = user;
 
       const { workspaceMemberId, userId, workspaceId } =
@@ -95,24 +96,25 @@ export class GoogleAPIsAuthController {
         id: workspaceId,
       });
 
-      const handle = emails[0].value;
+      const handle = emails[0].value.toLowerCase();
 
       const connectedAccountId =
         await this.googleAPIsService.refreshGoogleRefreshToken({
           handle,
-          workspaceMemberId: workspaceMemberId,
-          workspaceId: workspaceId,
+          userId,
+          workspaceMemberId,
+          workspaceId,
           accessToken,
           refreshToken,
           calendarVisibility,
           messageVisibility,
+          skipMessageChannelConfiguration,
         });
 
       if (userId) {
-        await this.onboardingService.setOnboardingConnectAccountPending({
+        await this.onboardingService.completeOnboardingConnectAccountStep({
           userId,
           workspaceId,
-          value: false,
         });
       }
 

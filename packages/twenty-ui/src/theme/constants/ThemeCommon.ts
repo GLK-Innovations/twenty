@@ -1,3 +1,4 @@
+import { ACCENT_DARK } from '@ui/theme/constants/AccentDark';
 import { ANIMATION } from './Animation';
 import { ICON } from './Icon';
 import { MODAL } from './Modal';
@@ -17,7 +18,10 @@ export const THEME_COMMON = {
     checkboxColumnWidth: '32px',
     horizontalCellPadding: '8px',
   },
-  rightDrawerWidth: '500px',
+  sidePanelWidth: '500px',
   clickableElementBackgroundTransition: 'background 0.1s ease',
   lastLayerZIndex: 2147483647,
+  buttons: {
+    secondaryTextColor: ACCENT_DARK.accent11,
+  },
 };

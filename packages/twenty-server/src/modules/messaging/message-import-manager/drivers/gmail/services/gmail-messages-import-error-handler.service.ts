@@ -1,32 +1,43 @@
 import { Injectable, Logger } from '@nestjs/common';
 
-import { GmailNetworkErrorHandler } from 'src/modules/messaging/message-import-manager/drivers/gmail/services/gmail-network-error-handler.service';
-import { parseGmailMessagesImportError } from 'src/modules/messaging/message-import-manager/drivers/gmail/utils/parse-gmail-messages-import-error.util';
+import {
+  MessageImportDriverException,
+  MessageImportDriverExceptionCode,
+} from 'src/modules/messaging/message-import-manager/drivers/exceptions/message-import-driver.exception';
+import { isGmailApiError } from 'src/modules/messaging/message-import-manager/drivers/gmail/utils/is-gmail-api-error.util';
+import { isGmailNetworkError } from 'src/modules/messaging/message-import-manager/drivers/gmail/utils/is-gmail-network-error.util';
+import { parseGmailApiError } from 'src/modules/messaging/message-import-manager/drivers/gmail/utils/parse-gmail-api-error.util';
+import { parseGmailNetworkError } from 'src/modules/messaging/message-import-manager/drivers/gmail/utils/parse-gmail-network-error.util';
 
 @Injectable()
 export class GmailMessagesImportErrorHandler {
   private readonly logger = new Logger(GmailMessagesImportErrorHandler.name);
 
-  constructor(
-    private readonly gmailNetworkErrorHandler: GmailNetworkErrorHandler,
-  ) {}
+  constructor() {}
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  public handleError(error: any, messageExternalId: string): void {
-    this.logger.log(`Error fetching messages`, error);
-
-    const networkError = this.gmailNetworkErrorHandler.handleError(error);
-
-    if (networkError) {
-      throw networkError;
+  public handleError(error: unknown, messageExternalId: string): void {
+    if (
+      isGmailApiError(error) &&
+      (error.response?.status === 404 || error.response?.status === 410)
+    ) {
+      return;
     }
 
-    const gmailError = parseGmailMessagesImportError(error, messageExternalId, {
-      cause: error,
-    });
+    this.logger.error(
+      `Gmail: Error importing message ${messageExternalId}: ${JSON.stringify(error)}`,
+    );
 
-    if (gmailError) {
-      throw gmailError;
+    if (isGmailNetworkError(error)) {
+      throw parseGmailNetworkError(error);
     }
+
+    if (isGmailApiError(error)) {
+      throw parseGmailApiError(error);
+    }
+
+    throw new MessageImportDriverException(
+      `Gmail message import error: ${error instanceof Error ? error.message : String(error)}`,
+      MessageImportDriverExceptionCode.UNKNOWN,
+    );
   }
 }

@@ -45,25 +45,31 @@ export const typeORMCoreModuleOptions: TypeOrmModuleOptions = {
   entities:
     process.env.IS_BILLING_ENABLED === 'true'
       ? [
-          `${isJest ? '' : 'dist/'}src/engine/core-modules/**/*.entity{.ts,.js}`,
-          `${isJest ? '' : 'dist/'}src/engine/metadata-modules/**/*.entity{.ts,.js}`,
+          `${isJest ? 'src/' : 'dist/'}engine/core-modules/**/*.entity{.ts,.js}`,
+          `${isJest ? 'src/' : 'dist/'}engine/metadata-modules/**/*.entity{.ts,.js}`,
         ]
       : [
-          `${isJest ? '' : 'dist/'}src/engine/core-modules/**/!(billing-*).entity.{ts,js}`,
-          `${isJest ? '' : 'dist/'}src/engine/metadata-modules/**/*.entity{.ts,.js}`,
+          `${isJest ? 'src/' : 'dist/'}engine/core-modules/**/!(billing-*).entity.{ts,js}`,
+          `${isJest ? 'src/' : 'dist/'}engine/metadata-modules/**/*.entity{.ts,.js}`,
         ],
   synchronize: false,
   migrationsRun: false,
+  poolSize: Number(process.env.PG_POOL_MAX_CONNECTIONS ?? 10),
   migrationsTableName: '_typeorm_migrations',
   metadataTableName: '_typeorm_generated_columns_and_materialized_views',
+  // The TypeORM migration system is frozen — historical migrations live in
+  // `legacy-typeorm-migrations-do-not-add/` and are loaded here only so the
+  // `_typeorm_migrations` table stays consistent for older deployments.
+  // Do NOT add new files there: write a fast/slow instance command instead.
+  // See `packages/twenty-server/docs/UPGRADE_COMMANDS.md`.
   migrations:
     process.env.IS_BILLING_ENABLED === 'true'
       ? [
-          `${isJest ? '' : 'dist/'}src/database/typeorm/core/migrations/common/*{.ts,.js}`,
-          `${isJest ? '' : 'dist/'}src/database/typeorm/core/migrations/billing/*{.ts,.js}`,
+          `${isJest ? 'src/' : 'dist/'}database/typeorm/core/legacy-typeorm-migrations-do-not-add/common/*{.ts,.js}`,
+          `${isJest ? 'src/' : 'dist/'}database/typeorm/core/legacy-typeorm-migrations-do-not-add/billing/*{.ts,.js}`,
         ]
       : [
-          `${isJest ? '' : 'dist/'}src/database/typeorm/core/migrations/common/*{.ts,.js}`,
+          `${isJest ? 'src/' : 'dist/'}database/typeorm/core/legacy-typeorm-migrations-do-not-add/common/*{.ts,.js}`,
         ],
   ssl:
     process.env.PG_SSL_ALLOW_SELF_SIGNED === 'true'
@@ -72,7 +78,9 @@ export const typeORMCoreModuleOptions: TypeOrmModuleOptions = {
         }
       : undefined,
   extra: {
-    query_timeout: 15000,
+    query_timeout: Number(process.env.PG_DATABASE_PRIMARY_TIMEOUT_MS ?? 10000),
+    idleTimeoutMillis: Number(process.env.PG_POOL_IDLE_TIMEOUT_MS ?? 600000),
+    allowExitOnIdle: process.env.PG_POOL_ALLOW_EXIT_ON_IDLE === 'true',
   },
 };
 

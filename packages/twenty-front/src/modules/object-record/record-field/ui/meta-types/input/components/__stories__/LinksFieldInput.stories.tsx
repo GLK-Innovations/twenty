@@ -1,26 +1,32 @@
-import { type Meta, type StoryObj } from '@storybook/react';
-import { expect, fn, userEvent, waitFor, within } from '@storybook/test';
+import { type Meta, type StoryObj } from '@storybook/react-vite';
 import { useEffect } from 'react';
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 
 import { FieldContext } from '@/object-record/record-field/ui/contexts/FieldContext';
 import { useLinksField } from '@/object-record/record-field/ui/meta-types/hooks/useLinksField';
 import { getFieldInputEventContextProviderWithJestMocks } from '@/object-record/record-field/ui/meta-types/input/components/__stories__/utils/getFieldInputEventContextProviderWithJestMocks';
+import { LinksFieldInput } from '@/object-record/record-field/ui/meta-types/input/components/LinksFieldInput';
 import { RecordFieldComponentInstanceContext } from '@/object-record/record-field/ui/states/contexts/RecordFieldComponentInstanceContext';
 import { RECORD_TABLE_CELL_INPUT_ID_PREFIX } from '@/object-record/record-table/constants/RecordTableCellInputIdPrefix';
 import { getRecordFieldInputInstanceId } from '@/object-record/utils/getRecordFieldInputId';
 import { usePushFocusItemToFocusStack } from '@/ui/utilities/focus/hooks/usePushFocusItemToFocusStack';
 import { FocusComponentType } from '@/ui/utilities/focus/types/FocusComponentType';
-import { getCanvasElementForDropdownTesting } from 'twenty-ui/testing';
 import { FieldMetadataType } from '~/generated-metadata/graphql';
-import { LinksFieldInput } from '../LinksFieldInput';
 
 const updateRecord = fn();
 
 const {
   FieldInputEventContextProviderWithJestMocks,
   handleEscapeMocked,
+  handleSubmitMocked,
   handleClickoutsideMocked,
 } = getFieldInputEventContextProviderWithJestMocks();
+
+const EMPTY_LINKS_VALUE = {
+  primaryLinkUrl: null,
+  primaryLinkLabel: null,
+  secondaryLinks: [],
+};
 
 const LinksValueSetterEffect = ({
   value,
@@ -53,7 +59,7 @@ type LinksInputWithContextProps = {
 const LinksFieldValueGater = () => {
   const { fieldValue } = useLinksField();
 
-  return fieldValue && <LinksFieldInput />;
+  return fieldValue ? <LinksFieldInput /> : null;
 };
 
 const LinksInputWithContext = ({
@@ -121,6 +127,7 @@ const getPrimaryLinkBookmarkIcon = (canvasElement: HTMLElement) =>
 const meta: Meta = {
   title: 'UI/Data/Field/Input/LinksFieldInput',
   component: LinksInputWithContext,
+  decorators: [],
   args: {
     value: {
       primaryLinkUrl: null,
@@ -295,13 +302,73 @@ export const DeletePrimaryLink: Story = {
     await userEvent.click(openDropdownButton);
 
     const deleteOption = await within(
-      getCanvasElementForDropdownTesting(),
+      canvasElement.ownerDocument.body,
     ).findByText('Delete');
     await userEvent.click(deleteOption);
 
     const input = await canvas.findByPlaceholderText('URL');
     expect(input).toBeVisible();
     expect(input).toHaveValue('');
+  },
+};
+
+export const DeletePrimaryLinkPersistsEmptyValue: Story = {
+  args: {
+    value: {
+      primaryLinkUrl: 'https://www.twenty.com',
+      primaryLinkLabel: 'Twenty Website',
+      secondaryLinks: [],
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+
+    const openDropdownButton = await canvas.findByRole('button', {
+      expanded: false,
+    });
+    await userEvent.click(openDropdownButton);
+
+    const deleteOption = await within(
+      canvasElement.ownerDocument.body,
+    ).findByText('Delete');
+    await userEvent.click(deleteOption);
+
+    expect(handleSubmitMocked).toHaveBeenCalledWith({
+      newValue: EMPTY_LINKS_VALUE,
+      skipClose: true,
+    });
+  },
+};
+
+export const ClearPrimaryLinkAndPressEnter: Story = {
+  args: {
+    value: {
+      primaryLinkUrl: 'https://www.twenty.com',
+      primaryLinkLabel: 'Twenty Website',
+      secondaryLinks: [],
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+
+    const openDropdownButton = await canvas.findByRole('button', {
+      expanded: false,
+    });
+    await userEvent.click(openDropdownButton);
+
+    const editOption = await within(
+      canvasElement.ownerDocument.body,
+    ).findByText('Edit');
+    await userEvent.click(editOption);
+
+    const input = await canvas.findByPlaceholderText('URL');
+    await userEvent.clear(input);
+    await userEvent.type(input, '{enter}');
+
+    expect(handleSubmitMocked).toHaveBeenCalledWith({
+      newValue: EMPTY_LINKS_VALUE,
+      skipClose: true,
+    });
   },
 };
 
@@ -334,7 +401,7 @@ export const DeletePrimaryLinkAndUseSecondaryLinkAsTheNewPrimaryLink: Story = {
     await userEvent.click(openDropdownButtons[0]);
 
     const deleteOption = await within(
-      getCanvasElementForDropdownTesting(),
+      canvasElement.ownerDocument.body,
     ).findByText('Delete');
     await userEvent.click(deleteOption);
 
@@ -376,7 +443,7 @@ export const DeleteSecondaryLink: Story = {
     await userEvent.click(openDropdownButtons[1]);
 
     const deleteOption = await within(
-      getCanvasElementForDropdownTesting(),
+      canvasElement.ownerDocument.body,
     ).findByText('Delete');
     await userEvent.click(deleteOption);
 
@@ -484,9 +551,20 @@ export const MakeSecondaryLinkPrimary: Story = {
     await userEvent.click(openDropdownButtons[1]); // Click the secondary link's dropdown
 
     const setPrimaryOption = await within(
-      getCanvasElementForDropdownTesting(),
+      canvasElement.ownerDocument.body,
     ).findByText('Set as Primary');
     await userEvent.click(setPrimaryOption);
+
+    expect(handleSubmitMocked).toHaveBeenCalledWith({
+      newValue: {
+        primaryLinkUrl: 'https://docs.twenty.com',
+        primaryLinkLabel: 'Documentation',
+        secondaryLinks: [
+          { url: 'https://www.twenty.com', label: 'Twenty Website' },
+        ],
+      },
+      skipClose: true,
+    });
   },
 };
 
@@ -511,9 +589,8 @@ export const CanNotSetPrimaryLinkAsPrimaryLink: Story = {
     });
     await userEvent.click(openDropdownButton);
 
-    // Should not see "Set as Primary" option for primary link
     const setPrimaryOption = within(
-      getCanvasElementForDropdownTesting(),
+      canvasElement.ownerDocument.body,
     ).queryByText('Set as Primary');
     expect(setPrimaryOption).not.toBeInTheDocument();
   },

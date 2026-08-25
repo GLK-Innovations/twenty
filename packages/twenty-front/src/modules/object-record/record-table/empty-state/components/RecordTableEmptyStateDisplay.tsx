@@ -1,12 +1,13 @@
+import { isLayoutCustomizationModeEnabledState } from '@/layout-customization/states/isLayoutCustomizationModeEnabledState';
 import { useObjectPermissionsForObject } from '@/object-record/hooks/useObjectPermissionsForObject';
-import { isObjectMetadataReadOnly } from '@/object-record/read-only/utils/isObjectMetadataReadOnly';
 import { hasAnySoftDeleteFilterOnViewComponentSelector } from '@/object-record/record-filter/states/hasAnySoftDeleteFilterOnView';
 import { useRecordTableContextOrThrow } from '@/object-record/record-table/contexts/RecordTableContext';
+import { canCreateRecordsForObjectMetadataItem } from '@/object-record/utils/canCreateRecordsForObjectMetadataItem';
 import { useScrollWrapperHTMLElement } from '@/ui/utilities/scroll/hooks/useScrollWrapperHTMLElement';
-import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
-import styled from '@emotion/styled';
-import { isDefined } from 'twenty-shared/utils';
-import { type IconComponent } from 'twenty-ui/display';
+import { useAtomComponentSelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentSelectorValue';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { styled } from '@linaria/react';
+import { type IconComponent } from 'twenty-ui/icon';
 import { Button } from 'twenty-ui/input';
 import {
   AnimatedPlaceholder,
@@ -15,18 +16,11 @@ import {
   AnimatedPlaceholderEmptyTextContainer,
   AnimatedPlaceholderEmptyTitle,
   type AnimatedPlaceholderType,
-} from 'twenty-ui/layout';
+} from 'twenty-ui/feedback';
 
-const StyledEmptyPlaceholderOuterContainer = styled(
-  AnimatedPlaceholderEmptyContainer,
-)`
-  align-items: flex-start;
-`;
-
-const StyledEmptyPlaceholderInnerContainer = styled(
-  AnimatedPlaceholderEmptyContainer,
-)<{ width?: number }>`
-  width: ${({ width }) => (isDefined(width) ? `${width}px` : '100%')};
+const StyledEmptyPlaceholderOuterContainer = styled.div`
+  height: 100%;
+  width: 100%;
 `;
 
 type RecordTableEmptyStateDisplayButtonComponentProps = {
@@ -56,12 +50,17 @@ export const RecordTableEmptyStateDisplay = (
   const objectPermissions = useObjectPermissionsForObject(
     objectMetadataItem.id,
   );
-  const isReadOnly = isObjectMetadataReadOnly({
-    objectPermissions,
-    objectMetadataItem,
-  });
+  const isLayoutCustomizationModeEnabled = useAtomStateValue(
+    isLayoutCustomizationModeEnabledState,
+  );
+  const canCreateRecords =
+    !isLayoutCustomizationModeEnabled &&
+    canCreateRecordsForObjectMetadataItem({
+      objectPermissions,
+      objectMetadataItem,
+    });
 
-  const hasAnySoftDeleteFilterOnView = useRecoilComponentValue(
+  const hasAnySoftDeleteFilterOnView = useAtomComponentSelectorValue(
     hasAnySoftDeleteFilterOnViewComponentSelector,
   );
 
@@ -71,7 +70,7 @@ export const RecordTableEmptyStateDisplay = (
 
   return (
     <StyledEmptyPlaceholderOuterContainer>
-      <StyledEmptyPlaceholderInnerContainer width={scrollWrapperWidth}>
+      <AnimatedPlaceholderEmptyContainer width={scrollWrapperWidth}>
         <AnimatedPlaceholder type={props.animatedPlaceholderType} />
         <AnimatedPlaceholderEmptyTextContainer>
           <AnimatedPlaceholderEmptyTitle>
@@ -83,7 +82,7 @@ export const RecordTableEmptyStateDisplay = (
         </AnimatedPlaceholderEmptyTextContainer>
         {'buttonComponent' in props && props.buttonComponent}
         {'buttonTitle' in props &&
-          !isReadOnly &&
+          canCreateRecords &&
           !hasAnySoftDeleteFilterOnView && (
             <Button
               Icon={props.ButtonIcon}
@@ -93,7 +92,7 @@ export const RecordTableEmptyStateDisplay = (
               disabled={props.buttonIsDisabled}
             />
           )}
-      </StyledEmptyPlaceholderInnerContainer>
+      </AnimatedPlaceholderEmptyContainer>
     </StyledEmptyPlaceholderOuterContainer>
   );
 };

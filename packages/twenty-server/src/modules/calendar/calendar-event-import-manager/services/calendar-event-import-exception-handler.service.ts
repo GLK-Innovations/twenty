@@ -1,11 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common';
 
 import { ExceptionHandlerService } from 'src/engine/core-modules/exception-handler/exception-handler.service';
+import { CalendarChannelEntity } from 'src/engine/metadata-modules/calendar-channel/entities/calendar-channel.entity';
 import {
-  type TwentyORMException,
-  TwentyORMExceptionCode,
+  ConnectedAccountRefreshAccessTokenException,
+  ConnectedAccountRefreshAccessTokenExceptionCode,
+} from 'src/engine/metadata-modules/connected-account/exceptions/connected-account-refresh-tokens.exception';
+import {
+  type TwentyOrmException,
+  TwentyOrmExceptionCode,
 } from 'src/engine/twenty-orm/exceptions/twenty-orm.exception';
-import { TwentyORMManager } from 'src/engine/twenty-orm/twenty-orm.manager';
+import { InjectWorkspaceScopedRepository } from 'src/engine/twenty-orm/workspace-scoped-repository/inject-workspace-scoped-repository.decorator';
+import { WorkspaceScopedRepository } from 'src/engine/twenty-orm/workspace-scoped-repository/workspace-scoped-repository';
 import { CALENDAR_THROTTLE_MAX_ATTEMPTS } from 'src/modules/calendar/calendar-event-import-manager/constants/calendar-throttle-max-attempts';
 import {
   type CalendarEventImportDriverException,
@@ -16,7 +22,6 @@ import {
   CalendarEventImportExceptionCode,
 } from 'src/modules/calendar/calendar-event-import-manager/exceptions/calendar-event-import.exception';
 import { CalendarChannelSyncStatusService } from 'src/modules/calendar/common/services/calendar-channel-sync-status.service';
-import { type CalendarChannelWorkspaceEntity } from 'src/modules/calendar/common/standard-objects/calendar-channel.workspace-entity';
 export enum CalendarEventImportSyncStep {
   CALENDAR_EVENT_LIST_FETCH = 'CALENDAR_EVENT_LIST_FETCH',
   CALENDAR_EVENTS_IMPORT = 'CALENDAR_EVENTS_IMPORT',
@@ -28,18 +33,19 @@ export class CalendarEventImportErrorHandlerService {
     CalendarEventImportErrorHandlerService.name,
   );
   constructor(
-    private readonly twentyORMManager: TwentyORMManager,
+    @InjectWorkspaceScopedRepository(CalendarChannelEntity)
+    private readonly calendarChannelRepository: WorkspaceScopedRepository<CalendarChannelEntity>,
     private readonly calendarChannelSyncStatusService: CalendarChannelSyncStatusService,
     private readonly exceptionHandlerService: ExceptionHandlerService,
   ) {}
 
   public async handleDriverException(
-    exception: CalendarEventImportDriverException | TwentyORMException,
+    exception:
+      | CalendarEventImportDriverException
+      | TwentyOrmException
+      | ConnectedAccountRefreshAccessTokenException,
     syncStep: CalendarEventImportSyncStep,
-    calendarChannel: Pick<
-      CalendarChannelWorkspaceEntity,
-      'id' | 'throttleFailureCount'
-    >,
+    calendarChannel: Pick<CalendarChannelEntity, 'id' | 'throttleFailureCount'>,
     workspaceId: string,
   ): Promise<void> {
     switch (exception.code) {
@@ -50,8 +56,9 @@ export class CalendarEventImportErrorHandlerService {
           workspaceId,
         );
         break;
-      case TwentyORMExceptionCode.QUERY_READ_TIMEOUT:
+      case TwentyOrmExceptionCode.QUERY_READ_TIMEOUT:
       case CalendarEventImportDriverExceptionCode.TEMPORARY_ERROR:
+      case ConnectedAccountRefreshAccessTokenExceptionCode.TEMPORARY_NETWORK_ERROR:
         await this.handleTemporaryException(
           syncStep,
           calendarChannel,
@@ -59,13 +66,21 @@ export class CalendarEventImportErrorHandlerService {
         );
         break;
       case CalendarEventImportDriverExceptionCode.INSUFFICIENT_PERMISSIONS:
+      case ConnectedAccountRefreshAccessTokenExceptionCode.REFRESH_TOKEN_NOT_FOUND:
+      case ConnectedAccountRefreshAccessTokenExceptionCode.INVALID_REFRESH_TOKEN:
         await this.handleInsufficientPermissionsException(
           calendarChannel,
           workspaceId,
         );
         break;
+      case CalendarEventImportDriverExceptionCode.SYNC_CURSOR_ERROR:
+        await this.handleSyncCursorErrorException(calendarChannel, workspaceId);
+        break;
+      case CalendarEventImportDriverExceptionCode.CHANNEL_MISCONFIGURED:
       case CalendarEventImportDriverExceptionCode.UNKNOWN:
       case CalendarEventImportDriverExceptionCode.UNKNOWN_NETWORK_ERROR:
+      case ConnectedAccountRefreshAccessTokenExceptionCode.ACCESS_TOKEN_NOT_FOUND:
+      case ConnectedAccountRefreshAccessTokenExceptionCode.PROVIDER_NOT_SUPPORTED:
       default:
         await this.handleUnknownException(
           exception,
@@ -76,12 +91,23 @@ export class CalendarEventImportErrorHandlerService {
     }
   }
 
+  private async handleSyncCursorErrorException(
+    calendarChannel: Pick<CalendarChannelEntity, 'id'>,
+    workspaceId: string,
+  ): Promise<void> {
+    this.logger.debug(
+      `CalendarChannelId: ${calendarChannel.id} - Sync cursor error, resetting and rescheduling`,
+    );
+
+    await this.calendarChannelSyncStatusService.resetAndMarkAsCalendarEventListFetchPending(
+      [calendarChannel.id],
+      workspaceId,
+    );
+  }
+
   private async handleTemporaryException(
     syncStep: CalendarEventImportSyncStep,
-    calendarChannel: Pick<
-      CalendarChannelWorkspaceEntity,
-      'id' | 'throttleFailureCount'
-    >,
+    calendarChannel: Pick<CalendarChannelEntity, 'id' | 'throttleFailureCount'>,
     workspaceId: string,
   ): Promise<void> {
     if (
@@ -93,7 +119,7 @@ export class CalendarEventImportErrorHandlerService {
       );
 
       const calendarEventImportException = new CalendarEventImportException(
-        `Temporary error occurred ${CALENDAR_THROTTLE_MAX_ATTEMPTS} times while importing calendar events for calendar channel ${calendarChannel.id.slice(0, 5)}... in workspace ${workspaceId} with throttleFailureCount ${calendarChannel.throttleFailureCount}`,
+        `Temporary error occurred ${CALENDAR_THROTTLE_MAX_ATTEMPTS} times while importing calendar events for calendar channel ${calendarChannel.id} in workspace ${workspaceId} with throttleFailureCount ${calendarChannel.throttleFailureCount}`,
         CalendarEventImportExceptionCode.UNKNOWN,
       );
 
@@ -102,6 +128,8 @@ export class CalendarEventImportErrorHandlerService {
         {
           additionalData: {
             calendarChannelId: calendarChannel.id,
+            syncStep,
+            throttleFailureCount: calendarChannel.throttleFailureCount,
           },
           workspace: {
             id: workspaceId,
@@ -112,31 +140,27 @@ export class CalendarEventImportErrorHandlerService {
       throw calendarEventImportException;
     }
 
-    const calendarChannelRepository =
-      await this.twentyORMManager.getRepository<CalendarChannelWorkspaceEntity>(
-        'calendarChannel',
-      );
-
-    await calendarChannelRepository.increment(
-      {
-        id: calendarChannel.id,
-      },
+    await this.calendarChannelRepository.increment(
+      workspaceId,
+      { id: calendarChannel.id },
       'throttleFailureCount',
       1,
-      undefined,
-      ['throttleFailureCount', 'id'],
     );
 
     switch (syncStep) {
       case CalendarEventImportSyncStep.CALENDAR_EVENT_LIST_FETCH:
-        await this.calendarChannelSyncStatusService.scheduleCalendarEventListFetch(
+        await this.calendarChannelSyncStatusService.markAsCalendarEventListFetchPending(
           [calendarChannel.id],
+          workspaceId,
+          true,
         );
         break;
 
       case CalendarEventImportSyncStep.CALENDAR_EVENTS_IMPORT:
-        await this.calendarChannelSyncStatusService.scheduleCalendarEventsImport(
+        await this.calendarChannelSyncStatusService.markAsCalendarEventsImportPending(
           [calendarChannel.id],
+          workspaceId,
+          true,
         );
         break;
 
@@ -146,7 +170,7 @@ export class CalendarEventImportErrorHandlerService {
   }
 
   private async handleInsufficientPermissionsException(
-    calendarChannel: Pick<CalendarChannelWorkspaceEntity, 'id'>,
+    calendarChannel: Pick<CalendarChannelEntity, 'id'>,
     workspaceId: string,
   ): Promise<void> {
     await this.calendarChannelSyncStatusService.markAsFailedInsufficientPermissionsAndFlushCalendarEventsToImport(
@@ -157,7 +181,7 @@ export class CalendarEventImportErrorHandlerService {
 
   private async handleUnknownException(
     exception: { message: string },
-    calendarChannel: Pick<CalendarChannelWorkspaceEntity, 'id'>,
+    calendarChannel: Pick<CalendarChannelEntity, 'id'>,
     workspaceId: string,
   ): Promise<void> {
     await this.calendarChannelSyncStatusService.markAsFailedUnknownAndFlushCalendarEventsToImport(
@@ -166,17 +190,17 @@ export class CalendarEventImportErrorHandlerService {
     );
 
     const calendarEventImportException = new CalendarEventImportException(
-      `Unknown error importing calendar events for calendar channel ${calendarChannel.id.slice(0, 5)}... in workspace ${workspaceId}: ${exception.message}`,
+      `Unknown error importing calendar events for calendar channel ${calendarChannel.id} in workspace ${workspaceId}: ${exception.message}`,
       CalendarEventImportExceptionCode.UNKNOWN,
     );
 
-    this.logger.log(exception);
+    this.logger.error(exception);
     this.exceptionHandlerService.captureExceptions(
       [calendarEventImportException],
       {
         additionalData: {
           calendarChannelId: calendarChannel.id,
-          exception,
+          exceptionMessage: exception.message,
         },
         workspace: {
           id: workspaceId,
@@ -189,14 +213,14 @@ export class CalendarEventImportErrorHandlerService {
 
   private async handleNotFoundException(
     syncStep: CalendarEventImportSyncStep,
-    calendarChannel: Pick<CalendarChannelWorkspaceEntity, 'id'>,
+    calendarChannel: Pick<CalendarChannelEntity, 'id'>,
     workspaceId: string,
   ): Promise<void> {
     if (syncStep === CalendarEventImportSyncStep.CALENDAR_EVENT_LIST_FETCH) {
       return;
     }
 
-    await this.calendarChannelSyncStatusService.resetAndScheduleCalendarEventListFetch(
+    await this.calendarChannelSyncStatusService.resetAndMarkAsCalendarEventListFetchPending(
       [calendarChannel.id],
       workspaceId,
     );

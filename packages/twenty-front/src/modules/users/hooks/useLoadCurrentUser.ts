@@ -8,52 +8,47 @@ import { authProvidersState } from '@/client-config/states/authProvidersState';
 import { useIsCurrentLocationOnAWorkspace } from '@/domain-manager/hooks/useIsCurrentLocationOnAWorkspace';
 import { useLastAuthenticatedWorkspaceDomain } from '@/domain-manager/hooks/useLastAuthenticatedWorkspaceDomain';
 import { useInitializeFormatPreferences } from '@/localization/hooks/useInitializeFormatPreferences';
-import { coreViewsState } from '@/views/states/coreViewState';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { useSetAtomState } from '@/ui/utilities/state/jotai/hooks/useSetAtomState';
 import { workspaceAuthBypassProvidersState } from '@/workspace/states/workspaceAuthBypassProvidersState';
 import { useCallback } from 'react';
-import { useRecoilValue, useSetRecoilState } from 'recoil';
 import { SOURCE_LOCALE, type APP_LOCALES } from 'twenty-shared/translations';
 import { type ObjectPermissions } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
+import { toOpenRecordInPreference } from '@/workspace-member/utils/toOpenRecordInPreference';
 import { type ColorScheme } from 'twenty-ui/input';
-import {
-  useFindAllCoreViewsLazyQuery,
-  useGetCurrentUserLazyQuery,
-} from '~/generated-metadata/graphql';
+import { useApolloClient } from '@apollo/client/react';
+import { GetCurrentUserDocument } from '~/generated-metadata/graphql';
 import { getWorkspaceUrl } from '~/utils/getWorkspaceUrl';
 import { dynamicActivate } from '~/utils/i18n/dynamicActivate';
+import { type UiScale } from '@/workspace-member/types/WorkspaceMember';
 
 export const useLoadCurrentUser = () => {
-  const setCurrentUser = useSetRecoilState(currentUserState);
-  const setAvailableWorkspaces = useSetRecoilState(availableWorkspacesState);
-  const setCurrentWorkspaceMember = useSetRecoilState(
+  const setCurrentUser = useSetAtomState(currentUserState);
+  const setAvailableWorkspaces = useSetAtomState(availableWorkspacesState);
+  const setCurrentWorkspaceMember = useSetAtomState(
     currentWorkspaceMemberState,
   );
   const { setLastAuthenticateWorkspaceDomain } =
     useLastAuthenticatedWorkspaceDomain();
-  const setCurrentUserWorkspace = useSetRecoilState(currentUserWorkspaceState);
-  const setCurrentWorkspaceMembers = useSetRecoilState(
+  const setCurrentUserWorkspace = useSetAtomState(currentUserWorkspaceState);
+  const setCurrentWorkspaceMembers = useSetAtomState(
     currentWorkspaceMembersState,
   );
-  const setCurrentWorkspace = useSetRecoilState(currentWorkspaceState);
+  const setCurrentWorkspace = useSetAtomState(currentWorkspaceState);
   const { initializeFormatPreferences } = useInitializeFormatPreferences();
-  const setCoreViews = useSetRecoilState(coreViewsState);
-  const setWorkspaceAuthBypassProviders = useSetRecoilState(
+  const setWorkspaceAuthBypassProviders = useSetAtomState(
     workspaceAuthBypassProvidersState,
   );
-  const authProviders = useRecoilValue(authProvidersState);
+  const authProviders = useAtomStateValue(authProvidersState);
 
   const { isOnAWorkspace } = useIsCurrentLocationOnAWorkspace();
 
-  const [getCurrentUser] = useGetCurrentUserLazyQuery();
-  const [findAllCoreViews] = useFindAllCoreViewsLazyQuery();
+  const client = useApolloClient();
 
   const loadCurrentUser = useCallback(async () => {
-    const currentUserResult = await getCurrentUser({
-      fetchPolicy: 'network-only',
-    });
-
-    const coreViewsResult = await findAllCoreViews({
+    const currentUserResult = await client.query({
+      query: GetCurrentUserDocument,
       fetchPolicy: 'network-only',
     });
 
@@ -63,7 +58,7 @@ export const useLoadCurrentUser = () => {
 
     const user = currentUserResult.data?.currentUser;
 
-    if (!user) {
+    if (!isDefined(user)) {
       throw new Error('No current user result');
     }
 
@@ -88,6 +83,7 @@ export const useLoadCurrentUser = () => {
           (user.currentUserWorkspace.objectsPermissions as Array<
             ObjectPermissions & { objectMetadataId: string }
           >) ?? [],
+        isImpersonating: user.currentUserWorkspace.isImpersonating ?? false,
       });
     }
 
@@ -95,19 +91,28 @@ export const useLoadCurrentUser = () => {
       workspaceMember = {
         ...user.workspaceMember,
         colorScheme: user.workspaceMember?.colorScheme as ColorScheme,
+        uiScale: user.workspaceMember?.uiScale as UiScale,
+        openRecordIn: toOpenRecordInPreference(
+          user.workspaceMember?.openRecordIn,
+        ),
         locale: user.workspaceMember?.locale ?? SOURCE_LOCALE,
       };
 
       setCurrentWorkspaceMember(workspaceMember);
 
-      // Initialize unified format preferences state
       initializeFormatPreferences(workspaceMember);
       dynamicActivate(
         (workspaceMember.locale as keyof typeof APP_LOCALES) ?? SOURCE_LOCALE,
       );
     }
 
-    const workspace = user.currentWorkspace ?? null;
+    const workspace = isDefined(user.currentWorkspace)
+      ? {
+          ...user.currentWorkspace,
+          workspaceCustomApplication:
+            user.currentWorkspace.workspaceCustomApplication ?? null,
+        }
+      : null;
 
     setCurrentWorkspace(workspace);
 
@@ -128,18 +133,13 @@ export const useLoadCurrentUser = () => {
       });
     }
 
-    if (isDefined(coreViewsResult.data?.getCoreViews)) {
-      setCoreViews(coreViewsResult.data.getCoreViews);
-    }
-
     return {
       user,
       workspaceMember,
       workspace,
     };
   }, [
-    getCurrentUser,
-    findAllCoreViews,
+    client,
     setCurrentUser,
     setCurrentWorkspace,
     isOnAWorkspace,
@@ -149,7 +149,6 @@ export const useLoadCurrentUser = () => {
     setCurrentWorkspaceMember,
     initializeFormatPreferences,
     setLastAuthenticateWorkspaceDomain,
-    setCoreViews,
     authProviders,
     setWorkspaceAuthBypassProviders,
   ]);

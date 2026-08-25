@@ -1,19 +1,28 @@
 import { SKELETON_LOADER_HEIGHT_SIZES } from '@/activities/components/SkeletonLoader';
-import { useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
+import { css } from '@linaria/core';
+import { styled } from '@linaria/react';
+import { useContext } from 'react';
 import Skeleton, { SkeletonTheme } from 'react-loading-skeleton';
+import { ThemeContext, themeCssVariables } from 'twenty-ui/theme-constants';
 
 const StyledSkeletonColumn = styled.div`
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: ${({ theme }) => theme.spacing(1)};
+  gap: ${themeCssVariables.spacing[1]};
   height: 76px;
-  padding-left: ${({ theme }) => theme.spacing(1)};
+  padding-left: ${themeCssVariables.spacing[1]};
+  width: 100%;
+`;
+
+const fillSkeletonContainer = css`
+  display: block;
+  width: 100%;
 `;
 
 export const NavigationDrawerSectionForObjectMetadataItemsSkeletonLoader: React.FC =
   () => {
-    const theme = useTheme();
+    const { theme } = useContext(ThemeContext);
     return (
       <SkeletonTheme
         baseColor={theme.background.tertiary}
@@ -22,15 +31,15 @@ export const NavigationDrawerSectionForObjectMetadataItemsSkeletonLoader: React.
       >
         <StyledSkeletonColumn>
           <Skeleton
-            width={196}
+            containerClassName={fillSkeletonContainer}
             height={SKELETON_LOADER_HEIGHT_SIZES.standard.s}
           />
           <Skeleton
-            width={196}
+            containerClassName={fillSkeletonContainer}
             height={SKELETON_LOADER_HEIGHT_SIZES.standard.s}
           />
           <Skeleton
-            width={196}
+            containerClassName={fillSkeletonContainer}
             height={SKELETON_LOADER_HEIGHT_SIZES.standard.s}
           />
         </StyledSkeletonColumn>

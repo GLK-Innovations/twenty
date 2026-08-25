@@ -2,8 +2,10 @@ import { ObjectOptionsDropdownMenuViewName } from '@/object-record/object-option
 import { OBJECT_OPTIONS_DROPDOWN_ID } from '@/object-record/object-options-dropdown/constants/ObjectOptionsDropdownId';
 import { useObjectOptionsDropdown } from '@/object-record/object-options-dropdown/hooks/useObjectOptionsDropdown';
 import { useObjectOptionsForBoard } from '@/object-record/object-options-dropdown/hooks/useObjectOptionsForBoard';
-import { recordGroupFieldMetadataComponentState } from '@/object-record/record-group/states/recordGroupFieldMetadataComponentState';
-import { recordIndexCalendarLayoutState } from '@/object-record/record-index/states/recordIndexCalendarLayoutState';
+import { getSupportedRecordCalendarLayout } from '@/object-record/record-calendar/utils/getSupportedRecordCalendarLayout';
+import { recordIndexCalendarLayoutComponentState } from '@/object-record/record-index/states/recordIndexCalendarLayoutComponentState';
+import { recordIndexCalendarFieldMetadataIdComponentState } from '@/object-record/record-index/states/recordIndexCalendarFieldMetadataIdComponentState';
+import { recordIndexGroupFieldMetadataItemComponentState } from '@/object-record/record-index/states/recordIndexGroupFieldMetadataComponentState';
 import { DropdownContent } from '@/ui/layout/dropdown/components/DropdownContent';
 import { DropdownMenuItemsContainer } from '@/ui/layout/dropdown/components/DropdownMenuItemsContainer';
 import { DropdownMenuSeparator } from '@/ui/layout/dropdown/components/DropdownMenuSeparator';
@@ -11,27 +13,36 @@ import { GenericDropdownContentWidth } from '@/ui/layout/dropdown/constants/Gene
 import { SelectableList } from '@/ui/layout/selectable-list/components/SelectableList';
 import { SelectableListItem } from '@/ui/layout/selectable-list/components/SelectableListItem';
 import { selectedItemIdComponentState } from '@/ui/layout/selectable-list/states/selectedItemIdComponentState';
-import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
-import { useSetRecoilComponentState } from '@/ui/utilities/state/component-state/hooks/useSetRecoilComponentState';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import { useSetAtomComponentState } from '@/ui/utilities/state/jotai/hooks/useSetAtomComponentState';
 import { useGetCurrentViewOnly } from '@/views/hooks/useGetCurrentViewOnly';
+import { viewsFromObjectMetadataItemFamilySelector } from '@/views/states/selectors/viewsFromObjectMetadataItemFamilySelector';
 import { ViewKey } from '@/views/types/ViewKey';
-import { ViewType, viewTypeIconMapping } from '@/views/types/ViewType';
-import { useDeleteViewFromCurrentState } from '@/views/view-picker/hooks/useDeleteViewFromCurrentState';
-import { viewPickerReferenceViewIdComponentState } from '@/views/view-picker/states/viewPickerReferenceViewIdComponentState';
-import { useLingui } from '@lingui/react/macro';
-import { useRecoilValue } from 'recoil';
-import { capitalize, isDefined } from 'twenty-shared/utils';
 import {
-  AppTooltip,
+  getViewTypeLabel,
+  ViewType,
+  viewTypeIconMapping,
+} from '@/views/types/ViewType';
+import { useDestroyViewFromCurrentState } from '@/views/view-picker/hooks/useDestroyViewFromCurrentState';
+import { useIsFeatureEnabled } from '@/workspace/hooks/useIsFeatureEnabled';
+import { viewPickerReferenceViewIdComponentState } from '@/views/view-picker/states/viewPickerReferenceViewIdComponentState';
+import { useAtomFamilySelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomFamilySelectorValue';
+import { useLingui } from '@lingui/react/macro';
+import { isDefined } from 'twenty-shared/utils';
+import {
   IconCalendar,
   IconCalendarWeek,
   IconLayoutList,
   IconListDetails,
   IconShare,
   IconTrash,
-} from 'twenty-ui/display';
+} from 'twenty-ui/icon';
+import { AppTooltip } from 'twenty-ui/surfaces';
 import { MenuItem } from 'twenty-ui/navigation';
-import { ViewCalendarLayout } from '~/generated/graphql';
+import {
+  FeatureFlagKey,
+  ViewCalendarLayout,
+} from '~/generated-metadata/graphql';
 
 interface ObjectOptionsDropdownCustomViewProps {
   onBackToDefault?: () => void;
@@ -49,26 +60,42 @@ export const ObjectOptionsDropdownCustomView = ({
   const customViewData = currentView
     ? {
         ...currentView,
-        key: ViewKey.Custom,
-        name: currentView.name || 'Custom View',
+        key: null,
+        name: currentView.name || t`Custom View`,
       }
     : null;
 
-  const recordGroupFieldMetadata = useRecoilComponentValue(
-    recordGroupFieldMetadataComponentState,
+  const recordIndexGroupFieldMetadataItem = useAtomComponentStateValue(
+    recordIndexGroupFieldMetadataItemComponentState,
+  );
+  const recordIndexCalendarFieldMetadataId = useAtomComponentStateValue(
+    recordIndexCalendarFieldMetadataIdComponentState,
   );
 
-  const calendarFieldMetadata = currentView?.calendarFieldMetadataId
+  const calendarFieldMetadata = recordIndexCalendarFieldMetadataId
     ? objectMetadataItem.fields.find(
-        (field) => field.id === currentView.calendarFieldMetadataId,
+        (field) => field.id === recordIndexCalendarFieldMetadataId,
       )
     : undefined;
 
-  const isDefaultView = currentView?.key === ViewKey.Index;
-
-  const recordIndexCalendarLayout = useRecoilValue(
-    recordIndexCalendarLayoutState,
+  const viewsOnCurrentObject = useAtomFamilySelectorValue(
+    viewsFromObjectMetadataItemFamilySelector,
+    { objectMetadataItemId: objectMetadataItem.id },
   );
+
+  const isDefaultView = currentView?.key === ViewKey.INDEX;
+  const isLastView = viewsOnCurrentObject.length <= 1;
+
+  const recordIndexCalendarLayout = useAtomComponentStateValue(
+    recordIndexCalendarLayoutComponentState,
+  );
+  const isCalendarWeekViewEnabled = useIsFeatureEnabled(
+    FeatureFlagKey.IS_CALENDAR_WEEK_VIEW_ENABLED,
+  );
+  const supportedCalendarLayout = getSupportedRecordCalendarLayout({
+    calendarLayout: recordIndexCalendarLayout,
+    isCalendarWeekViewEnabled,
+  });
 
   const { visibleBoardFields } = useObjectOptionsForBoard({
     objectNameSingular: objectMetadataItem.nameSingular,
@@ -76,9 +103,12 @@ export const ObjectOptionsDropdownCustomView = ({
     viewBarId: recordIndexId,
   });
 
-  const { deleteViewFromCurrentState } = useDeleteViewFromCurrentState();
-  const setViewPickerReferenceViewId = useSetRecoilComponentState(
+  const visibleFieldsCount = visibleBoardFields.length;
+
+  const { destroyViewFromCurrentState } = useDestroyViewFromCurrentState();
+  const setViewPickerReferenceViewId = useSetAtomComponentState(
     viewPickerReferenceViewIdComponentState,
+    recordIndexId,
   );
 
   const handleDelete = () => {
@@ -86,7 +116,7 @@ export const ObjectOptionsDropdownCustomView = ({
       return;
     }
     setViewPickerReferenceViewId(customViewData?.id);
-    deleteViewFromCurrentState();
+    destroyViewFromCurrentState();
     closeDropdown();
     onBackToDefault?.();
   };
@@ -95,14 +125,19 @@ export const ObjectOptionsDropdownCustomView = ({
     'Layout',
     'Visibility',
     'Fields',
-    ...(customViewData?.type === ViewType.Calendar
-      ? ['CalendarDateField', 'CalendarView']
+    ...(customViewData?.type === ViewType.CALENDAR
+      ? [
+          isCalendarWeekViewEnabled
+            ? 'CalendarDateFields'
+            : 'CalendarDateField',
+          'CalendarView',
+        ]
       : []),
-    ...(customViewData?.type !== ViewType.Calendar ? ['Group'] : []),
+    ...(customViewData?.type !== ViewType.CALENDAR ? ['Group'] : []),
     'Delete view',
   ];
 
-  const selectedItemId = useRecoilComponentValue(
+  const selectedItemId = useAtomComponentStateValue(
     selectedItemIdComponentState,
     OBJECT_OPTIONS_DROPDOWN_ID,
   );
@@ -129,10 +164,10 @@ export const ObjectOptionsDropdownCustomView = ({
               focused={selectedItemId === 'Layout'}
               onClick={() => onContentChange('layout')}
               LeftIcon={viewTypeIconMapping(
-                customViewData?.type ?? ViewType.Table,
+                customViewData?.type ?? ViewType.TABLE,
               )}
               text={t`Layout`}
-              contextualText={`${capitalize(customViewData?.type ?? '')}`}
+              contextualText={t(getViewTypeLabel(customViewData.type))}
               contextualTextPosition="right"
               hasSubMenu
             />
@@ -158,29 +193,53 @@ export const ObjectOptionsDropdownCustomView = ({
         </DropdownMenuItemsContainer>
         <DropdownMenuSeparator />
         <DropdownMenuItemsContainer scrollable={false}>
-          {customViewData?.type === ViewType.Calendar && (
+          {customViewData?.type === ViewType.CALENDAR && (
             <>
-              <div id="calendar-date-field-picker-menu-item">
-                <SelectableListItem
-                  itemId="CalendarDateField"
-                  onEnter={() => onContentChange('calendarFields')}
-                >
-                  <MenuItem
-                    focused={selectedItemId === 'CalendarDateField'}
-                    onClick={() => onContentChange('calendarFields')}
-                    LeftIcon={IconCalendar}
-                    text={t`Date field`}
-                    contextualText={
-                      isDefaultView
-                        ? t`Not available on Default View`
-                        : calendarFieldMetadata?.label
-                    }
-                    contextualTextPosition="right"
-                    hasSubMenu
-                    disabled={isDefaultView}
-                  />
-                </SelectableListItem>
-              </div>
+              {isCalendarWeekViewEnabled ? (
+                <div id="calendar-date-fields-picker-menu-item">
+                  <SelectableListItem
+                    itemId="CalendarDateFields"
+                    onEnter={() => onContentChange('calendarDateFields')}
+                  >
+                    <MenuItem
+                      focused={selectedItemId === 'CalendarDateFields'}
+                      onClick={() => onContentChange('calendarDateFields')}
+                      LeftIcon={IconCalendar}
+                      text={t`Date fields`}
+                      contextualText={
+                        isDefaultView
+                          ? t`Not available on Default View`
+                          : calendarFieldMetadata?.label
+                      }
+                      contextualTextPosition="right"
+                      hasSubMenu
+                      disabled={isDefaultView}
+                    />
+                  </SelectableListItem>
+                </div>
+              ) : (
+                <div id="calendar-date-field-picker-menu-item">
+                  <SelectableListItem
+                    itemId="CalendarDateField"
+                    onEnter={() => onContentChange('calendarFields')}
+                  >
+                    <MenuItem
+                      focused={selectedItemId === 'CalendarDateField'}
+                      onClick={() => onContentChange('calendarFields')}
+                      LeftIcon={IconCalendar}
+                      text={t`Date field`}
+                      contextualText={
+                        isDefaultView
+                          ? t`Not available on Default View`
+                          : calendarFieldMetadata?.label
+                      }
+                      contextualTextPosition="right"
+                      hasSubMenu
+                      disabled={isDefaultView}
+                    />
+                  </SelectableListItem>
+                </div>
+              )}
               <SelectableListItem
                 itemId="CalendarView"
                 onEnter={() => onContentChange('calendarView')}
@@ -191,9 +250,9 @@ export const ObjectOptionsDropdownCustomView = ({
                   LeftIcon={IconCalendarWeek}
                   text={t`Calendar view`}
                   contextualText={
-                    recordIndexCalendarLayout === ViewCalendarLayout.MONTH
+                    supportedCalendarLayout === ViewCalendarLayout.MONTH
                       ? t`Month`
-                      : recordIndexCalendarLayout === ViewCalendarLayout.WEEK
+                      : supportedCalendarLayout === ViewCalendarLayout.WEEK
                         ? t`Week`
                         : t`Day`
                   }
@@ -211,17 +270,17 @@ export const ObjectOptionsDropdownCustomView = ({
               onClick={() => onContentChange('fields')}
               LeftIcon={IconListDetails}
               text={t`Fields`}
-              contextualText={`${visibleBoardFields.length} shown`}
+              contextualText={t`${visibleFieldsCount} shown`}
               contextualTextPosition="right"
               hasSubMenu
             />
           </SelectableListItem>
-          {customViewData?.type !== ViewType.Calendar && (
+          {customViewData?.type !== ViewType.CALENDAR && (
             <div id="group-by-menu-item">
               <SelectableListItem
                 itemId="Group"
                 onEnter={() =>
-                  isDefined(recordGroupFieldMetadata)
+                  isDefined(recordIndexGroupFieldMetadataItem)
                     ? onContentChange('recordGroups')
                     : onContentChange('recordGroupFields')
                 }
@@ -229,7 +288,7 @@ export const ObjectOptionsDropdownCustomView = ({
                 <MenuItem
                   focused={selectedItemId === 'Group'}
                   onClick={() =>
-                    isDefined(recordGroupFieldMetadata)
+                    isDefined(recordIndexGroupFieldMetadataItem)
                       ? onContentChange('recordGroups')
                       : onContentChange('recordGroupFields')
                   }
@@ -238,7 +297,7 @@ export const ObjectOptionsDropdownCustomView = ({
                   contextualText={
                     isDefaultView
                       ? t`Not available on Default View`
-                      : recordGroupFieldMetadata?.label
+                      : recordIndexGroupFieldMetadataItem?.label
                   }
                   contextualTextPosition="right"
                   hasSubMenu
@@ -269,14 +328,19 @@ export const ObjectOptionsDropdownCustomView = ({
                 onClick={() => handleDelete()}
                 LeftIcon={IconTrash}
                 text={t`Delete view`}
-                disabled={isDefaultView}
+                disabled={isDefaultView || isLastView}
+                accent="danger"
               />
             </SelectableListItem>
           </div>
-          {isDefaultView && (
+          {(isDefaultView || isLastView) && (
             <AppTooltip
               anchorSelect={`#delete-view-menu-item`}
-              content={t`Not available on Default View`}
+              content={
+                isDefaultView
+                  ? t`Not available on Default View`
+                  : t`Cannot delete the only view`
+              }
               noArrow
               place="bottom"
               width="100%"

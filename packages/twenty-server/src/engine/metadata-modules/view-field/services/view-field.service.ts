@@ -1,469 +1,402 @@
 import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
 
-import { msg } from '@lingui/core/macro';
 import { isDefined } from 'twenty-shared/utils';
-import { IsNull, Repository } from 'typeorm';
 
-import { UserInputError } from 'src/engine/core-modules/graphql/utils/graphql-errors.util';
-import { ViewFieldEntity } from 'src/engine/metadata-modules/view-field/entities/view-field.entity';
+import { ApplicationService } from 'src/engine/core-modules/application/application.service';
+import { WorkspaceManyOrAllFlatEntityMapsCacheService } from 'src/engine/metadata-modules/flat-entity/services/workspace-many-or-all-flat-entity-maps-cache.service';
+import { findFlatEntityByIdInFlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/utils/find-flat-entity-by-id-in-flat-entity-maps.util';
+import { findFlatEntityByUniversalIdentifierOrThrow } from 'src/engine/metadata-modules/flat-entity/utils/find-flat-entity-by-universal-identifier-or-throw.util';
+import { findManyFlatEntityByIdInFlatEntityMapsOrThrow } from 'src/engine/metadata-modules/flat-entity/utils/find-many-flat-entity-by-id-in-flat-entity-maps-or-throw.util';
+import { fromCreateViewFieldInputToFlatViewFieldToCreate } from 'src/engine/metadata-modules/flat-view-field/utils/from-create-view-field-input-to-flat-view-field-to-create.util';
+import { fromDeleteViewFieldInputToFlatViewFieldOrThrow } from 'src/engine/metadata-modules/flat-view-field/utils/from-delete-view-field-input-to-flat-view-field-or-throw.util';
+import { fromDestroyViewFieldInputToFlatViewFieldOrThrow } from 'src/engine/metadata-modules/flat-view-field/utils/from-destroy-view-field-input-to-flat-view-field-or-throw.util';
+import { fromUpdateViewFieldInputToFlatViewFieldToUpdateOrThrow } from 'src/engine/metadata-modules/flat-view-field/utils/from-update-view-field-input-to-flat-view-field-to-update-or-throw.util';
+import { CreateViewFieldInput } from 'src/engine/metadata-modules/view-field/dtos/inputs/create-view-field.input';
+import { DeleteViewFieldInput } from 'src/engine/metadata-modules/view-field/dtos/inputs/delete-view-field.input';
+import { DestroyViewFieldInput } from 'src/engine/metadata-modules/view-field/dtos/inputs/destroy-view-field.input';
+import { UpdateViewFieldInput } from 'src/engine/metadata-modules/view-field/dtos/inputs/update-view-field.input';
+import { ViewFieldDTO } from 'src/engine/metadata-modules/view-field/dtos/view-field.dto';
 import {
   ViewFieldException,
   ViewFieldExceptionCode,
-  ViewFieldExceptionMessageKey,
-  generateViewFieldExceptionMessage,
-  generateViewFieldUserFriendlyExceptionMessage,
 } from 'src/engine/metadata-modules/view-field/exceptions/view-field.exception';
-import { FIND_ALL_CORE_VIEWS_GRAPHQL_OPERATION } from 'src/engine/metadata-modules/view/constants/find-all-core-views-graphql-operation.constant';
-import { ViewEntity } from 'src/engine/metadata-modules/view/entities/view.entity';
-import { WorkspaceCacheStorageService } from 'src/engine/workspace-cache-storage/workspace-cache-storage.service';
+import { fromFlatViewFieldToViewFieldDto } from 'src/engine/metadata-modules/view-field/utils/from-flat-view-field-to-view-field-dto.util';
+import { WorkspaceMigrationBuilderException } from 'src/engine/workspace-manager/workspace-migration/exceptions/workspace-migration-builder-exception';
+import { WorkspaceMigrationValidateBuildAndRunService } from 'src/engine/workspace-manager/workspace-migration/services/workspace-migration-validate-build-and-run-service';
 
 @Injectable()
 export class ViewFieldService {
   constructor(
-    @InjectRepository(ViewFieldEntity)
-    private readonly viewFieldRepository: Repository<ViewFieldEntity>,
-    @InjectRepository(ViewEntity)
-    private readonly viewRepository: Repository<ViewEntity>,
-    private readonly workspaceCacheStorageService: WorkspaceCacheStorageService,
+    private readonly workspaceMigrationValidateBuildAndRunService: WorkspaceMigrationValidateBuildAndRunService,
+    private readonly workspaceManyOrAllFlatEntityMapsCacheService: WorkspaceManyOrAllFlatEntityMapsCacheService,
+    private readonly applicationService: ApplicationService,
   ) {}
 
-  async findByWorkspaceId(workspaceId: string): Promise<ViewFieldEntity[]> {
-    return this.viewFieldRepository.find({
-      where: {
-        workspaceId,
-        deletedAt: IsNull(),
-      },
-      order: { position: 'ASC' },
-      relations: ['workspace', 'view'],
+  async createOne({
+    createViewFieldInput,
+    workspaceId,
+  }: {
+    createViewFieldInput: CreateViewFieldInput;
+    workspaceId: string;
+  }): Promise<ViewFieldDTO> {
+    const [createdViewField] = await this.createMany({
+      workspaceId,
+      createViewFieldInputs: [createViewFieldInput],
     });
+
+    if (!isDefined(createdViewField)) {
+      throw new ViewFieldException(
+        'Failed to create view field',
+        ViewFieldExceptionCode.INVALID_VIEW_FIELD_DATA,
+      );
+    }
+
+    return createdViewField;
+  }
+
+  async createMany({
+    createViewFieldInputs,
+    workspaceId,
+  }: {
+    createViewFieldInputs: CreateViewFieldInput[];
+    workspaceId: string;
+  }): Promise<ViewFieldDTO[]> {
+    if (createViewFieldInputs.length === 0) {
+      return [];
+    }
+
+    const { workspaceCustomFlatApplication } =
+      await this.applicationService.findWorkspaceTwentyStandardAndCustomApplicationOrThrow(
+        {
+          workspaceId,
+        },
+      );
+
+    const { flatFieldMetadataMaps, flatViewMaps, flatViewFieldGroupMaps } =
+      await this.workspaceManyOrAllFlatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+        {
+          workspaceId,
+          flatMapsKeys: [
+            'flatFieldMetadataMaps',
+            'flatViewMaps',
+            'flatViewFieldGroupMaps',
+          ],
+        },
+      );
+
+    const flatViewFieldsToCreate = createViewFieldInputs.map(
+      (createViewFieldInput) =>
+        fromCreateViewFieldInputToFlatViewFieldToCreate({
+          createViewFieldInput,
+          flatApplication: workspaceCustomFlatApplication,
+          flatFieldMetadataMaps,
+          flatViewMaps,
+          flatViewFieldGroupMaps,
+        }),
+    );
+
+    const validateAndBuildResult =
+      await this.workspaceMigrationValidateBuildAndRunService.validateBuildAndRunWorkspaceMigration(
+        {
+          allFlatEntityOperationByMetadataName: {
+            viewField: {
+              flatEntityToCreate: flatViewFieldsToCreate,
+              flatEntityToDelete: [],
+              flatEntityToUpdate: [],
+            },
+          },
+          workspaceId,
+          isSystemBuild: false,
+          applicationUniversalIdentifier:
+            workspaceCustomFlatApplication.universalIdentifier,
+        },
+      );
+
+    if (validateAndBuildResult.status === 'fail') {
+      throw new WorkspaceMigrationBuilderException(
+        validateAndBuildResult,
+        'Multiple validation errors occurred while creating view fields',
+      );
+    }
+
+    const { flatViewFieldMaps: recomputedExistingFlatViewFieldMaps } =
+      await this.workspaceManyOrAllFlatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+        {
+          workspaceId,
+          flatMapsKeys: ['flatViewFieldMaps'],
+        },
+      );
+
+    return findManyFlatEntityByIdInFlatEntityMapsOrThrow({
+      flatEntityIds: flatViewFieldsToCreate.map((el) => el.id),
+      flatEntityMaps: recomputedExistingFlatViewFieldMaps,
+    }).map(fromFlatViewFieldToViewFieldDto);
+  }
+
+  async updateOne({
+    updateViewFieldInput,
+    workspaceId,
+  }: {
+    workspaceId: string;
+    updateViewFieldInput: UpdateViewFieldInput;
+  }): Promise<ViewFieldDTO> {
+    const { workspaceCustomFlatApplication } =
+      await this.applicationService.findWorkspaceTwentyStandardAndCustomApplicationOrThrow(
+        {
+          workspaceId,
+        },
+      );
+
+    const {
+      flatViewFieldMaps: existingFlatViewFieldMaps,
+      flatViewFieldGroupMaps,
+    } =
+      await this.workspaceManyOrAllFlatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+        {
+          workspaceId,
+          flatMapsKeys: ['flatViewFieldMaps', 'flatViewFieldGroupMaps'],
+        },
+      );
+
+    const optimisticallyUpdatedFlatView =
+      fromUpdateViewFieldInputToFlatViewFieldToUpdateOrThrow({
+        flatViewFieldMaps: existingFlatViewFieldMaps,
+        flatViewFieldGroupMaps,
+        updateViewFieldInput,
+        callerApplicationUniversalIdentifier:
+          workspaceCustomFlatApplication.universalIdentifier,
+        workspaceCustomApplicationUniversalIdentifier:
+          workspaceCustomFlatApplication.universalIdentifier,
+      });
+
+    const validateAndBuildResult =
+      await this.workspaceMigrationValidateBuildAndRunService.validateBuildAndRunWorkspaceMigration(
+        {
+          allFlatEntityOperationByMetadataName: {
+            viewField: {
+              flatEntityToCreate: [],
+              flatEntityToDelete: [],
+              flatEntityToUpdate: [optimisticallyUpdatedFlatView],
+            },
+          },
+          workspaceId,
+          isSystemBuild: false,
+          applicationUniversalIdentifier:
+            workspaceCustomFlatApplication.universalIdentifier,
+        },
+      );
+
+    if (validateAndBuildResult.status === 'fail') {
+      throw new WorkspaceMigrationBuilderException(
+        validateAndBuildResult,
+        'Multiple validation errors occurred while updating view field',
+      );
+    }
+
+    const { flatViewFieldMaps: recomputedExistingFlatViewFieldMaps } =
+      await this.workspaceManyOrAllFlatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+        {
+          workspaceId,
+          flatMapsKeys: ['flatViewFieldMaps'],
+        },
+      );
+
+    return fromFlatViewFieldToViewFieldDto(
+      findFlatEntityByUniversalIdentifierOrThrow({
+        universalIdentifier: optimisticallyUpdatedFlatView.universalIdentifier,
+        flatEntityMaps: recomputedExistingFlatViewFieldMaps,
+      }),
+    );
+  }
+
+  async deleteOne({
+    deleteViewFieldInput,
+    workspaceId,
+  }: {
+    deleteViewFieldInput: DeleteViewFieldInput;
+    workspaceId: string;
+  }): Promise<ViewFieldDTO> {
+    const { workspaceCustomFlatApplication } =
+      await this.applicationService.findWorkspaceTwentyStandardAndCustomApplicationOrThrow(
+        {
+          workspaceId,
+        },
+      );
+
+    const { flatViewFieldMaps: existingFlatViewFieldMaps } =
+      await this.workspaceManyOrAllFlatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+        {
+          workspaceId,
+          flatMapsKeys: ['flatViewFieldMaps'],
+        },
+      );
+
+    const optimisticallyUpdatedFlatViewWithDeletedAt =
+      fromDeleteViewFieldInputToFlatViewFieldOrThrow({
+        flatViewFieldMaps: existingFlatViewFieldMaps,
+        deleteViewFieldInput,
+      });
+
+    const validateAndBuildResult =
+      await this.workspaceMigrationValidateBuildAndRunService.validateBuildAndRunWorkspaceMigration(
+        {
+          allFlatEntityOperationByMetadataName: {
+            viewField: {
+              flatEntityToCreate: [],
+              flatEntityToDelete: [],
+              flatEntityToUpdate: [optimisticallyUpdatedFlatViewWithDeletedAt],
+            },
+          },
+          workspaceId,
+          isSystemBuild: false,
+          applicationUniversalIdentifier:
+            workspaceCustomFlatApplication.universalIdentifier,
+        },
+      );
+
+    if (validateAndBuildResult.status === 'fail') {
+      throw new WorkspaceMigrationBuilderException(
+        validateAndBuildResult,
+        'Multiple validation errors occurred while deleting view field',
+      );
+    }
+
+    const { flatViewFieldMaps: recomputedExistingFlatViewFieldMaps } =
+      await this.workspaceManyOrAllFlatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+        {
+          workspaceId,
+          flatMapsKeys: ['flatViewFieldMaps'],
+        },
+      );
+
+    return fromFlatViewFieldToViewFieldDto(
+      findFlatEntityByUniversalIdentifierOrThrow({
+        universalIdentifier:
+          optimisticallyUpdatedFlatViewWithDeletedAt.universalIdentifier,
+        flatEntityMaps: recomputedExistingFlatViewFieldMaps,
+      }),
+    );
+  }
+
+  async destroyOne({
+    destroyViewFieldInput,
+    workspaceId,
+  }: {
+    destroyViewFieldInput: DestroyViewFieldInput;
+    workspaceId: string;
+  }): Promise<ViewFieldDTO> {
+    const { workspaceCustomFlatApplication } =
+      await this.applicationService.findWorkspaceTwentyStandardAndCustomApplicationOrThrow(
+        {
+          workspaceId,
+        },
+      );
+
+    const { flatViewFieldMaps: existingFlatViewFieldMaps } =
+      await this.workspaceManyOrAllFlatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+        {
+          workspaceId,
+          flatMapsKeys: ['flatViewFieldMaps'],
+        },
+      );
+
+    const existingViewFieldToDelete =
+      fromDestroyViewFieldInputToFlatViewFieldOrThrow({
+        destroyViewFieldInput,
+        flatViewFieldMaps: existingFlatViewFieldMaps,
+      });
+
+    const existingFlatViewField = findFlatEntityByUniversalIdentifierOrThrow({
+      universalIdentifier: existingViewFieldToDelete.universalIdentifier,
+      flatEntityMaps: existingFlatViewFieldMaps,
+    });
+
+    const validateAndBuildResult =
+      await this.workspaceMigrationValidateBuildAndRunService.validateBuildAndRunWorkspaceMigration(
+        {
+          allFlatEntityOperationByMetadataName: {
+            viewField: {
+              flatEntityToCreate: [],
+              flatEntityToDelete: [existingViewFieldToDelete],
+              flatEntityToUpdate: [],
+            },
+          },
+          workspaceId,
+          isSystemBuild: false,
+          applicationUniversalIdentifier:
+            workspaceCustomFlatApplication.universalIdentifier,
+        },
+      );
+
+    if (validateAndBuildResult.status === 'fail') {
+      throw new WorkspaceMigrationBuilderException(
+        validateAndBuildResult,
+        'Multiple validation errors occurred while deleting view field',
+      );
+    }
+
+    return fromFlatViewFieldToViewFieldDto({
+      ...existingFlatViewField,
+      deletedAt: new Date().toISOString(),
+    });
+  }
+
+  async findByWorkspaceId(workspaceId: string): Promise<ViewFieldDTO[]> {
+    const { flatViewFieldMaps } =
+      await this.workspaceManyOrAllFlatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+        {
+          workspaceId,
+          flatMapsKeys: ['flatViewFieldMaps'],
+        },
+      );
+
+    return Object.values(flatViewFieldMaps.byUniversalIdentifier)
+      .filter(isDefined)
+      .filter((field) => !isDefined(field.deletedAt))
+      .map(fromFlatViewFieldToViewFieldDto)
+      .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id));
   }
 
   async findByViewId(
     workspaceId: string,
     viewId: string,
-  ): Promise<ViewFieldEntity[]> {
-    return this.viewFieldRepository.find({
-      where: {
-        workspaceId,
-        viewId,
-        deletedAt: IsNull(),
-      },
-      order: { position: 'ASC' },
-      relations: ['workspace', 'view'],
-    });
+  ): Promise<ViewFieldDTO[]> {
+    const { flatViewFieldMaps } =
+      await this.workspaceManyOrAllFlatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+        {
+          workspaceId,
+          flatMapsKeys: ['flatViewFieldMaps'],
+        },
+      );
+
+    return Object.values(flatViewFieldMaps.byUniversalIdentifier)
+      .filter(isDefined)
+      .filter((field) => field.viewId === viewId && !isDefined(field.deletedAt))
+      .map(fromFlatViewFieldToViewFieldDto)
+      .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id));
   }
 
   async findById(
     id: string,
     workspaceId: string,
-  ): Promise<ViewFieldEntity | null> {
-    const viewField = await this.viewFieldRepository.findOne({
-      where: {
-        id,
-        workspaceId,
-        deletedAt: IsNull(),
-      },
-      relations: ['workspace', 'view'],
-    });
-
-    return viewField || null;
-  }
-
-  async create(
-    viewFieldData: Partial<ViewFieldEntity>,
-  ): Promise<ViewFieldEntity> {
-    if (this.hasRequiredFields(viewFieldData)) {
-      try {
-        if (isDefined(viewFieldData.position)) {
-          const viewFieldDataWithPosition =
-            viewFieldData as typeof viewFieldData & { position: number };
-
-          await this.verifyLabelMetadataIdentifierIsInFirstPositionOrThrow(
-            viewFieldDataWithPosition,
-            viewFieldData.workspaceId,
-          );
-        }
-
-        await this.verifyLabelMetadataIdentifierIsVisibleOrThrow(
-          viewFieldData,
-          viewFieldData.workspaceId,
-        );
-
-        const viewFieldDataWithPosition = await this.formatViewFieldData(
-          viewFieldData,
-          viewFieldData.workspaceId,
-        );
-
-        const viewField = this.viewFieldRepository.create(
-          viewFieldDataWithPosition,
-        );
-
-        const savedViewField = await this.viewFieldRepository.save(viewField);
-
-        await this.flushGraphQLCache(viewFieldData.workspaceId);
-
-        const createdViewField = await this.findById(
-          savedViewField.id,
-          viewFieldData.workspaceId,
-        );
-
-        if (!isDefined(createdViewField)) {
-          throw new ViewFieldException(
-            generateViewFieldExceptionMessage(
-              ViewFieldExceptionMessageKey.VIEW_FIELD_NOT_FOUND,
-            ),
-            ViewFieldExceptionCode.VIEW_FIELD_NOT_FOUND,
-            {
-              userFriendlyMessage:
-                generateViewFieldUserFriendlyExceptionMessage(
-                  ViewFieldExceptionMessageKey.VIEW_FIELD_NOT_FOUND,
-                ),
-            },
-          );
-        }
-
-        return createdViewField;
-      } catch (error) {
-        if (
-          error.message.includes(
-            'duplicate key value violates unique constraint',
-          )
-        ) {
-          throw new ViewFieldException(
-            generateViewFieldExceptionMessage(
-              ViewFieldExceptionMessageKey.VIEW_FIELD_ALREADY_EXISTS,
-            ),
-            ViewFieldExceptionCode.INVALID_VIEW_FIELD_DATA,
-            {
-              userFriendlyMessage:
-                generateViewFieldUserFriendlyExceptionMessage(
-                  ViewFieldExceptionMessageKey.VIEW_FIELD_ALREADY_EXISTS,
-                ),
-            },
-          );
-        }
-
-        throw error;
-      }
-    } else {
-      if (!isDefined(viewFieldData.workspaceId)) {
-        throw new ViewFieldException(
-          generateViewFieldExceptionMessage(
-            ViewFieldExceptionMessageKey.WORKSPACE_ID_REQUIRED,
-          ),
-          ViewFieldExceptionCode.INVALID_VIEW_FIELD_DATA,
-          {
-            userFriendlyMessage: generateViewFieldUserFriendlyExceptionMessage(
-              ViewFieldExceptionMessageKey.WORKSPACE_ID_REQUIRED,
-            ),
-          },
-        );
-      }
-
-      if (!isDefined(viewFieldData.viewId)) {
-        throw new ViewFieldException(
-          generateViewFieldExceptionMessage(
-            ViewFieldExceptionMessageKey.VIEW_ID_REQUIRED,
-          ),
-          ViewFieldExceptionCode.INVALID_VIEW_FIELD_DATA,
-          {
-            userFriendlyMessage: generateViewFieldUserFriendlyExceptionMessage(
-              ViewFieldExceptionMessageKey.VIEW_ID_REQUIRED,
-            ),
-          },
-        );
-      }
-
-      throw new ViewFieldException(
-        generateViewFieldExceptionMessage(
-          ViewFieldExceptionMessageKey.FIELD_METADATA_ID_REQUIRED,
-        ),
-        ViewFieldExceptionCode.INVALID_VIEW_FIELD_DATA,
+  ): Promise<ViewFieldDTO | null> {
+    const { flatViewFieldMaps } =
+      await this.workspaceManyOrAllFlatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
         {
-          userFriendlyMessage: generateViewFieldUserFriendlyExceptionMessage(
-            ViewFieldExceptionMessageKey.FIELD_METADATA_ID_REQUIRED,
-          ),
+          workspaceId,
+          flatMapsKeys: ['flatViewFieldMaps'],
         },
       );
-    }
-  }
 
-  async update(
-    id: string,
-    workspaceId: string,
-    updateData: Partial<ViewFieldEntity>,
-  ): Promise<ViewFieldEntity> {
-    const existingViewField = await this.findById(id, workspaceId);
-
-    if (!isDefined(existingViewField)) {
-      throw new ViewFieldException(
-        generateViewFieldExceptionMessage(
-          ViewFieldExceptionMessageKey.VIEW_FIELD_NOT_FOUND,
-          id,
-        ),
-        ViewFieldExceptionCode.VIEW_FIELD_NOT_FOUND,
-      );
-    }
-
-    const viewId = existingViewField.viewId;
-
-    if (this.updatesPosition(updateData)) {
-      await this.verifyLabelMetadataIdentifierIsInFirstPositionOrThrow(
-        {
-          ...updateData,
-          viewId,
-          id,
-          fieldMetadataId: existingViewField.fieldMetadataId,
-        },
-        workspaceId,
-      );
-    }
-
-    if (this.disablesVisibility(updateData)) {
-      await this.verifyLabelMetadataIdentifierIsVisibleOrThrow(
-        { ...updateData, viewId, id },
-        workspaceId,
-      );
-    }
-
-    const updatedViewField = await this.viewFieldRepository.save({
-      id,
-      ...updateData,
+    const flatViewField = findFlatEntityByIdInFlatEntityMaps({
+      flatEntityId: id,
+      flatEntityMaps: flatViewFieldMaps,
     });
 
-    await this.flushGraphQLCache(workspaceId);
-
-    return { ...existingViewField, ...updatedViewField };
-  }
-
-  async delete(id: string, workspaceId: string): Promise<ViewFieldEntity> {
-    const viewField = await this.findById(id, workspaceId);
-
-    if (!isDefined(viewField)) {
-      throw new ViewFieldException(
-        generateViewFieldExceptionMessage(
-          ViewFieldExceptionMessageKey.VIEW_FIELD_NOT_FOUND,
-          id,
-        ),
-        ViewFieldExceptionCode.VIEW_FIELD_NOT_FOUND,
-      );
+    if (!isDefined(flatViewField) || isDefined(flatViewField.deletedAt)) {
+      return null;
     }
 
-    await this.viewFieldRepository.softDelete(id);
-
-    await this.flushGraphQLCache(workspaceId);
-
-    return viewField;
-  }
-
-  async destroy(id: string, workspaceId: string): Promise<ViewFieldEntity> {
-    const viewField = await this.viewFieldRepository.findOne({
-      where: {
-        id,
-        workspaceId,
-      },
-      relations: ['workspace', 'view'],
-      withDeleted: true,
-    });
-
-    if (!isDefined(viewField)) {
-      throw new ViewFieldException(
-        generateViewFieldExceptionMessage(
-          ViewFieldExceptionMessageKey.VIEW_FIELD_NOT_FOUND,
-          id,
-        ),
-        ViewFieldExceptionCode.VIEW_FIELD_NOT_FOUND,
-      );
-    }
-
-    await this.viewFieldRepository.delete(id);
-
-    await this.flushGraphQLCache(workspaceId);
-
-    return viewField;
-  }
-
-  private updatesPosition(
-    data: Partial<ViewFieldEntity>,
-  ): data is Partial<ViewFieldEntity> & { position: number } {
-    return isDefined(data.position);
-  }
-
-  private disablesVisibility(
-    data: Partial<ViewFieldEntity>,
-  ): data is Partial<ViewFieldEntity> & { isVisible: boolean } {
-    return data.isVisible === false;
-  }
-
-  private async verifyLabelMetadataIdentifierIsVisibleOrThrow(
-    newOrUpdatedViewField: Partial<ViewFieldEntity> & {
-      viewId: string;
-    },
-    workspaceId: string,
-  ) {
-    const view = await this.findViewByIdWithRelations(
-      newOrUpdatedViewField.viewId,
-      workspaceId,
-    );
-
-    if (!isDefined(view)) {
-      throw new Error(`View not found: ${newOrUpdatedViewField.viewId}`);
-    }
-
-    const labelMetadataIdentifierFieldMetadataId =
-      view.objectMetadata.labelIdentifierFieldMetadataId;
-
-    const labelMetadataIdentifierViewField = view.viewFields.find(
-      (viewField) =>
-        viewField.fieldMetadataId === labelMetadataIdentifierFieldMetadataId,
-    );
-
-    if (
-      !isDefined(labelMetadataIdentifierViewField) ||
-      labelMetadataIdentifierViewField.id !== newOrUpdatedViewField.id
-    ) {
-      return;
-    }
-
-    if (newOrUpdatedViewField.isVisible === false) {
-      throw new UserInputError('Label metadata identifier must stay visible.', {
-        userFriendlyMessage: msg`Record text must stay visible.`,
-      });
-    }
-  }
-
-  private async verifyLabelMetadataIdentifierIsInFirstPositionOrThrow(
-    newOrUpdatedViewField: Partial<ViewFieldEntity> & { viewId: string } & {
-      position: number;
-    },
-    workspaceId: string,
-  ) {
-    const view = await this.findViewByIdWithRelations(
-      newOrUpdatedViewField.viewId,
-      workspaceId,
-    );
-
-    if (!isDefined(view)) {
-      throw new Error(`View not found: ${newOrUpdatedViewField.viewId}`);
-    }
-
-    const viewFieldsWithoutUpdatedViewField = view.viewFields.filter(
-      (viewField) => viewField.id !== newOrUpdatedViewField?.id,
-    );
-
-    if (viewFieldsWithoutUpdatedViewField.length === 0) {
-      return;
-    }
-
-    const labelMetadataIdentifierFieldMetadataId =
-      view.objectMetadata.labelIdentifierFieldMetadataId;
-
-    if (
-      labelMetadataIdentifierFieldMetadataId ===
-      newOrUpdatedViewField.fieldMetadataId
-    ) {
-      const minPositionInViewWithoutUpdatedViewField =
-        viewFieldsWithoutUpdatedViewField.reduce(
-          (minViewField, viewField) =>
-            viewField.position < minViewField.position
-              ? viewField
-              : minViewField,
-          viewFieldsWithoutUpdatedViewField[0],
-        ).position;
-
-      if (
-        newOrUpdatedViewField.position >=
-        minPositionInViewWithoutUpdatedViewField
-      ) {
-        throw new UserInputError(
-          'Label metadata identifier must keep the minimal position in the view.',
-          {
-            userFriendlyMessage: msg`Record text must be in first position of the view.`,
-          },
-        );
-      }
-    } else {
-      const labelMetadataIdentifierViewFieldPosition = view.viewFields.find(
-        (viewField) =>
-          viewField.fieldMetadataId === labelMetadataIdentifierFieldMetadataId,
-      )?.position;
-
-      if (
-        isDefined(labelMetadataIdentifierViewFieldPosition) &&
-        newOrUpdatedViewField.position <=
-          labelMetadataIdentifierViewFieldPosition
-      ) {
-        throw new UserInputError(
-          'Label metadata identifier must keep the minimal position in the view.',
-          {
-            userFriendlyMessage: msg`Record text must be in first position of the view.`,
-          },
-        );
-      }
-    }
-  }
-
-  private async formatViewFieldData(
-    viewFieldData: Partial<ViewFieldEntity> & { viewId: string },
-    workspaceId: string,
-  ): Promise<Partial<ViewFieldEntity>> {
-    if (!isDefined(viewFieldData.position)) {
-      const view = await this.findViewByIdWithRelations(
-        viewFieldData.viewId,
-        workspaceId,
-      );
-
-      if (!isDefined(view)) {
-        throw new Error(`View not found: ${viewFieldData.viewId}`);
-      }
-
-      const highestPositionInView = view.viewFields.reduce(
-        (maxViewField, viewField) =>
-          viewField.position > maxViewField.position ? viewField : maxViewField,
-        view.viewFields[0],
-      );
-
-      return { ...viewFieldData, position: highestPositionInView.position + 1 };
-    } else {
-      return viewFieldData;
-    }
-  }
-
-  private hasRequiredFields(
-    data: Partial<ViewFieldEntity>,
-  ): data is Partial<ViewFieldEntity> & {
-    viewId: string;
-    fieldMetadataId: string;
-    workspaceId: string;
-  } {
-    return (
-      isDefined(data.viewId) &&
-      isDefined(data.fieldMetadataId) &&
-      isDefined(data.workspaceId)
-    );
-  }
-
-  public async findViewByIdWithRelations(
-    id: string,
-    workspaceId: string,
-  ): Promise<ViewEntity | null> {
-    const view = await this.viewRepository.findOne({
-      where: {
-        id,
-        workspaceId,
-        deletedAt: IsNull(),
-      },
-      relations: ['workspace', 'objectMetadata', 'viewFields'],
-    });
-
-    return view || null;
-  }
-
-  private async flushGraphQLCache(workspaceId: string): Promise<void> {
-    await this.workspaceCacheStorageService.flushGraphQLOperation({
-      operationName: FIND_ALL_CORE_VIEWS_GRAPHQL_OPERATION,
-      workspaceId,
-    });
+    return fromFlatViewFieldToViewFieldDto(flatViewField);
   }
 }

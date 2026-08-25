@@ -1,8 +1,4 @@
-import {
-  type DropResult,
-  type OnDragEndResponder,
-  type ResponderProvided,
-} from '@hello-pangea/dnd';
+import { type DraggableListDropResult } from '@/ui/layout/draggable-list/types/DraggableListDropResult';
 import { useRef } from 'react';
 
 import { RecordGroupMenuItemDraggable } from '@/object-record/record-group/components/RecordGroupMenuItemDraggable';
@@ -15,11 +11,12 @@ import { StyledDropdownMenuSubheader } from '@/ui/layout/dropdown/components/Sty
 type RecordGroupsVisibilityDropdownSectionProps = {
   recordGroupIds: string[];
   isDraggable: boolean;
-  onDragEnd?: OnDragEndResponder;
+  onDragEnd?: (result: DraggableListDropResult) => void;
   onVisibilityChange: (recordGroup: RecordGroupDefinition) => void;
   title: string;
   showSubheader?: boolean;
   showDragGrip: boolean;
+  isVisibleLimitReached?: boolean;
 };
 
 export const RecordGroupsVisibilityDropdownSection = ({
@@ -30,9 +27,10 @@ export const RecordGroupsVisibilityDropdownSection = ({
   title,
   showSubheader = true,
   showDragGrip,
+  isVisibleLimitReached = false,
 }: RecordGroupsVisibilityDropdownSectionProps) => {
-  const handleOnDrag = (result: DropResult, provided: ResponderProvided) => {
-    onDragEnd?.(result, provided);
+  const handleOnDrag = (result: DraggableListDropResult) => {
+    onDragEnd?.(result);
   };
 
   const ref = useRef<HTMLDivElement>(null);
@@ -42,7 +40,7 @@ export const RecordGroupsVisibilityDropdownSection = ({
       {showSubheader && (
         <StyledDropdownMenuSubheader>{title}</StyledDropdownMenuSubheader>
       )}
-      <DropdownMenuItemsContainer>
+      <DropdownMenuItemsContainer hasMaxHeight>
         {recordGroupIds.length > 0 && (
           <>
             {!isDraggable ? (
@@ -53,6 +51,7 @@ export const RecordGroupsVisibilityDropdownSection = ({
                   onVisibilityChange={onVisibilityChange}
                   showDragGrip={showDragGrip}
                   isDraggable={isDraggable}
+                  isVisibleLimitReached={isVisibleLimitReached}
                 />
               ))
             ) : (
@@ -71,6 +70,7 @@ export const RecordGroupsVisibilityDropdownSection = ({
                             onVisibilityChange={onVisibilityChange}
                             showDragGrip={showDragGrip}
                             isDraggable={isDraggable}
+                            isVisibleLimitReached={isVisibleLimitReached}
                           />
                         }
                       />

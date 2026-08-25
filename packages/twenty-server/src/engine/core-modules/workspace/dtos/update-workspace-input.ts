@@ -3,15 +3,18 @@ import { Field, InputType } from '@nestjs/graphql';
 import {
   IsArray,
   IsBoolean,
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
   IsUUID,
   Matches,
+  Max,
   Min,
 } from 'class-validator';
 
 import { UUIDScalarType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/scalars';
+import { WorkspaceDiscoverability } from 'src/engine/core-modules/workspace/types/workspace-discoverability.type';
 
 @InputType()
 export class UpdateWorkspaceInput {
@@ -47,6 +50,11 @@ export class UpdateWorkspaceInput {
   @IsBoolean()
   @IsOptional()
   isPublicInviteLinkEnabled?: boolean;
+
+  @Field(() => WorkspaceDiscoverability, { nullable: true })
+  @IsEnum(WorkspaceDiscoverability)
+  @IsOptional()
+  workspaceDiscoverability?: WorkspaceDiscoverability;
 
   @Field({ nullable: true })
   @IsBoolean()
@@ -100,13 +108,46 @@ export class UpdateWorkspaceInput {
   trashRetentionDays?: number;
 
   @Field({ nullable: true })
+  @IsInt()
+  @Min(30) // Minimum 30 days retention for audit compliance
+  @Max(1095) // Maximum 3 years (matches ClickHouse table-level TTL)
+  @IsOptional()
+  eventLogRetentionDays?: number;
+
+  @Field({ nullable: true })
   @IsString()
   @IsOptional()
-  routerModel?: string;
+  fastModel?: string;
+
+  @Field({ nullable: true })
+  @IsString()
+  @IsOptional()
+  smartModel?: string;
+
+  @Field({ nullable: true })
+  @IsString()
+  @IsOptional()
+  aiAdditionalInstructions?: string;
 
   @Field(() => [String], { nullable: true })
   @IsArray()
   @IsString({ each: true })
   @IsOptional()
   editableProfileFields?: string[];
+
+  @Field(() => [String], { nullable: true })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  enabledAiModelIds?: string[];
+
+  @Field({ nullable: true })
+  @IsBoolean()
+  @IsOptional()
+  useRecommendedModels?: boolean;
+
+  @Field({ nullable: true })
+  @IsBoolean()
+  @IsOptional()
+  isInternalMessagesImportEnabled?: boolean;
 }

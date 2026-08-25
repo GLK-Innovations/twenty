@@ -1,10 +1,9 @@
-import { TRIGGER_STEP_ID } from 'twenty-shared/workflow';
+import { TRIGGER_STEP_ID, WorkflowActionType } from 'twenty-shared/workflow';
 
 import { insertStep } from 'src/modules/workflow/workflow-builder/workflow-version-step/utils/insert-step';
 import {
   type WorkflowAction,
   type WorkflowIteratorAction,
-  WorkflowActionType,
 } from 'src/modules/workflow/workflow-executor/workflow-actions/types/workflow-action.type';
 import {
   type WorkflowTrigger,
@@ -39,9 +38,8 @@ describe('insertStep', () => {
     type: WorkflowActionType.CODE,
     settings: {
       input: {
-        serverlessFunctionId: 'test',
-        serverlessFunctionVersion: '1.0.0',
-        serverlessFunctionInput: {},
+        logicFunctionId: 'test',
+        logicFunctionInput: {},
       },
       outputSchema: {},
       errorHandlingOptions: {

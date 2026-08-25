@@ -1,9 +1,11 @@
-import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
-import { useSetRecoilComponentState } from '@/ui/utilities/state/component-state/hooks/useSetRecoilComponentState';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import { useSetAtomComponentState } from '@/ui/utilities/state/jotai/hooks/useSetAtomComponentState';
+import { flowComponentState } from '@/workflow/states/flowComponentState';
 import { useWorkflowWithCurrentVersion } from '@/workflow/hooks/useWorkflowWithCurrentVersion';
 import { workflowVisualizerWorkflowIdComponentState } from '@/workflow/states/workflowVisualizerWorkflowIdComponentState';
 import { WorkflowDiagramCanvasBase } from '@/workflow/workflow-diagram/components/WorkflowDiagramCanvasBase';
 import { WorkflowDiagramCanvasEditableEffect } from '@/workflow/workflow-diagram/components/WorkflowDiagramCanvasEditableEffect';
+import { useStartNodeCreation } from '@/workflow/workflow-diagram/hooks/useStartNodeCreation';
 import { workflowDiagramComponentState } from '@/workflow/workflow-diagram/states/workflowDiagramComponentState';
 import { workflowDiagramRightClickMenuPositionState } from '@/workflow/workflow-diagram/states/workflowDiagramRightClickMenuPositionState';
 import {
@@ -22,18 +24,20 @@ import { WorkflowDiagramStepNodeEditable } from '@/workflow/workflow-diagram/wor
 import { useCreateEdge } from '@/workflow/workflow-steps/hooks/useCreateEdge';
 import { useDeleteEdge } from '@/workflow/workflow-steps/hooks/useDeleteEdge';
 import { useUpdateStep } from '@/workflow/workflow-steps/hooks/useUpdateStep';
+import { prepareIfElseStepWithNewBranch } from '@/workflow/workflow-steps/workflow-actions/if-else-action/utils/prepareIfElseStepWithNewBranch';
 import { useUpdateWorkflowVersionTrigger } from '@/workflow/workflow-trigger/hooks/useUpdateWorkflowVersionTrigger';
 import {
   addEdge,
   ReactFlowProvider,
   type Connection,
   type Edge,
+  type OnNodeDrag,
 } from '@xyflow/react';
-import React, { useCallback } from 'react';
+import { useCallback } from 'react';
 import { isDefined } from 'twenty-shared/utils';
 
 export const WorkflowDiagramCanvasEditable = () => {
-  const workflowVisualizerWorkflowId = useRecoilComponentValue(
+  const workflowVisualizerWorkflowId = useAtomComponentStateValue(
     workflowVisualizerWorkflowIdComponentState,
   );
 
@@ -41,11 +45,11 @@ export const WorkflowDiagramCanvasEditable = () => {
     workflowVisualizerWorkflowId,
   );
 
-  const setWorkflowDiagram = useSetRecoilComponentState(
+  const setWorkflowDiagram = useSetAtomComponentState(
     workflowDiagramComponentState,
   );
 
-  const setWorkflowDiagramRightClickMenuPosition = useSetRecoilComponentState(
+  const setWorkflowDiagramRightClickMenuPosition = useSetAtomComponentState(
     workflowDiagramRightClickMenuPositionState,
   );
 
@@ -57,7 +61,25 @@ export const WorkflowDiagramCanvasEditable = () => {
 
   const { updateTrigger } = useUpdateWorkflowVersionTrigger();
 
-  const onConnect = (edgeConnect: WorkflowConnection) => {
+  const { startNodeCreation } = useStartNodeCreation();
+
+  const flow = useAtomComponentStateValue(flowComponentState);
+
+  const onConnect = async (edgeConnect: WorkflowConnection) => {
+    const steps = flow?.steps;
+    const sourceStep = isDefined(steps)
+      ? steps.find((step) => step.id === edgeConnect.source)
+      : undefined;
+
+    if (sourceStep?.type === 'IF_ELSE') {
+      const updatedStep = prepareIfElseStepWithNewBranch({
+        parentStep: sourceStep,
+        targetStepId: edgeConnect.target,
+      });
+
+      await updateStep(updatedStep);
+    }
+
     setWorkflowDiagram((diagram) => {
       if (isDefined(diagram) === false) {
         throw new Error(
@@ -70,6 +92,10 @@ export const WorkflowDiagramCanvasEditable = () => {
         edges: addEdge<WorkflowDiagramEdge>(edgeConnect, diagram.edges),
       };
     });
+
+    if (sourceStep?.type === 'IF_ELSE') {
+      return;
+    }
 
     createEdge({
       source: edgeConnect.source,
@@ -111,14 +137,8 @@ export const WorkflowDiagramCanvasEditable = () => {
     });
   };
 
-  const onNodeDragStop = async (
-    _: React.MouseEvent<Element>,
-    node: WorkflowDiagramNode,
-  ) => {
-    const stepToUpdate =
-      workflowWithCurrentVersion?.currentVersion?.steps?.find(
-        (step) => step.id === node.id,
-      );
+  const onNodeDragStop: OnNodeDrag<WorkflowDiagramNode> = async (_, node) => {
+    const stepToUpdate = flow?.steps?.find((step) => step.id === node.id);
 
     if (isDefined(stepToUpdate)) {
       await updateStep({
@@ -129,7 +149,7 @@ export const WorkflowDiagramCanvasEditable = () => {
       return;
     }
 
-    const triggerToUpdate = workflowWithCurrentVersion?.currentVersion?.trigger;
+    const triggerToUpdate = flow?.trigger;
 
     if (isDefined(triggerToUpdate)) {
       await updateTrigger({
@@ -162,6 +182,7 @@ export const WorkflowDiagramCanvasEditable = () => {
         nodeTypes={{
           default: WorkflowDiagramStepNodeEditable,
           'empty-trigger': WorkflowDiagramEmptyTriggerEditable,
+          empty: WorkflowDiagramStepNodeEditable,
         }}
         edgeTypes={{
           blank: WorkflowDiagramBlankEdge,
@@ -177,6 +198,7 @@ export const WorkflowDiagramCanvasEditable = () => {
         nodesConnectable
         nodesDraggable
         onDeleteEdge={onDeleteEdge}
+        startNodeCreation={startNodeCreation}
       />
 
       <WorkflowDiagramCanvasEditableEffect />

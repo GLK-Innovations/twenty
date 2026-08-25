@@ -3,45 +3,85 @@ import { InjectRepository } from '@nestjs/typeorm';
 
 import { Repository } from 'typeorm';
 
-import { InjectCacheStorage } from 'src/engine/core-modules/cache-storage/decorators/cache-storage.decorator';
-import { CacheStorageService } from 'src/engine/core-modules/cache-storage/services/cache-storage.service';
-import { CacheStorageNamespace } from 'src/engine/core-modules/cache-storage/types/cache-storage-namespace.enum';
+import { WorkspaceCacheProvider } from 'src/engine/workspace-cache/interfaces/workspace-cache-provider.service';
+
+import { ApplicationEntity } from 'src/engine/core-modules/application/application.entity';
+import { FieldMetadataEntity } from 'src/engine/metadata-modules/field-metadata/field-metadata.entity';
 import { createEmptyFlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/constant/create-empty-flat-entity-maps.constant';
 import { FlatViewFieldMaps } from 'src/engine/metadata-modules/flat-view-field/types/flat-view-field-maps.type';
 import { fromViewFieldEntityToFlatViewField } from 'src/engine/metadata-modules/flat-view-field/utils/from-view-field-entity-to-flat-view-field.util';
+import { ViewFieldGroupEntity } from 'src/engine/metadata-modules/view-field-group/entities/view-field-group.entity';
 import { ViewFieldEntity } from 'src/engine/metadata-modules/view-field/entities/view-field.entity';
-import { WorkspaceFlatMapCache } from 'src/engine/workspace-flat-map-cache/decorators/workspace-flat-map-cache.decorator';
-import { WorkspaceFlatMapCacheService } from 'src/engine/workspace-flat-map-cache/services/workspace-flat-map-cache.service';
-import { addFlatEntityToFlatEntityMapsThroughMutationOrThrow } from 'src/engine/workspace-manager/workspace-migration-v2/utils/add-flat-entity-to-flat-entity-maps-through-mutation-or-throw.util';
+import { ViewEntity } from 'src/engine/metadata-modules/view/entities/view.entity';
+import { InjectWorkspaceScopedRepository } from 'src/engine/twenty-orm/workspace-scoped-repository/inject-workspace-scoped-repository.decorator';
+import { WorkspaceScopedRepository } from 'src/engine/twenty-orm/workspace-scoped-repository/workspace-scoped-repository';
+import { WorkspaceCache } from 'src/engine/workspace-cache/decorators/workspace-cache.decorator';
+import { createIdToUniversalIdentifierMap } from 'src/engine/workspace-cache/utils/create-id-to-universal-identifier-map.util';
+import { addFlatEntityToFlatEntityMapsThroughMutationOrThrow } from 'src/engine/workspace-manager/workspace-migration/utils/add-flat-entity-to-flat-entity-maps-through-mutation-or-throw.util';
 
 @Injectable()
-@WorkspaceFlatMapCache('flatViewFieldMaps')
-export class WorkspaceFlatViewFieldMapCacheService extends WorkspaceFlatMapCacheService<FlatViewFieldMaps> {
+@WorkspaceCache('flatViewFieldMaps', { packingPonderation: 32 })
+export class WorkspaceFlatViewFieldMapCacheService extends WorkspaceCacheProvider<FlatViewFieldMaps> {
   constructor(
-    @InjectCacheStorage(CacheStorageNamespace.EngineWorkspace)
-    cacheStorageService: CacheStorageService,
-    @InjectRepository(ViewFieldEntity)
-    private readonly viewFieldRepository: Repository<ViewFieldEntity>,
+    @InjectWorkspaceScopedRepository(ViewFieldEntity)
+    private readonly viewFieldRepository: WorkspaceScopedRepository<ViewFieldEntity>,
+    @InjectRepository(ApplicationEntity)
+    private readonly applicationRepository: Repository<ApplicationEntity>,
+    @InjectRepository(FieldMetadataEntity)
+    private readonly fieldMetadataRepository: Repository<FieldMetadataEntity>,
+    @InjectWorkspaceScopedRepository(ViewEntity)
+    private readonly viewRepository: WorkspaceScopedRepository<ViewEntity>,
+    @InjectWorkspaceScopedRepository(ViewFieldGroupEntity)
+    private readonly viewFieldGroupRepository: WorkspaceScopedRepository<ViewFieldGroupEntity>,
   ) {
-    super(cacheStorageService);
+    super();
   }
 
-  protected async computeFlatMap({
-    workspaceId,
-  }: {
-    workspaceId: string;
-  }): Promise<FlatViewFieldMaps> {
-    const existingViewFields = await this.viewFieldRepository.find({
-      where: {
-        workspaceId,
-      },
-      withDeleted: true,
-    });
+  async computeForCache(workspaceId: string): Promise<FlatViewFieldMaps> {
+    const [viewFields, applications, fieldMetadatas, views, viewFieldGroups] =
+      await Promise.all([
+        this.viewFieldRepository.find(workspaceId, {
+          withDeleted: true,
+        }),
+        this.applicationRepository.find({
+          where: { workspaceId },
+          select: ['id', 'universalIdentifier'],
+          withDeleted: true,
+        }),
+        this.fieldMetadataRepository.find({
+          where: { workspaceId },
+          select: ['id', 'universalIdentifier'],
+          withDeleted: true,
+        }),
+        this.viewRepository.find(workspaceId, {
+          select: ['id', 'universalIdentifier'],
+          withDeleted: true,
+        }),
+        this.viewFieldGroupRepository.find(workspaceId, {
+          select: ['id', 'universalIdentifier'],
+          withDeleted: true,
+        }),
+      ]);
+
+    const applicationIdToUniversalIdentifierMap =
+      createIdToUniversalIdentifierMap(applications);
+    const fieldMetadataIdToUniversalIdentifierMap =
+      createIdToUniversalIdentifierMap(fieldMetadatas);
+    const viewIdToUniversalIdentifierMap =
+      createIdToUniversalIdentifierMap(views);
+    const viewFieldGroupIdToUniversalIdentifierMap =
+      createIdToUniversalIdentifierMap(viewFieldGroups);
 
     const flatViewFieldMaps = createEmptyFlatEntityMaps();
 
-    for (const viewFieldEntity of existingViewFields) {
-      const flatViewField = fromViewFieldEntityToFlatViewField(viewFieldEntity);
+    for (const viewFieldEntity of viewFields) {
+      const flatViewField = fromViewFieldEntityToFlatViewField({
+        entity: viewFieldEntity,
+        applicationIdToUniversalIdentifierMap,
+        fieldMetadataIdToUniversalIdentifierMap,
+        viewIdToUniversalIdentifierMap,
+        viewFieldGroupIdToUniversalIdentifierMap,
+      });
 
       addFlatEntityToFlatEntityMapsThroughMutationOrThrow({
         flatEntity: flatViewField,

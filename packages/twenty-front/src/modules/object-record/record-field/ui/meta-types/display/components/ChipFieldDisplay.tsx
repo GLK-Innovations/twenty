@@ -1,24 +1,19 @@
 import { RecordChip } from '@/object-record/components/RecordChip';
 import { useChipFieldDisplay } from '@/object-record/record-field/ui/meta-types/hooks/useChipFieldDisplay';
 import { isDefined } from 'twenty-shared/utils';
-import { ChipSize } from 'twenty-ui/components';
-import { useIsMobile } from 'twenty-ui/utilities';
+import { ChipSize } from 'twenty-ui/data-display';
 
 export const ChipFieldDisplay = () => {
   const {
-    recordValue,
+    recordStore: recordValue,
     objectNameSingular,
     labelIdentifierLink,
     disableChipClick,
     maxWidth,
     triggerEvent,
     onRecordChipClick,
+    isLabelIdentifierCompact,
   } = useChipFieldDisplay();
-
-  const isMobile = useIsMobile();
-
-  // TODO: reimplement scrolled horizontally here.
-  const isLabelIdentifierCompact = isMobile;
 
   if (!isDefined(recordValue)) {
     return null;
@@ -31,7 +26,7 @@ export const ChipFieldDisplay = () => {
       record={recordValue}
       size={ChipSize.Small}
       to={labelIdentifierLink}
-      isLabelHidden={isLabelIdentifierCompact}
+      isLabelHidden={isLabelIdentifierCompact ?? false}
       forceDisableClick={disableChipClick}
       triggerEvent={triggerEvent}
       onClick={onRecordChipClick}

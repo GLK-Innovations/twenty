@@ -2,21 +2,19 @@ import { currentWorkspaceMembersState } from '@/auth/states/currentWorkspaceMemb
 import { TableCell } from '@/ui/layout/table/components/TableCell';
 import { TableRow } from '@/ui/layout/table/components/TableRow';
 import { UserContext } from '@/users/contexts/UserContext';
-import { useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
 import { useContext } from 'react';
-import { useRecoilValue } from 'recoil';
-import {
-  Avatar,
-  IconKey,
-  OverflowingTextWithTooltip,
-  useIcons,
-} from 'twenty-ui/display';
-import { type Agent } from '~/generated-metadata/graphql';
-import { type ApiKeyForRole } from '~/generated/graphql';
+import { t } from '@lingui/core/macro';
+import { styled } from '@linaria/react';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { Avatar } from 'twenty-ui/data-display';
+import { IconKey, useIcons } from 'twenty-ui/icon';
+import { OverflowingTextWithTooltip } from 'twenty-ui/surfaces';
+import { ThemeContext, themeCssVariables } from 'twenty-ui/theme-constants';
+import { type Agent, type ApiKeyForRole } from '~/generated-metadata/graphql';
 import { dateLocaleState } from '~/localization/states/dateLocaleState';
+import { getAbsoluteImageUrl } from '~/utils/image/getAbsoluteImageUrl';
 import { formatDateString } from '~/utils/string/formatDateString';
-import { type PartialWorkspaceMember } from '../../types/RoleWithPartialMembers';
+import { type PartialWorkspaceMember } from '@/settings/roles/types/RoleWithPartialMembers';
 
 const StyledIconWrapper = styled.div`
   align-items: center;
@@ -25,7 +23,7 @@ const StyledIconWrapper = styled.div`
 `;
 
 const StyledNameCell = styled.div`
-  color: ${({ theme }) => theme.font.color.primary};
+  color: ${themeCssVariables.font.color.primary};
   flex: 1;
   min-width: 0;
 `;
@@ -33,13 +31,9 @@ const StyledNameCell = styled.div`
 const StyledNameContainer = styled.div`
   align-items: center;
   display: flex;
+  gap: ${themeCssVariables.spacing[2]};
   overflow: hidden;
-  gap: ${({ theme }) => theme.spacing(2)};
   width: 100%;
-`;
-
-const StyledTableCell = styled(TableCell)`
-  overflow: hidden;
 `;
 
 export type RoleTarget =
@@ -54,11 +48,13 @@ type SettingsRoleAssignmentTableRowProps = {
 export const SettingsRoleAssignmentTableRow = ({
   roleTarget,
 }: SettingsRoleAssignmentTableRowProps) => {
-  const theme = useTheme();
-  const currentWorkspaceMembers = useRecoilValue(currentWorkspaceMembersState);
+  const currentWorkspaceMembers = useAtomStateValue(
+    currentWorkspaceMembersState,
+  );
+  const { theme } = useContext(ThemeContext);
   const { getIcon } = useIcons();
   const { dateFormat, timeZone } = useContext(UserContext);
-  const dateLocale = useRecoilValue(dateLocaleState);
+  const dateLocale = useAtomStateValue(dateLocaleState);
 
   const renderIcon = () => {
     switch (roleTarget.type) {
@@ -68,7 +64,7 @@ export const SettingsRoleAssignmentTableRow = ({
         );
         return (
           <Avatar
-            avatarUrl={enrichedWorkspaceMember?.avatarUrl}
+            avatarUrl={getAbsoluteImageUrl(enrichedWorkspaceMember?.avatarUrl)}
             placeholderColorSeed={enrichedWorkspaceMember?.id}
             placeholder={enrichedWorkspaceMember?.name.firstName ?? ''}
             type="rounded"
@@ -78,10 +74,12 @@ export const SettingsRoleAssignmentTableRow = ({
       }
       case 'agent': {
         const Icon = getIcon(roleTarget.data.icon || 'IconRobot');
-        return <Icon size={theme.icon.size.md} />;
+        return <Icon size={theme.icon.size.md} stroke={theme.icon.stroke.sm} />;
       }
       case 'apiKey': {
-        return <IconKey size={theme.icon.size.md} />;
+        return (
+          <IconKey size={theme.icon.size.md} stroke={theme.icon.stroke.sm} />
+        );
       }
     }
   };
@@ -111,23 +109,23 @@ export const SettingsRoleAssignmentTableRow = ({
               dateFormat,
               localeCatalog: dateLocale.localeCatalog,
             })
-          : 'Never expires';
+          : t`Never expires`;
     }
   };
 
   return (
     <TableRow gridAutoColumns="2fr 4fr">
-      <StyledTableCell>
+      <TableCell overflow="hidden">
         <StyledNameContainer>
           <StyledIconWrapper>{renderIcon()}</StyledIconWrapper>
           <StyledNameCell>
             <OverflowingTextWithTooltip text={renderName()} />
           </StyledNameCell>
         </StyledNameContainer>
-      </StyledTableCell>
-      <StyledTableCell>
+      </TableCell>
+      <TableCell overflow="hidden">
         <OverflowingTextWithTooltip text={renderSecondaryInfo()} />
-      </StyledTableCell>
+      </TableCell>
     </TableRow>
   );
 };

@@ -31,23 +31,28 @@ export class RestApiDestroyManyHandler extends RestApiBaseHandler {
       );
     }
 
-    const { authContext, objectMetadataItemWithFieldMaps, objectMetadataMaps } =
-      await this.buildCommonOptions(request);
+    const {
+      authContext,
+      flatObjectMetadata,
+      flatObjectMetadataMaps,
+      flatFieldMetadataMaps,
+      objectIdByNameSingular,
+    } = await this.buildCommonOptions(request);
 
     try {
-      const records = await this.commonDestroyManyQueryRunnerService.execute(
-        { filter, selectedFields: { id: true } },
-        {
-          authContext,
-          objectMetadataMaps,
-          objectMetadataItemWithFieldMaps,
-        },
-      );
+      const { results: records } =
+        await this.commonDestroyManyQueryRunnerService.execute(
+          { filter, selectedFields: { id: true } },
+          {
+            authContext,
+            flatObjectMetadata,
+            flatObjectMetadataMaps,
+            flatFieldMetadataMaps,
+            objectIdByNameSingular,
+          },
+        );
 
-      return this.formatRestResponse(
-        records,
-        objectMetadataItemWithFieldMaps.namePlural,
-      );
+      return this.formatRestResponse(records, flatObjectMetadata.namePlural);
     } catch (error) {
       return workspaceQueryRunnerRestApiExceptionHandler(error);
     }

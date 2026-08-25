@@ -1,13 +1,13 @@
-import { type Meta, type StoryObj } from '@storybook/react';
+import { type Meta, type StoryObj } from '@storybook/react-vite';
 
 import {
   MessageChannelContactAutoCreationPolicy,
+  MessageChannelType,
   MessageFolderImportPolicy,
-} from '@/accounts/types/MessageChannel';
+} from 'twenty-shared/types';
 import { SettingsAccountsMessageChannelDetails } from '@/settings/accounts/components/SettingsAccountsMessageChannelDetails';
 import { ComponentDecorator } from 'twenty-ui/testing';
 import { MessageChannelVisibility } from '~/generated/graphql';
-import { I18nFrontDecorator } from '~/testing/decorators/I18nFrontDecorator';
 import { ObjectMetadataItemsDecorator } from '~/testing/decorators/ObjectMetadataItemsDecorator';
 import { SnackBarDecorator } from '~/testing/decorators/SnackBarDecorator';
 
@@ -17,19 +17,18 @@ const meta: Meta<typeof SettingsAccountsMessageChannelDetails> = {
   component: SettingsAccountsMessageChannelDetails,
   decorators: [
     ComponentDecorator,
-    I18nFrontDecorator,
     ObjectMetadataItemsDecorator,
     SnackBarDecorator,
   ],
   args: {
     messageChannel: {
       id: '20202020-ef5a-4822-9e08-ce6e6a4dcb6a',
+      type: MessageChannelType.EMAIL,
       contactAutoCreationPolicy: MessageChannelContactAutoCreationPolicy.SENT,
       excludeNonProfessionalEmails: true,
       excludeGroupEmails: false,
       isSyncEnabled: true,
       visibility: MessageChannelVisibility.SHARE_EVERYTHING,
-      messageFolders: [],
       messageFolderImportPolicy: MessageFolderImportPolicy.ALL_FOLDERS,
     },
   },

@@ -56,6 +56,7 @@ export class LeftMenu {
   }
 
   async goToSettings() {
+    await this.workspaceDropdown.click();
     await this.settingsTab.click();
   }
 

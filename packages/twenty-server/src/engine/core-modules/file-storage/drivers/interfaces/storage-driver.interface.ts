@@ -1,18 +1,43 @@
 import { type Readable } from 'stream';
 
-import { type Sources } from 'src/engine/core-modules/file-storage/types/source.type';
+import { type ByteRange } from 'src/engine/core-modules/file-storage/types/byte-range.type';
 
 export interface StorageDriver {
-  delete(params: { folderPath: string; filename?: string }): Promise<void>;
-  read(params: { folderPath: string; filename: string }): Promise<Readable>;
-  readFolder(folderPath: string): Promise<Sources>;
-  write(params: {
-    file: Buffer | Uint8Array | string;
-    name: string;
-    folder: string;
+  readFile(params: {
+    filePath: string;
+    byteRange?: ByteRange;
+  }): Promise<Readable>;
+  writeFile(params: {
+    filePath: string;
+    sourceFile: Buffer | Uint8Array | string;
     mimeType: string | undefined;
   }): Promise<void>;
-  writeFolder(sources: Sources, folderPath: string): Promise<void>;
+
+  writeFileStream(params: {
+    filePath: string;
+    stream: Readable;
+    mimeType: string | undefined;
+  }): Promise<void>;
+
+  getFileMetadata(params: {
+    filePath: string;
+  }): Promise<{ size: number } | null>;
+
+  downloadFolder(params: {
+    onStoragePath: string;
+    localPath: string;
+  }): Promise<void>;
+  uploadFolder(params: {
+    localPath: string;
+    onStoragePath: string;
+  }): Promise<void>;
+
+  downloadFile(params: {
+    onStoragePath: string;
+    localPath: string;
+  }): Promise<void>;
+
+  delete(params: { folderPath: string; filename?: string }): Promise<void>;
   move(params: {
     from: { folderPath: string; filename?: string };
     to: { folderPath: string; filename?: string };
@@ -21,14 +46,22 @@ export interface StorageDriver {
     from: { folderPath: string; filename?: string };
     to: { folderPath: string; filename?: string };
   }): Promise<void>;
-  download(params: {
-    from: { folderPath: string; filename?: string };
-    to: { folderPath: string; filename?: string };
-  }): Promise<void>;
 
-  checkFileExists(params: {
-    folderPath: string;
-    filename: string;
-  }): Promise<boolean>;
-  checkFolderExists(folderPath: string): Promise<boolean>;
+  checkFileExists(params: { filePath: string }): Promise<boolean>;
+  checkFolderExists(params: { folderPath: string }): Promise<boolean>;
+
+  getPresignedUrl(params: {
+    filePath: string;
+    expiresInSeconds?: number;
+    responseContentType?: string;
+    responseContentDisposition?: string;
+    responseCacheControl?: string;
+  }): Promise<string | null>;
+
+  getPresignedUploadUrl(params: {
+    filePath: string;
+    contentType: string;
+    contentLength: number;
+    expiresInSeconds?: number;
+  }): Promise<string | null>;
 }

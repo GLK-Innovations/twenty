@@ -4,39 +4,56 @@ import {
 } from 'twenty-shared/types';
 import { capitalize } from 'twenty-shared/utils';
 
-import { type FieldMetadataEntity } from 'src/engine/metadata-modules/field-metadata/field-metadata.entity';
+import { type CompositeFieldMetadataType } from 'src/engine/metadata-modules/field-metadata/types/composite-field-metadata-type.type';
 import { isCompositeFieldMetadataType } from 'src/engine/metadata-modules/field-metadata/utils/is-composite-field-metadata-type.util';
-import { type ObjectMetadataItemWithFieldMaps } from 'src/engine/metadata-modules/types/object-metadata-item-with-field-maps';
-import { type CompositeFieldMetadataType } from 'src/engine/metadata-modules/workspace-migration/factories/composite-column-action.factory';
+import { type FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/flat-entity-maps.type';
+import { findFlatEntityByIdInFlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/utils/find-flat-entity-by-id-in-flat-entity-maps.util';
+import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
+import {
+  buildFieldMapsFromFlatObjectMetadata,
+  type FieldMapsForObject,
+} from 'src/engine/metadata-modules/flat-field-metadata/utils/build-field-maps-from-flat-object-metadata.util';
+import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
 
 export function formatData<T>(
   data: T,
-  objectMetadataItemWithFieldMaps: ObjectMetadataItemWithFieldMaps,
+  flatObjectMetadata: FlatObjectMetadata,
+  flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>,
+  fieldMapsForObject?: FieldMapsForObject,
 ): T {
   if (!data) {
     return data;
   }
 
+  const fieldMaps =
+    fieldMapsForObject ??
+    buildFieldMapsFromFlatObjectMetadata(
+      flatFieldMetadataMaps,
+      flatObjectMetadata,
+    );
+
   if (Array.isArray(data)) {
     return data.map((item) =>
-      formatData(item, objectMetadataItemWithFieldMaps),
+      formatData(item, flatObjectMetadata, flatFieldMetadataMaps, fieldMaps),
     ) as T;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { fieldIdByName, fieldIdByJoinColumnName } = fieldMaps;
+
+  // oxlint-disable-next-line typescript/no-explicit-any
   const newData: Record<string, any> = {};
 
   for (const [key, value] of Object.entries(data)) {
-    const fieldMetadataId =
-      objectMetadataItemWithFieldMaps.fieldIdByName[key] ||
-      objectMetadataItemWithFieldMaps.fieldIdByJoinColumnName[key];
+    const fieldMetadataId = fieldIdByName[key] || fieldIdByJoinColumnName[key];
 
-    const fieldMetadata =
-      objectMetadataItemWithFieldMaps.fieldsById[fieldMetadataId];
+    const fieldMetadata = findFlatEntityByIdInFlatEntityMaps({
+      flatEntityId: fieldMetadataId,
+      flatEntityMaps: flatFieldMetadataMaps,
+    });
 
     if (!fieldMetadata) {
       throw new Error(
-        `Field metadata for field "${key}" is missing in object metadata ${objectMetadataItemWithFieldMaps.nameSingular}`,
+        `Field metadata for field "${key}" is missing in object metadata ${flatObjectMetadata.nameSingular}`,
       );
     }
 
@@ -56,10 +73,10 @@ export function formatData<T>(
 }
 
 export function formatCompositeField(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line typescript/no-explicit-any
   value: any,
-  fieldMetadata: FieldMetadataEntity,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  fieldMetadata: FlatFieldMetadata,
+  // oxlint-disable-next-line typescript/no-explicit-any
 ): Record<string, any> {
   const compositeType = compositeTypeDefinitions.get(
     fieldMetadata.type as CompositeFieldMetadataType,
@@ -71,7 +88,7 @@ export function formatCompositeField(
     );
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line typescript/no-explicit-any
   const formattedCompositeField: Record<string, any> = {};
 
   for (const property of compositeType.properties) {
@@ -81,7 +98,7 @@ export function formatCompositeField(
     if (value && value[subFieldKey] !== undefined) {
       formattedCompositeField[fullFieldName] = formatFieldMetadataValue(
         value[subFieldKey],
-        property as unknown as FieldMetadataEntity,
+        property as unknown as FlatFieldMetadata,
       );
     }
   }
@@ -90,9 +107,9 @@ export function formatCompositeField(
 }
 
 function formatFieldMetadataValue(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line typescript/no-explicit-any
   value: any,
-  fieldMetadata: FieldMetadataEntity,
+  fieldMetadata: FlatFieldMetadata,
 ) {
   if (
     fieldMetadata.type === FieldMetadataType.RAW_JSON &&

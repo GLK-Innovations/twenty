@@ -1,4 +1,4 @@
-import { type FieldMetadataDefaultSerializableValue } from 'src/engine/metadata-modules/field-metadata/interfaces/field-metadata-default-value.interface';
+import { type FieldMetadataDefaultValueForAnyType } from 'twenty-shared/types';
 
 import {
   FieldMetadataException,
@@ -8,13 +8,12 @@ import { isFunctionDefaultValue } from 'src/engine/metadata-modules/field-metada
 import { serializeFunctionDefaultValue } from 'src/engine/metadata-modules/field-metadata/utils/serialize-function-default-value.util';
 
 export const serializeDefaultValue = (
-  defaultValue?: FieldMetadataDefaultSerializableValue,
+  defaultValue?: FieldMetadataDefaultValueForAnyType,
 ) => {
   if (defaultValue === undefined || defaultValue === null) {
     return null;
   }
 
-  // Function default values
   if (isFunctionDefaultValue(defaultValue)) {
     const serializedTypeDefaultValue =
       serializeFunctionDefaultValue(defaultValue);
@@ -29,7 +28,6 @@ export const serializeDefaultValue = (
     return serializedTypeDefaultValue;
   }
 
-  // Static default values
   if (typeof defaultValue === 'string' && defaultValue.startsWith("'")) {
     return defaultValue;
   }

@@ -1,17 +1,17 @@
-import { useAuth } from '@/auth/hooks/useAuth';
+import { useImpersonationSession } from '@/auth/hooks/useImpersonationSession';
 import { currentWorkspaceMemberState } from '@/auth/states/currentWorkspaceMemberState';
 import { isImpersonatingState } from '@/auth/states/isImpersonatingState';
 import { InformationBanner } from '@/information-banner/components/InformationBanner';
 import { t } from '@lingui/core/macro';
-import { useRecoilValue } from 'recoil';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 import { isDefined } from 'twenty-shared/utils';
-import { IconLogout } from 'twenty-ui/display';
+import { IconLogout } from 'twenty-ui/icon';
 
 export const InformationBannerIsImpersonating = () => {
-  const currentWorkspaceMember = useRecoilValue(currentWorkspaceMemberState);
-  const isImpersonating = useRecoilValue(isImpersonatingState);
+  const currentWorkspaceMember = useAtomStateValue(currentWorkspaceMemberState);
+  const isImpersonating = useAtomStateValue(isImpersonatingState);
 
-  const { signOut } = useAuth();
+  const { stopImpersonating } = useImpersonationSession();
 
   if (!isDefined(currentWorkspaceMember) || !isImpersonating) {
     return null;
@@ -21,10 +21,11 @@ export const InformationBannerIsImpersonating = () => {
 
   return (
     <InformationBanner
+      componentInstanceId="information-banner-is-impersonating"
       message={t`Logged in as ${impersonatedUser}`}
       buttonTitle={t`Stop impersonating`}
       buttonIcon={IconLogout}
-      buttonOnClick={signOut}
+      buttonOnClick={stopImpersonating}
     />
   );
 };

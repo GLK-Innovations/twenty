@@ -1,21 +1,26 @@
-import { removePropertiesFromRecord } from 'twenty-shared/utils';
-
-import { VIEW_GROUP_ENTITY_RELATION_PROPERTIES } from 'src/engine/metadata-modules/flat-view-group/constants/view-group-entity-relation-properties.constant';
+import { fromEntityToScalarEntity } from 'src/engine/metadata-modules/flat-entity/utils/from-entity-to-scalar-entity.util';
 import { type FlatViewGroup } from 'src/engine/metadata-modules/flat-view-group/types/flat-view-group.type';
-import { type ViewGroupEntity } from 'src/engine/metadata-modules/view-group/entities/view-group.entity';
+import { type FromEntityToFlatEntityArgs } from 'src/engine/workspace-cache/types/from-entity-to-flat-entity-args.type';
+import { resolveManyToOneRelationIdsToUniversalIdentifiers } from 'src/engine/workspace-manager/workspace-migration/universal-flat-entity/utils/resolve-many-to-one-relation-ids-to-universal-identifiers.util';
 
 export const fromViewGroupEntityToFlatViewGroup = (
-  viewGroupEntity: ViewGroupEntity,
+  args: FromEntityToFlatEntityArgs<'viewGroup'>,
 ): FlatViewGroup => {
-  const viewGroupEntityWithoutRelations = removePropertiesFromRecord(
-    viewGroupEntity,
-    VIEW_GROUP_ENTITY_RELATION_PROPERTIES,
-  );
+  const { entity: viewGroupEntity } = args;
+
+  const viewGroupScalarEntity = fromEntityToScalarEntity({
+    metadataName: 'viewGroup',
+    entity: viewGroupEntity,
+  });
+
+  const relationUniversalIdentifiers =
+    resolveManyToOneRelationIdsToUniversalIdentifiers({
+      metadataName: 'viewGroup',
+      ...args,
+    });
 
   return {
-    ...viewGroupEntityWithoutRelations,
-    universalIdentifier:
-      viewGroupEntityWithoutRelations.universalIdentifier ??
-      viewGroupEntityWithoutRelations.id,
+    ...viewGroupScalarEntity,
+    ...relationUniversalIdentifiers,
   };
 };

@@ -3,6 +3,7 @@ import { type MessageNetworkExceptionCode } from 'src/modules/messaging/message-
 export class MessageImportDriverException extends Error {
   code: MessageImportDriverExceptionCode | MessageNetworkExceptionCode;
   cause?: Error;
+  throttleRetryAfter?: Date;
   context?: {
     messageChannelId?: string;
     workspaceId?: string;
@@ -14,6 +15,7 @@ export class MessageImportDriverException extends Error {
     code: MessageImportDriverExceptionCode | MessageNetworkExceptionCode,
     options?: {
       cause?: Error;
+      throttleRetryAfter?: Date;
       context?: {
         messageChannelId?: string;
         workspaceId?: string;
@@ -25,6 +27,7 @@ export class MessageImportDriverException extends Error {
     this.name = 'MessageImportDriverException';
     this.code = code;
     this.cause = options?.cause;
+    this.throttleRetryAfter = options?.throttleRetryAfter;
     this.context = options?.context;
 
     if (options?.cause?.stack) {
@@ -43,4 +46,6 @@ export enum MessageImportDriverExceptionCode {
   SYNC_CURSOR_ERROR = 'SYNC_CURSOR_ERROR',
   PROVIDER_NOT_SUPPORTED = 'PROVIDER_NOT_SUPPORTED',
   CLIENT_NOT_AVAILABLE = 'CLIENT_NOT_AVAILABLE',
+  ACCESS_TOKEN_MISSING = 'ACCESS_TOKEN_MISSING',
+  CHANNEL_MISCONFIGURED = 'CHANNEL_MISCONFIGURED',
 }

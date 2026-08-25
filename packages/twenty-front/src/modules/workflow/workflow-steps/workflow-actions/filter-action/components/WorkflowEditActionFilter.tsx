@@ -1,14 +1,9 @@
-import { SidePanelHeader } from '@/command-menu/components/SidePanelHeader';
 import { type WorkflowFilterAction } from '@/workflow/types/Workflow';
+import { WorkflowStepBody } from '@/workflow/workflow-steps/components/WorkflowStepBody';
 import { WorkflowStepFooter } from '@/workflow/workflow-steps/components/WorkflowStepFooter';
-import { FILTER_ACTION } from '@/workflow/workflow-steps/workflow-actions/constants/actions/FilterAction';
-import { WorkflowEditActionFilterBody } from '@/workflow/workflow-steps/workflow-actions/filter-action/components/WorkflowEditActionFilterBody';
-import { WorkflowEditActionFilterBodyEffect } from '@/workflow/workflow-steps/workflow-actions/filter-action/components/WorkflowEditActionFilterBodyEffect';
-import { StepFilterGroupsComponentInstanceContext } from '@/workflow/workflow-steps/workflow-actions/filter-action/states/context/StepFilterGroupsComponentInstanceContext';
-import { StepFiltersComponentInstanceContext } from '@/workflow/workflow-steps/workflow-actions/filter-action/states/context/StepFiltersComponentInstanceContext';
-import { useWorkflowActionHeader } from '@/workflow/workflow-steps/workflow-actions/hooks/useWorkflowActionHeader';
-import { type StepFilter, type StepFilterGroup } from 'twenty-shared/types';
-import { useIcons } from 'twenty-ui/display';
+import { WorkflowStepFilterBuilder } from '@/workflow/workflow-steps/filters/components/WorkflowStepFilterBuilder';
+import { type FilterSettings } from '@/workflow/workflow-steps/filters/types/FilterSettings';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 type WorkflowEditActionFilterProps = {
   action: WorkflowFilterAction;
@@ -22,66 +17,37 @@ type WorkflowEditActionFilterProps = {
       };
 };
 
-export type FilterSettings = {
-  stepFilterGroups?: StepFilterGroup[];
-  stepFilters?: StepFilter[];
-};
-
 export const WorkflowEditActionFilter = ({
   action,
   actionOptions,
 }: WorkflowEditActionFilterProps) => {
-  const { headerTitle, headerIcon, headerIconColor, headerType } =
-    useWorkflowActionHeader({
-      action,
-      defaultTitle: FILTER_ACTION.defaultLabel,
-    });
+  const handleFilterSettingsUpdate = (filterSettings: FilterSettings) => {
+    if (actionOptions.readonly === true) {
+      return;
+    }
 
-  const { getIcon } = useIcons();
+    actionOptions.onActionUpdate({
+      ...action,
+      settings: {
+        ...action.settings,
+        input: {
+          stepFilterGroups: filterSettings.stepFilterGroups ?? [],
+          stepFilters: filterSettings.stepFilters ?? [],
+        },
+      },
+    });
+  };
 
   return (
     <>
-      <SidePanelHeader
-        onTitleChange={(newName: string) => {
-          if (actionOptions.readonly === true) {
-            return;
-          }
-
-          actionOptions.onActionUpdate({
-            ...action,
-            name: newName,
-          });
-        }}
-        Icon={getIcon(headerIcon)}
-        iconColor={headerIconColor}
-        initialTitle={headerTitle}
-        headerType={headerType}
-        disabled={actionOptions.readonly}
-        iconTooltip={FILTER_ACTION.defaultLabel}
-      />
-      <StepFiltersComponentInstanceContext.Provider
-        value={{
-          instanceId: action.id,
-        }}
-      >
-        <StepFilterGroupsComponentInstanceContext.Provider
-          value={{
-            instanceId: action.id,
-          }}
-        >
-          <WorkflowEditActionFilterBody
-            action={action}
-            actionOptions={actionOptions}
-          />
-          <WorkflowEditActionFilterBodyEffect
-            stepId={action.id}
-            defaultValue={{
-              stepFilterGroups: action.settings.input.stepFilterGroups,
-              stepFilters: action.settings.input.stepFilters,
-            }}
-          />
-        </StepFilterGroupsComponentInstanceContext.Provider>
-      </StepFiltersComponentInstanceContext.Provider>
+      <WorkflowStepBody rowGap={themeCssVariables.spacing[0]}>
+        <WorkflowStepFilterBuilder
+          instanceId={action.id}
+          defaultValue={action.settings.input}
+          readonly={actionOptions.readonly}
+          onFilterSettingsUpdate={handleFilterSettingsUpdate}
+        />
+      </WorkflowStepBody>
       {!actionOptions.readonly && <WorkflowStepFooter stepId={action.id} />}
     </>
   );

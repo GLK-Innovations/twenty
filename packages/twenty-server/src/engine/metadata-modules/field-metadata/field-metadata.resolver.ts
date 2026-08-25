@@ -4,45 +4,65 @@ import {
   Context,
   Mutation,
   Parent,
+  Query,
   ResolveField,
-  Resolver,
 } from '@nestjs/graphql';
+import { InjectRepository } from '@nestjs/typeorm';
 
+import { PermissionFlagType } from 'twenty-shared/constants';
 import { isDefined } from 'twenty-shared/utils';
+import { Repository } from 'typeorm';
 
-import { FeatureFlagKey } from 'src/engine/core-modules/feature-flag/enums/feature-flag-key.enum';
-import { FeatureFlagService } from 'src/engine/core-modules/feature-flag/services/feature-flag.service';
+import { MetadataResolver } from 'src/engine/api/graphql/graphql-config/decorators/metadata-resolver.decorator';
+import { UUIDScalarType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/scalars';
 import { PreventNestToAutoLogGraphqlErrorsFilter } from 'src/engine/core-modules/graphql/filters/prevent-nest-to-auto-log-graphql-errors.filter';
 import { ResolverValidationPipe } from 'src/engine/core-modules/graphql/pipes/resolver-validation.pipe';
 import {
   ForbiddenError,
-  ValidationError,
+  NotFoundError,
 } from 'src/engine/core-modules/graphql/utils/graphql-errors.util';
-import { I18nService } from 'src/engine/core-modules/i18n/i18n.service';
 import { I18nContext } from 'src/engine/core-modules/i18n/types/i18n-context.type';
 import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
 import { type IDataloaders } from 'src/engine/dataloaders/dataloader.interface';
 import { AuthWorkspace } from 'src/engine/decorators/auth/auth-workspace.decorator';
+import { NoPermissionGuard } from 'src/engine/guards/no-permission.guard';
 import { SettingsPermissionGuard } from 'src/engine/guards/settings-permission.guard';
 import { WorkspaceAuthGuard } from 'src/engine/guards/workspace-auth.guard';
 import { CreateOneFieldMetadataInput } from 'src/engine/metadata-modules/field-metadata/dtos/create-field.input';
 import { DeleteOneFieldInput } from 'src/engine/metadata-modules/field-metadata/dtos/delete-field.input';
-import { FieldMetadataDTO } from 'src/engine/metadata-modules/field-metadata/dtos/field-metadata.dto';
-import { RelationDTO } from 'src/engine/metadata-modules/field-metadata/dtos/relation.dto';
 import {
-  UpdateOneFieldMetadataInput,
-  type UpdateFieldInput,
-} from 'src/engine/metadata-modules/field-metadata/dtos/update-field.input';
-import { BeforeUpdateOneField } from 'src/engine/metadata-modules/field-metadata/hooks/before-update-one-field.hook';
+  FIELD_FILTER_COLUMN_BY_FILTER_FIELD,
+  FieldFilterInput,
+} from 'src/engine/metadata-modules/field-metadata/dtos/field-filter.input';
+import { FieldMetadataDTO } from 'src/engine/metadata-modules/field-metadata/dtos/field-metadata.dto';
+import { FieldConnectionDTO } from 'src/engine/metadata-modules/field-metadata/dtos/field-metadata-connection.dto';
+import { RelationDTO } from 'src/engine/metadata-modules/field-metadata/dtos/relation.dto';
+import { UpdateOneFieldMetadataInput } from 'src/engine/metadata-modules/field-metadata/dtos/update-field.input';
+import { FieldMetadataEntity } from 'src/engine/metadata-modules/field-metadata/field-metadata.entity';
 import { FieldMetadataService } from 'src/engine/metadata-modules/field-metadata/services/field-metadata.service';
-import { FieldMetadataServiceV2 } from 'src/engine/metadata-modules/field-metadata/services/field-metadata.service-v2';
+import { fromFieldMetadataEntityToFieldMetadataDto } from 'src/engine/metadata-modules/field-metadata/utils/from-field-metadata-entity-to-field-metadata-dto.util';
+import { ObjectMetadataDTO } from 'src/engine/metadata-modules/object-metadata/dtos/object-metadata.dto';
+import { CursorPagingInput } from 'src/engine/metadata-modules/pagination/dtos/cursor-paging.input';
+import { type CursorConnection } from 'src/engine/metadata-modules/pagination/dtos/cursor-connection-type.factory';
+import { applyMetadataFilterToQueryBuilder } from 'src/engine/metadata-modules/pagination/utils/apply-metadata-filter-to-query-builder.util';
+import { findManyWithCursorPagination } from 'src/engine/metadata-modules/pagination/utils/find-many-with-cursor-pagination.util';
 import { fieldMetadataGraphqlApiExceptionHandler } from 'src/engine/metadata-modules/field-metadata/utils/field-metadata-graphql-api-exception-handler.util';
-import { PermissionFlagType } from 'src/engine/metadata-modules/permissions/constants/permission-flag-type.constants';
+import { fromFlatFieldMetadataToFieldMetadataDto } from 'src/engine/metadata-modules/flat-field-metadata/utils/from-flat-field-metadata-to-field-metadata-dto.util';
+import { UniqueFieldMetadataIdsService } from 'src/engine/metadata-modules/index-metadata/services/unique-field-metadata-ids.service';
+import { resolveEffectiveEntityProperty } from 'src/engine/metadata-modules/utils/resolve-effective-entity-property.util';
 import { PermissionsGraphqlApiExceptionFilter } from 'src/engine/metadata-modules/permissions/utils/permissions-graphql-api-exception.filter';
+import { ApplicationTranslationCatalogService } from 'src/engine/metadata-modules/application-translation-catalog/services/application-translation-catalog.service';
+
+// Keep @Parent() structurally typed so ResolverValidationPipe does not validate
+// FieldMetadataDTO date decorators on already-loaded parent records.
+type FieldMetadataStandardOverrideParent = Pick<
+  FieldMetadataDTO,
+  'label' | 'description' | 'icon' | 'overrides' | 'applicationId'
+>;
 
 @UseGuards(WorkspaceAuthGuard)
 @UsePipes(ResolverValidationPipe)
-@Resolver(() => FieldMetadataDTO)
+@MetadataResolver(() => FieldMetadataDTO)
 @UseFilters(
   PermissionsGraphqlApiExceptionFilter,
   PreventNestToAutoLogGraphqlErrorsFilter,
@@ -50,29 +70,192 @@ import { PermissionsGraphqlApiExceptionFilter } from 'src/engine/metadata-module
 export class FieldMetadataResolver {
   constructor(
     private readonly fieldMetadataService: FieldMetadataService,
-    private readonly beforeUpdateOneField: BeforeUpdateOneField<UpdateFieldInput>,
-    private readonly featureFlagService: FeatureFlagService,
-    private readonly fieldMetadataServiceV2: FieldMetadataServiceV2,
-    private readonly i18nService: I18nService,
+    private readonly applicationTranslationCatalogService: ApplicationTranslationCatalogService,
+    @InjectRepository(FieldMetadataEntity)
+    private readonly fieldMetadataRepository: Repository<FieldMetadataEntity>,
+    private readonly uniqueFieldMetadataIdsService: UniqueFieldMetadataIdsService,
   ) {}
+
+  @UseGuards(NoPermissionGuard)
+  @Query(() => FieldConnectionDTO)
+  async fields(
+    @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,
+    @Args('paging', {
+      type: () => CursorPagingInput,
+      defaultValue: { first: 10 },
+      description: 'Limit or page results.',
+    })
+    paging: CursorPagingInput,
+    @Args('filter', {
+      type: () => FieldFilterInput,
+      defaultValue: {},
+      description: 'Specify to filter the records returned.',
+    })
+    filter: FieldFilterInput,
+  ): Promise<CursorConnection<FieldMetadataDTO>> {
+    const queryBuilder = this.fieldMetadataRepository
+      .createQueryBuilder('fieldMetadata')
+      .where('"fieldMetadata"."workspaceId" = :workspaceId', { workspaceId });
+
+    applyMetadataFilterToQueryBuilder({
+      whereBuilder: queryBuilder,
+      alias: 'fieldMetadata',
+      filter,
+      columnByFilterField: FIELD_FILTER_COLUMN_BY_FILTER_FIELD,
+    });
+
+    const connection = await findManyWithCursorPagination({
+      queryBuilder,
+      alias: 'fieldMetadata',
+      paging,
+    });
+    const uniqueFieldMetadataIds =
+      await this.uniqueFieldMetadataIdsService.getForWorkspace(workspaceId);
+
+    return {
+      ...connection,
+      edges: connection.edges.map((edge) => ({
+        ...edge,
+        node: fromFieldMetadataEntityToFieldMetadataDto(
+          edge.node,
+          uniqueFieldMetadataIds,
+        ),
+      })),
+    };
+  }
+
+  @UseGuards(NoPermissionGuard)
+  @Query(() => FieldMetadataDTO)
+  async field(
+    @Args('id', {
+      type: () => UUIDScalarType,
+      description: 'The id of the record to find.',
+    })
+    id: string,
+    @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,
+  ): Promise<FieldMetadataDTO> {
+    const fieldMetadata = await this.fieldMetadataRepository.findOne({
+      where: { id, workspaceId },
+    });
+
+    if (!isDefined(fieldMetadata)) {
+      throw new NotFoundError(
+        `Unable to find FieldMetadataEntity with id: ${id}`,
+      );
+    }
+
+    const uniqueFieldMetadataIds =
+      await this.uniqueFieldMetadataIdsService.getForWorkspace(workspaceId);
+
+    return fromFieldMetadataEntityToFieldMetadataDto(
+      fieldMetadata,
+      uniqueFieldMetadataIds,
+    );
+  }
+
+  @ResolveField(() => ObjectMetadataDTO, { nullable: true })
+  async object(
+    @AuthWorkspace() workspace: WorkspaceEntity,
+    @Parent()
+    { objectMetadataId }: Pick<FieldMetadataDTO, 'objectMetadataId'>,
+    @Context() context: { loaders: IDataloaders },
+  ): Promise<ObjectMetadataDTO | null> {
+    return context.loaders.objectMetadataLoader.load({
+      workspaceId: workspace.id,
+      objectMetadataId,
+    });
+  }
+
+  @ResolveField(() => Boolean, {
+    nullable: true,
+    deprecationReason: 'Use isUIEditable',
+  })
+  async isUIReadOnly(
+    @Parent() fieldMetadata: Pick<FieldMetadataDTO, 'isUIEditable'>,
+  ): Promise<boolean> {
+    return !(fieldMetadata.isUIEditable ?? true);
+  }
+
+  private async resolveStandardOverride(
+    fieldMetadata: FieldMetadataStandardOverrideParent,
+    labelKey: 'label' | 'description' | 'icon',
+    context: { loaders: IDataloaders } & I18nContext,
+    workspaceId: string,
+  ): Promise<string> {
+    return resolveEffectiveEntityProperty({
+      metadataName: 'fieldMetadata',
+      baseValue: fieldMetadata[labelKey],
+      overrides: fieldMetadata.overrides,
+      property: labelKey,
+      i18nContext:
+        await this.applicationTranslationCatalogService.buildEffectiveEntityI18nContext(
+          {
+            applicationId: fieldMetadata.applicationId ?? undefined,
+            loaders: context.loaders,
+            locale: context.req.locale,
+            workspaceId,
+          },
+        ),
+    });
+  }
+
+  @ResolveField(() => String, { nullable: true })
+  async label(
+    @Parent() fieldMetadata: FieldMetadataStandardOverrideParent,
+    @Context() context: { loaders: IDataloaders } & I18nContext,
+    @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,
+  ): Promise<string> {
+    return this.resolveStandardOverride(
+      fieldMetadata,
+      'label',
+      context,
+      workspaceId,
+    );
+  }
+
+  @ResolveField(() => String, { nullable: true })
+  async description(
+    @Parent() fieldMetadata: FieldMetadataStandardOverrideParent,
+    @Context() context: { loaders: IDataloaders } & I18nContext,
+    @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,
+  ): Promise<string> {
+    return this.resolveStandardOverride(
+      fieldMetadata,
+      'description',
+      context,
+      workspaceId,
+    );
+  }
+
+  @ResolveField(() => String, { nullable: true })
+  async icon(
+    @Parent() fieldMetadata: FieldMetadataStandardOverrideParent,
+    @Context() context: { loaders: IDataloaders } & I18nContext,
+    @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,
+  ): Promise<string> {
+    return this.resolveStandardOverride(
+      fieldMetadata,
+      'icon',
+      context,
+      workspaceId,
+    );
+  }
 
   @UseGuards(SettingsPermissionGuard(PermissionFlagType.DATA_MODEL))
   @Mutation(() => FieldMetadataDTO)
   async createOneField(
     @Args('input') input: CreateOneFieldMetadataInput,
     @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,
-    @Context() context: I18nContext,
   ) {
     try {
-      return await this.fieldMetadataService.createOne({
-        ...input.field,
+      const flatFieldMetadata = await this.fieldMetadataService.createOneField({
+        createFieldInput: input.field,
         workspaceId,
       });
+
+      return fromFlatFieldMetadataToFieldMetadataDto(flatFieldMetadata);
     } catch (error) {
-      return fieldMetadataGraphqlApiExceptionHandler(
-        error,
-        this.i18nService.getI18nInstance(context.req.locale),
-      );
+      return fieldMetadataGraphqlApiExceptionHandler(error);
     }
   }
 
@@ -81,109 +264,50 @@ export class FieldMetadataResolver {
   async updateOneField(
     @Args('input') input: UpdateOneFieldMetadataInput,
     @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,
-    @Context() context: I18nContext,
   ) {
-    const isWorkspaceMigrationV2Enabled =
-      await this.featureFlagService.isFeatureEnabled(
-        FeatureFlagKey.IS_WORKSPACE_MIGRATION_V2_ENABLED,
-        workspaceId,
-      );
-
     try {
-      if (isWorkspaceMigrationV2Enabled) {
-        return await this.fieldMetadataServiceV2.updateOne({
-          updateFieldInput: { ...input.update, id: input.id },
-          workspaceId,
-        });
-      }
-
-      const updatedInput = (await this.beforeUpdateOneField.run(input, {
-        workspaceId,
-        locale: context.req.locale,
-      })) as UpdateOneFieldMetadataInput;
-
-      return await this.fieldMetadataService.updateOne(updatedInput.id, {
-        ...updatedInput.update,
+      const flatFieldMetadata = await this.fieldMetadataService.updateOneField({
+        updateFieldInput: { ...input.update, id: input.id },
         workspaceId,
       });
+
+      return fromFlatFieldMetadataToFieldMetadataDto(flatFieldMetadata);
     } catch (error) {
-      fieldMetadataGraphqlApiExceptionHandler(
-        error,
-        this.i18nService.getI18nInstance(context.req.locale),
-      );
+      fieldMetadataGraphqlApiExceptionHandler(error);
     }
   }
 
   @UseGuards(SettingsPermissionGuard(PermissionFlagType.DATA_MODEL))
   @Mutation(() => FieldMetadataDTO)
   async deleteOneField(
-    @Args('input') input: DeleteOneFieldInput,
+    @Args('input') deleteOneFieldInput: DeleteOneFieldInput,
     @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,
-    @Context() context: I18nContext,
   ) {
     if (!isDefined(workspaceId)) {
       throw new ForbiddenError('Could not retrieve workspace ID');
     }
 
     try {
-      const isWorkspaceMigrationV2Enabled =
-        await this.featureFlagService.isFeatureEnabled(
-          FeatureFlagKey.IS_WORKSPACE_MIGRATION_V2_ENABLED,
-          workspaceId,
-        );
-
-      if (isWorkspaceMigrationV2Enabled) {
-        return await this.fieldMetadataServiceV2.deleteOneField({
-          deleteOneFieldInput: input,
-          workspaceId,
-        });
-      }
-    } catch (error) {
-      fieldMetadataGraphqlApiExceptionHandler(
-        error,
-        this.i18nService.getI18nInstance(context.req.locale),
-      );
-    }
-
-    const fieldMetadata =
-      await this.fieldMetadataService.findOneWithinWorkspace(workspaceId, {
-        where: {
-          id: input.id.toString(),
-        },
+      const flatFieldMetadata = await this.fieldMetadataService.deleteOneField({
+        deleteOneFieldInput,
+        workspaceId,
       });
 
-    if (!isDefined(fieldMetadata)) {
-      throw new ValidationError('Field does not exist');
-    }
-
-    if (!fieldMetadata.isCustom) {
-      throw new ValidationError("Standard Fields can't be deleted");
-    }
-
-    if (fieldMetadata.isActive) {
-      throw new ValidationError("Active fields can't be deleted");
-    }
-
-    try {
-      return await this.fieldMetadataService.deleteOneField(input, workspaceId);
+      return fromFlatFieldMetadataToFieldMetadataDto(flatFieldMetadata);
     } catch (error) {
-      fieldMetadataGraphqlApiExceptionHandler(
-        error,
-        this.i18nService.getI18nInstance(context.req.locale),
-      );
+      fieldMetadataGraphqlApiExceptionHandler(error);
     }
   }
 
   @ResolveField(() => RelationDTO, { nullable: true })
   async relation(
     @AuthWorkspace() workspace: WorkspaceEntity,
-
     @Parent()
     {
       id: fieldMetadataId,
       objectMetadataId,
     }: Pick<FieldMetadataDTO, 'id' | 'objectMetadataId'>,
-    @Context() context: { loaders: IDataloaders } & I18nContext,
+    @Context() context: { loaders: IDataloaders },
   ): Promise<RelationDTO | null> {
     try {
       return await context.loaders.relationLoader.load({
@@ -192,10 +316,7 @@ export class FieldMetadataResolver {
         workspaceId: workspace.id,
       });
     } catch (error) {
-      return fieldMetadataGraphqlApiExceptionHandler(
-        error,
-        this.i18nService.getI18nInstance(context.req.locale),
-      );
+      return fieldMetadataGraphqlApiExceptionHandler(error);
     }
   }
 
@@ -207,7 +328,7 @@ export class FieldMetadataResolver {
       id: fieldMetadataId,
       objectMetadataId,
     }: Pick<FieldMetadataDTO, 'id' | 'objectMetadataId'>,
-    @Context() context: { loaders: IDataloaders } & I18nContext,
+    @Context() context: { loaders: IDataloaders },
   ): Promise<RelationDTO[] | null> {
     try {
       return await context.loaders.morphRelationLoader.load({
@@ -216,10 +337,7 @@ export class FieldMetadataResolver {
         workspaceId: workspace.id,
       });
     } catch (error) {
-      return fieldMetadataGraphqlApiExceptionHandler(
-        error,
-        this.i18nService.getI18nInstance(context.req.locale),
-      );
+      return fieldMetadataGraphqlApiExceptionHandler(error);
     }
   }
 }

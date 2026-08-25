@@ -1,4 +1,5 @@
-import { type Decorator } from '@storybook/react';
+import { type JSX } from 'react';
+import { type Decorator } from '@storybook/react-vite';
 import {
   createMemoryRouter,
   createRoutesFromElements,

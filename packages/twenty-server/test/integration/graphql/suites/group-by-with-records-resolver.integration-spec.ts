@@ -44,7 +44,6 @@ describe('basic group-by with records', () => {
   const COMPANY_2_EMPLOYEES = 20;
 
   beforeAll(async () => {
-    //   Create test companies
     await makeGraphqlAPIRequest(
       createOneOperationFactory({
         objectMetadataSingularName: 'company',
@@ -138,7 +137,6 @@ describe('basic group-by with records', () => {
   });
 
   afterAll(async () => {
-    // Cleanup created opportunities
     for (const id of [
       testOpportunityId1,
       testOpportunityId2,
@@ -154,7 +152,6 @@ describe('basic group-by with records', () => {
       );
     }
 
-    // Cleanup created companies
     for (const id of [testCompanyId1, testCompanyId2]) {
       await makeGraphqlAPIRequest(
         destroyOneOperationFactory({
@@ -172,8 +169,13 @@ describe('basic group-by with records', () => {
         query OpportunitiesGroupBy(
           $groupBy: [OpportunityGroupByInput!]!
           $filter: OpportunityFilterInput
+          $limit: Int
         ) {
-          opportunitiesGroupBy(groupBy: $groupBy, filter: $filter) {
+          opportunitiesGroupBy(
+            groupBy: $groupBy
+            filter: $filter
+            limit: $limit
+          ) {
             minCloseDate
             groupByDimensionValues
             sumAmountAmountMicros
@@ -210,6 +212,7 @@ describe('basic group-by with records', () => {
           name: 'AscNullsFirst',
         },
         filter: FILTER_2020,
+        limit: 3,
       },
     });
 
@@ -289,14 +292,18 @@ describe('basic group-by with records', () => {
   });
 
   it('groups by stage and createdAt with records and filters', async () => {
-    // Test with filter to only include NEW stage opportunities
     const response = await makeGraphqlAPIRequest({
       query: gql`
         query OpportunitiesGroupBy(
           $groupBy: [OpportunityGroupByInput!]!
           $filter: OpportunityFilterInput
+          $limit: Int
         ) {
-          opportunitiesGroupBy(groupBy: $groupBy, filter: $filter) {
+          opportunitiesGroupBy(
+            groupBy: $groupBy
+            filter: $filter
+            limit: $limit
+          ) {
             minCloseDate
             groupByDimensionValues
             sumAmountAmountMicros
@@ -334,6 +341,7 @@ describe('basic group-by with records', () => {
             },
           ],
         },
+        limit: 2,
       },
     });
 
@@ -376,8 +384,9 @@ describe('basic group-by with records', () => {
         query CompaniesGroupBy(
           $groupBy: [CompanyGroupByInput!]!
           $filter: CompanyFilterInput
+          $limit: Int
         ) {
-          companiesGroupBy(groupBy: $groupBy, filter: $filter) {
+          companiesGroupBy(groupBy: $groupBy, filter: $filter, limit: $limit) {
             groupByDimensionValues
             __typename
             edges {
@@ -403,6 +412,7 @@ describe('basic group-by with records', () => {
           },
         ],
         filter: FILTER_2020,
+        limit: 2,
       },
     });
 
@@ -467,11 +477,13 @@ describe('basic group-by with records', () => {
             $groupBy: [OpportunityGroupByInput!]!
             $filter: OpportunityFilterInput
             $orderByForRecords: [OpportunityOrderByInput!]
+            $limit: Int
           ) {
             opportunitiesGroupBy(
               groupBy: $groupBy
               filter: $filter
               orderByForRecords: $orderByForRecords
+              limit: $limit
             ) {
               groupByDimensionValues
               __typename
@@ -501,6 +513,7 @@ describe('basic group-by with records', () => {
             },
           ],
           filter: FILTER_2020,
+          limit: 20,
         },
       };
     };
@@ -547,6 +560,138 @@ describe('basic group-by with records', () => {
       expect(thursdayNewGroup.edges).toHaveLength(2);
       expect(thursdayNewGroup.edges[0].node.name).toBe('Opportunity 3');
       expect(thursdayNewGroup.edges[1].node.name).toBe('Opportunity 2');
+    });
+
+    it('sorts by relation field (company name) in ascending order', async () => {
+      const response = await makeGraphqlAPIRequest({
+        query: gql`
+          query OpportunitiesGroupBy(
+            $groupBy: [OpportunityGroupByInput!]!
+            $filter: OpportunityFilterInput
+            $orderByForRecords: [OpportunityOrderByInput!]
+            $limit: Int
+          ) {
+            opportunitiesGroupBy(
+              groupBy: $groupBy
+              filter: $filter
+              orderByForRecords: $orderByForRecords
+              limit: $limit
+            ) {
+              groupByDimensionValues
+              __typename
+              edges {
+                node {
+                  stage
+                  name
+                  company {
+                    id
+                    name
+                  }
+                }
+              }
+            }
+          }
+        `,
+        variables: {
+          groupBy: [
+            {
+              stage: true,
+            },
+          ],
+          orderByForRecords: [
+            {
+              company: {
+                name: 'AscNullsFirst',
+              },
+            },
+          ],
+          filter: FILTER_2020,
+          limit: 20,
+        },
+      });
+
+      expect(response.body.errors).toBeUndefined();
+      expect(response.body.data).toBeDefined();
+
+      const groups = response.body.data.opportunitiesGroupBy;
+
+      const newGroup = groups.find((group: any) =>
+        group.groupByDimensionValues.includes('NEW'),
+      );
+
+      expect(newGroup).toBeDefined();
+      expect(newGroup.edges).toHaveLength(3);
+
+      // Opp 1 and 2 belong to Company 1, Opp 3 to Company 2
+      // Ascending by company name: Company 1 < Company 2
+      expect(newGroup.edges[0].node.company.name).toBe('Company 1');
+      expect(newGroup.edges[1].node.company.name).toBe('Company 1');
+      expect(newGroup.edges[2].node.company.name).toBe('Company 2');
+    });
+
+    it('sorts by relation field (company name) in descending order', async () => {
+      const response = await makeGraphqlAPIRequest({
+        query: gql`
+          query OpportunitiesGroupBy(
+            $groupBy: [OpportunityGroupByInput!]!
+            $filter: OpportunityFilterInput
+            $orderByForRecords: [OpportunityOrderByInput!]
+            $limit: Int
+          ) {
+            opportunitiesGroupBy(
+              groupBy: $groupBy
+              filter: $filter
+              orderByForRecords: $orderByForRecords
+              limit: $limit
+            ) {
+              groupByDimensionValues
+              __typename
+              edges {
+                node {
+                  stage
+                  name
+                  company {
+                    id
+                    name
+                  }
+                }
+              }
+            }
+          }
+        `,
+        variables: {
+          groupBy: [
+            {
+              stage: true,
+            },
+          ],
+          orderByForRecords: [
+            {
+              company: {
+                name: 'DescNullsLast',
+              },
+            },
+          ],
+          filter: FILTER_2020,
+          limit: 20,
+        },
+      });
+
+      expect(response.body.errors).toBeUndefined();
+      expect(response.body.data).toBeDefined();
+
+      const groups = response.body.data.opportunitiesGroupBy;
+
+      const newGroup = groups.find((group: any) =>
+        group.groupByDimensionValues.includes('NEW'),
+      );
+
+      expect(newGroup).toBeDefined();
+      expect(newGroup.edges).toHaveLength(3);
+
+      expect(newGroup.edges[0].node.company.name).toBe('Company 2');
+      expect(newGroup.edges[1].node.company.name).toBe('Company 1');
+      expect(newGroup.edges[2].node.company.name).toBe('Company 1');
     });
   });
 });

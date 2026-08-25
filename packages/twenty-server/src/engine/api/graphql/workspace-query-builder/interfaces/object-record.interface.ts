@@ -3,10 +3,11 @@ import {
   type ObjectRecordGroupByDateGranularity,
   type ObjectRecordOrderByForCompositeField,
   type ObjectRecordOrderByForScalarField,
+  type FirstDayOfTheWeek,
 } from 'twenty-shared/types';
 
 export type ObjectRecordFilter = Partial<{
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line typescript/no-explicit-any
   [Property in keyof ObjectRecord]: any;
 }>;
 
@@ -27,6 +28,8 @@ export type ObjectRecordGroupByForCompositeField = Partial<{
 export type ObjectRecordGroupByForDateField = Partial<{
   [Property in keyof ObjectRecord]: {
     granularity: ObjectRecordGroupByDateGranularity;
+    weekStartDay?: FirstDayOfTheWeek;
+    timeZone?: string;
   };
 }>;
 
@@ -34,7 +37,11 @@ export type ObjectRecordOrderBy = Array<
   ObjectRecordOrderByForScalarField | ObjectRecordOrderByForCompositeField
 >;
 
-export type ObjectRecordCursorLeafScalarValue = string | number | boolean;
+export type ObjectRecordCursorLeafScalarValue =
+  | string
+  | number
+  | boolean
+  | null;
 export type ObjectRecordCursorLeafCompositeValue = Record<
   string,
   ObjectRecordCursorLeafScalarValue

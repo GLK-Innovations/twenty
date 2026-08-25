@@ -1,7 +1,5 @@
 import { Injectable } from '@nestjs/common';
 
-import { AuditService } from 'src/engine/core-modules/audit/services/audit.service';
-
 type MessagingMonitoringTrackInput = {
   eventName: string;
   workspaceId?: string;
@@ -13,7 +11,7 @@ type MessagingMonitoringTrackInput = {
 
 @Injectable()
 export class MessagingMonitoringService {
-  constructor(private readonly _auditService: AuditService) {}
+  constructor() {}
 
   public async track({
     eventName: _eventName,
@@ -23,18 +21,6 @@ export class MessagingMonitoringService {
     messageChannelId: _messageChannelId,
     message: _message,
   }: MessagingMonitoringTrackInput): Promise<void> {
-    // TODO: replace once we have Prometheus
-    /*
-    await this.auditService
-      .createContext({
-        userId,
-        workspaceId,
-      })
-      .insertWorkspaceEvent(MONITORING_EVENT, {
-        eventName: `messaging.${eventName}`,
-        connectedAccountId,
-        messageChannelId,
-        message,
-      }); */
+    // TODO: emit monitoring once Prometheus lands
   }
 }

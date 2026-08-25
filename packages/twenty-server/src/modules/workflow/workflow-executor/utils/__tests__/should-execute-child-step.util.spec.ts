@@ -1,10 +1,9 @@
-import { StepStatus } from 'twenty-shared/workflow';
+import { StepStatus, WorkflowActionType } from 'twenty-shared/workflow';
 
 import { shouldExecuteChildStep } from 'src/modules/workflow/workflow-executor/utils/should-execute-child-step.util';
-import {
-  type WorkflowAction,
-  WorkflowActionType,
-} from 'src/modules/workflow/workflow-executor/workflow-actions/types/workflow-action.type';
+import { type WorkflowAction } from 'src/modules/workflow/workflow-executor/workflow-actions/types/workflow-action.type';
+
+const CHILD_STEP_ID = 'child-step-under-test';
 
 describe('shouldExecuteChildStep', () => {
   const parentSteps = [
@@ -36,6 +35,7 @@ describe('shouldExecuteChildStep', () => {
 
   it('should return true when there are no parent steps', () => {
     const result = shouldExecuteChildStep({
+      childStepId: CHILD_STEP_ID,
       parentSteps: [],
       stepInfos: {},
     });
@@ -54,6 +54,7 @@ describe('shouldExecuteChildStep', () => {
     };
 
     const result = shouldExecuteChildStep({
+      childStepId: CHILD_STEP_ID,
       parentSteps,
       stepInfos,
     });
@@ -72,6 +73,7 @@ describe('shouldExecuteChildStep', () => {
     };
 
     const result = shouldExecuteChildStep({
+      childStepId: CHILD_STEP_ID,
       parentSteps,
       stepInfos,
     });
@@ -90,6 +92,7 @@ describe('shouldExecuteChildStep', () => {
     };
 
     const result = shouldExecuteChildStep({
+      childStepId: CHILD_STEP_ID,
       parentSteps,
       stepInfos,
     });
@@ -150,6 +153,7 @@ describe('shouldExecuteChildStep', () => {
     };
 
     const result = shouldExecuteChildStep({
+      childStepId: CHILD_STEP_ID,
       parentSteps: multiParentSteps,
       stepInfos,
     });
@@ -168,6 +172,7 @@ describe('shouldExecuteChildStep', () => {
     };
 
     const result = shouldExecuteChildStep({
+      childStepId: CHILD_STEP_ID,
       parentSteps,
       stepInfos,
     });
@@ -186,6 +191,7 @@ describe('shouldExecuteChildStep', () => {
     };
 
     const result = shouldExecuteChildStep({
+      childStepId: CHILD_STEP_ID,
       parentSteps,
       stepInfos,
     });
@@ -204,6 +210,7 @@ describe('shouldExecuteChildStep', () => {
     };
 
     const result = shouldExecuteChildStep({
+      childStepId: CHILD_STEP_ID,
       parentSteps,
       stepInfos,
     });
@@ -222,6 +229,7 @@ describe('shouldExecuteChildStep', () => {
     };
 
     const result = shouldExecuteChildStep({
+      childStepId: CHILD_STEP_ID,
       parentSteps,
       stepInfos,
     });
@@ -240,6 +248,7 @@ describe('shouldExecuteChildStep', () => {
     };
 
     const result = shouldExecuteChildStep({
+      childStepId: CHILD_STEP_ID,
       parentSteps,
       stepInfos,
     });
@@ -258,6 +267,7 @@ describe('shouldExecuteChildStep', () => {
     };
 
     const result = shouldExecuteChildStep({
+      childStepId: CHILD_STEP_ID,
       parentSteps,
       stepInfos,
     });
@@ -276,6 +286,7 @@ describe('shouldExecuteChildStep', () => {
     };
 
     const result = shouldExecuteChildStep({
+      childStepId: CHILD_STEP_ID,
       parentSteps,
       stepInfos,
     });
@@ -294,6 +305,7 @@ describe('shouldExecuteChildStep', () => {
     };
 
     const result = shouldExecuteChildStep({
+      childStepId: CHILD_STEP_ID,
       parentSteps,
       stepInfos,
     });
@@ -324,6 +336,7 @@ describe('shouldExecuteChildStep', () => {
     };
 
     const result = shouldExecuteChildStep({
+      childStepId: CHILD_STEP_ID,
       parentSteps: singleParent,
       stepInfos,
     });
@@ -354,6 +367,7 @@ describe('shouldExecuteChildStep', () => {
     };
 
     const result = shouldExecuteChildStep({
+      childStepId: CHILD_STEP_ID,
       parentSteps: singleParent,
       stepInfos,
     });
@@ -369,6 +383,7 @@ describe('shouldExecuteChildStep', () => {
     };
 
     const result = shouldExecuteChildStep({
+      childStepId: CHILD_STEP_ID,
       parentSteps,
       stepInfos,
     });
@@ -423,6 +438,7 @@ describe('shouldExecuteChildStep', () => {
     };
 
     const result = shouldExecuteChildStep({
+      childStepId: CHILD_STEP_ID,
       parentSteps: multiParentSteps,
       stepInfos,
     });
@@ -444,7 +460,6 @@ describe('shouldExecuteChildStep', () => {
       nextStepIds: [],
     })) as unknown as WorkflowAction[];
 
-    // All parents stopped or skipped, none succeeded
     const stepInfos = Object.fromEntries(
       manyParentSteps.map((step, i) => [
         step.id,
@@ -453,7 +468,58 @@ describe('shouldExecuteChildStep', () => {
     );
 
     const result = shouldExecuteChildStep({
+      childStepId: CHILD_STEP_ID,
       parentSteps: manyParentSteps,
+      stepInfos,
+    });
+
+    expect(result).toBe(false);
+  });
+
+  it('should return false when one parent succeeded and another is FAILED_SAFELY', () => {
+    const stepInfos = {
+      'parent-1': {
+        status: StepStatus.SUCCESS,
+      },
+      'parent-2': {
+        status: StepStatus.FAILED_SAFELY,
+      },
+    };
+
+    const result = shouldExecuteChildStep({
+      childStepId: CHILD_STEP_ID,
+      parentSteps,
+      stepInfos,
+    });
+
+    expect(result).toBe(false);
+  });
+
+  it('should return false when single parent is FAILED_SAFELY', () => {
+    const singleParent = [
+      {
+        id: 'parent-1',
+        type: WorkflowActionType.CODE,
+        settings: {
+          errorHandlingOptions: {
+            continueOnFailure: { value: false },
+            retryOnFailure: { value: false },
+          },
+          outputSchema: {},
+        },
+        nextStepIds: [],
+      } as unknown as WorkflowAction,
+    ];
+
+    const stepInfos = {
+      'parent-1': {
+        status: StepStatus.FAILED_SAFELY,
+      },
+    };
+
+    const result = shouldExecuteChildStep({
+      childStepId: CHILD_STEP_ID,
+      parentSteps: singleParent,
       stepInfos,
     });
 
@@ -474,7 +540,6 @@ describe('shouldExecuteChildStep', () => {
       nextStepIds: [],
     })) as unknown as WorkflowAction[];
 
-    // First parent succeeded, rest are still running
     const stepInfos = Object.fromEntries(
       manyParentSteps.map((step, i) => [
         step.id,
@@ -483,6 +548,7 @@ describe('shouldExecuteChildStep', () => {
     );
 
     const result = shouldExecuteChildStep({
+      childStepId: CHILD_STEP_ID,
       parentSteps: manyParentSteps,
       stepInfos,
     });

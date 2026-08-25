@@ -1,89 +1,204 @@
 {
   "tabs": {
+    "gettingStarted": {
+      "label": "Začínáme",
+      "groups": {
+        "welcome": {
+          "label": "Vítejte"
+        },
+        "coreConcepts": {
+          "label": "Základní pojmy"
+        }
+      }
+    },
     "userGuide": {
       "label": "Uživatelská příručka",
       "groups": {
-        "gettingStarted": {
-          "label": "Začněme"
+        "userGuideOverview": {
+          "label": "Přehled"
         },
         "dataModel": {
-          "label": "Datový model"
+          "label": "Datový model",
+          "groups": {
+            "dataModelReference": {
+              "label": "Referenční dokumentace"
+            },
+            "dataModelHowTos": {
+              "label": "Návody"
+            }
+          }
         },
-        "crmEssentials": {
-          "label": "CRM základy"
+        "dataMigration": {
+          "label": "Migrace dat",
+          "groups": {
+            "dataMigrationReference": {
+              "label": "Referenční dokumentace"
+            },
+            "dataMigrationHowTos": {
+              "label": "Návody"
+            }
+          }
         },
-        "views": {
-          "label": "Pohledy"
+        "calendarEmails": {
+          "label": "Kalendář a e-maily",
+          "groups": {
+            "calendarEmailsReference": {
+              "label": "Referenční dokumentace"
+            },
+            "calendarEmailsHowTos": {
+              "label": "Návody"
+            }
+          }
         },
         "workflows": {
-          "label": "Pracovní postupy"
+          "label": "Pracovní postupy",
+          "groups": {
+            "workflowsReference": {
+              "label": "Referenční dokumentace"
+            },
+            "workflowsHowTos": {
+              "label": "Návody",
+              "groups": {
+                "crmAutomations": {
+                  "label": "Automatizace CRM"
+                },
+                "connectToOtherTools": {
+                  "label": "Propojení s dalšími nástroji"
+                },
+                "advancedConfigurations": {
+                  "label": "Pokročilá nastavení"
+                },
+                "needMoreHelp": {
+                  "label": "Potřebujete další pomoc"
+                }
+              }
+            }
+          }
         },
-        "collaboration": {
-          "label": "Spolupráce"
+        "ai": {
+          "label": "AI",
+          "groups": {
+            "aiReference": {
+              "label": "Referenční dokumentace"
+            },
+            "aiHowTos": {
+              "label": "Návody"
+            }
+          }
         },
-        "integrationsApi": {
-          "label": "Integrace & API"
+        "layout": {
+          "label": "Rozvržení",
+          "groups": {
+            "layoutReference": {
+              "label": "Referenční dokumentace",
+              "groups": {
+                "layoutViews": {
+                  "label": "Zobrazení"
+                }
+              }
+            },
+            "layoutHowTos": {
+              "label": "Návody"
+            }
+          }
         },
-        "reporting": {
-          "label": "Reportování"
+        "dashboards": {
+          "label": "Panely",
+          "groups": {
+            "dashboardsReference": {
+              "label": "Referenční dokumentace"
+            },
+            "dashboardsHowTos": {
+              "label": "Návody"
+            }
+          }
+        },
+        "permissionsAccess": {
+          "label": "Oprávnění a přístup",
+          "groups": {
+            "permissionsAccessReference": {
+              "label": "Referenční dokumentace"
+            },
+            "permissionsAccessHowTos": {
+              "label": "Návody"
+            }
+          }
+        },
+        "billing": {
+          "label": "Fakturace",
+          "groups": {
+            "billingReference": {
+              "label": "Referenční dokumentace"
+            },
+            "billingHowTos": {
+              "label": "Návody"
+            }
+          }
         },
         "settings": {
-          "label": "Nastavení"
+          "label": "Nastavení",
+          "groups": {
+            "settingsReference": {
+              "label": "Referenční dokumentace"
+            },
+            "settingsHowTos": {
+              "label": "Návody"
+            }
+          }
         },
-        "pricing": {
-          "label": "Ceny"
-        },
-        "resources": {
-          "label": "Zdroje"
+        "legal": {
+          "label": "Právní",
+          "groups": {
+            "legalHowTos": {
+              "label": "Návody"
+            }
+          }
         }
       }
     },
     "developers": {
       "label": "Vývojáři",
       "groups": {
-        "developersGroup": {
-          "label": "Vývojáři"
+        "developersOverview": {
+          "label": "Přehled"
         },
-        "devGettingStarted": {
-          "label": "Začněme",
+        "apps": {
+          "label": "Aplikace",
           "groups": {
-            "selfHosting": {
-              "label": "Samohostování"
+            "appsGettingStarted": {
+              "label": "Začínáme"
             },
-            "apiAndWebhooks": {
-              "label": "API a Webhooky"
+            "appsTutorial": {
+              "label": "Návod"
+            },
+            "appsConfig": {
+              "label": "Konfigurace"
+            },
+            "appsData": {
+              "label": "Data"
+            },
+            "appsLogic": {
+              "label": "Logika"
+            },
+            "appsLayout": {
+              "label": "Rozvržení"
+            },
+            "appsOperations": {
+              "label": "Operace"
+            },
+            "appsTranslations": {
+              "label": "Překlady"
             }
           }
         },
-        "contributing": {
-          "label": "Přispěje",
-          "groups": {
-            "frontendDevelopment": {
-              "label": "Vývoj frontendu",
-              "groups": {
-                "twentyUi": {
-                  "label": "Twenty UI",
-                  "groups": {
-                    "display": {
-                      "label": "Zobrazení"
-                    },
-                    "feedback": {
-                      "label": "Komentář"
-                    },
-                    "input": {
-                      "label": "Input"
-                    },
-                    "navigation": {
-                      "label": "Navigation"
-                    }
-                  }
-                }
-              }
-            },
-            "backendDevelopment": {
-              "label": "Vývoj backendu"
-            }
-          }
+        "api": {
+          "label": "API"
+        },
+        "selfHost": {
+          "label": "Vlastní hosting"
+        },
+        "contribute": {
+          "label": "Přispět"
         }
       }
     }

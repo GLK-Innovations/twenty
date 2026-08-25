@@ -3,12 +3,13 @@ import { DropdownContent } from '@/ui/layout/dropdown/components/DropdownContent
 import { DropdownMenuItemsContainer } from '@/ui/layout/dropdown/components/DropdownMenuItemsContainer';
 import { GenericDropdownContentWidth } from '@/ui/layout/dropdown/constants/GenericDropdownContentWidth';
 import { useCloseDropdown } from '@/ui/layout/dropdown/hooks/useCloseDropdown';
+import { useLingui } from '@lingui/react/macro';
 import {
   IconDotsVertical,
   IconDownload,
   IconPencil,
   IconTrash,
-} from 'twenty-ui/display';
+} from 'twenty-ui/icon';
 import { LightIconButton } from 'twenty-ui/input';
 import { MenuItem } from 'twenty-ui/navigation';
 
@@ -27,6 +28,7 @@ export const AttachmentDropdown = ({
   attachmentId,
   hasDownloadPermission,
 }: AttachmentDropdownProps) => {
+  const { t } = useLingui();
   const dropdownId = `${attachmentId}-attachment-dropdown`;
 
   const { closeDropdown } = useCloseDropdown();
@@ -50,25 +52,29 @@ export const AttachmentDropdown = ({
     <Dropdown
       dropdownId={dropdownId}
       clickableComponent={
-        <LightIconButton Icon={IconDotsVertical} accent="tertiary" />
+        <LightIconButton
+          Icon={IconDotsVertical}
+          accent="tertiary"
+          aria-label={t`More options`}
+        />
       }
       dropdownComponents={
         <DropdownContent widthInPixels={GenericDropdownContentWidth.Narrow}>
           <DropdownMenuItemsContainer>
             {hasDownloadPermission && (
               <MenuItem
-                text="Download"
+                text={t`Download`}
                 LeftIcon={IconDownload}
                 onClick={handleDownload}
               />
             )}
             <MenuItem
-              text="Rename"
+              text={t`Rename`}
               LeftIcon={IconPencil}
               onClick={handleRename}
             />
             <MenuItem
-              text="Delete"
+              text={t`Delete`}
               accent="danger"
               LeftIcon={IconTrash}
               onClick={handleDelete}

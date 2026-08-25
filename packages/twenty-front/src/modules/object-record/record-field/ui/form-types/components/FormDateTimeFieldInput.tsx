@@ -1,69 +1,57 @@
-import { FormFieldInputContainer } from '@/object-record/record-field/ui/form-types/components/FormFieldInputContainer';
+import { FormFieldInputContainer } from '@/ui/input/components/FormFieldInputContainer';
 import { FormFieldInputInnerContainer } from '@/object-record/record-field/ui/form-types/components/FormFieldInputInnerContainer';
 import { FormFieldInputRowContainer } from '@/object-record/record-field/ui/form-types/components/FormFieldInputRowContainer';
 import { VariableChipStandalone } from '@/object-record/record-field/ui/form-types/components/VariableChipStandalone';
 import { type VariablePickerComponent } from '@/object-record/record-field/ui/form-types/types/VariablePickerComponent';
-import { InputLabel } from '@/ui/input/components/InputLabel';
+import { Field } from 'twenty-ui/input';
 import {
+  DATE_TIME_PICKER_MONTH_YEAR_PANEL_DROPDOWN_ID,
   DateTimePicker,
   MONTH_AND_YEAR_DROPDOWN_MONTH_SELECT_ID,
   MONTH_AND_YEAR_DROPDOWN_YEAR_SELECT_ID,
 } from '@/ui/input/components/internal/date/components/DateTimePicker';
-import { MAX_DATE } from '@/ui/input/components/internal/date/constants/MaxDate';
-import { MIN_DATE } from '@/ui/input/components/internal/date/constants/MinDate';
-import { useParseDateTimeInputStringToJSDate } from '@/ui/input/components/internal/date/hooks/useParseDateTimeInputStringToJSDate';
-import { useParseJSDateToIMaskDateTimeInputString } from '@/ui/input/components/internal/date/hooks/useParseJSDateToIMaskDateTimeInputString';
+import { DateTimePickerInput } from '@/ui/input/components/internal/date/components/DateTimePickerInput';
+import { useUserTimezone } from '@/ui/input/components/internal/date/hooks/useUserTimezone';
+import { type FormFieldInputVariant } from '@/ui/input/types/FormFieldInputVariant';
 
 import { useCloseDropdown } from '@/ui/layout/dropdown/hooks/useCloseDropdown';
 import { OverlayContainer } from '@/ui/layout/overlay/components/OverlayContainer';
 import { useHotkeysOnFocusedElement } from '@/ui/utilities/hotkey/hooks/useHotkeysOnFocusedElement';
+import { ParentClickOutsideIdContext } from '@/ui/utilities/pointer-event/contexts/ParentClickOutsideIdContext';
 import { useListenClickOutside } from '@/ui/utilities/pointer-event/hooks/useListenClickOutside';
-import { isStandaloneVariableString } from '@/workflow/utils/isStandaloneVariableString';
-import { css } from '@emotion/react';
-import styled from '@emotion/styled';
-import { isNonEmptyString } from '@sniptt/guards';
+
+import { isStandaloneVariableString } from 'twenty-shared/workflow';
 import {
-  useId,
-  useRef,
-  useState,
-  type ChangeEvent,
-  type KeyboardEvent,
-} from 'react';
+  FloatingPortal,
+  autoUpdate,
+  flip,
+  offset,
+  useFloating,
+} from '@floating-ui/react';
+import { styled } from '@linaria/react';
+import { useId, useRef, useState } from 'react';
+import { Temporal } from 'temporal-polyfill';
 import { Key } from 'ts-key-enum';
 import { isDefined } from 'twenty-shared/utils';
-import { TEXT_INPUT_STYLE } from 'twenty-ui/theme';
 import { type Nullable } from 'twenty-ui/utilities';
 
-const StyledInputContainer = styled(FormFieldInputInnerContainer)`
-  display: grid;
-  grid-template-columns: 1fr;
-  grid-template-rows: 1fr 0;
-  overflow: visible;
-  position: relative;
+const FORM_DATE_TIME_FIELD_PICKER_CLICK_OUTSIDE_ID =
+  'form-date-time-field-picker-floating';
+
+const StyledDateInputTextContainer = styled.div<{ isReadonly?: boolean }>`
+  align-items: center;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  pointer-events: ${({ isReadonly }) => (isReadonly ? 'none' : 'auto')};
+  user-select: ${({ isReadonly }) => (isReadonly ? 'none' : 'auto')};
+  width: 100%;
 `;
 
-const StyledDateInputAbsoluteContainer = styled.div`
-  position: absolute;
-  top: ${({ theme }) => theme.spacing(1)};
-`;
-
-const StyledDateInput = styled.input<{ hasError?: boolean }>`
-  ${TEXT_INPUT_STYLE}
-
-  &:disabled {
-    color: ${({ theme }) => theme.font.color.tertiary};
-  }
-
-  ${({ hasError, theme }) =>
-    hasError &&
-    css`
-      color: ${theme.color.red};
-    `};
-`;
-
-const StyledDateInputContainer = styled.div`
-  position: relative;
-  z-index: 1;
+const StyledDatePickerInputWrapper = styled.div`
+  display: flex;
+  flex: 1;
+  min-width: 0;
 `;
 
 type DraftValue =
@@ -84,6 +72,8 @@ type FormDateTimeFieldInputProps = {
   placeholder?: string;
   VariablePicker?: VariablePickerComponent;
   readonly?: boolean;
+  timeZone?: string;
+  variant?: FormFieldInputVariant;
 };
 
 export const FormDateTimeFieldInput = ({
@@ -92,14 +82,10 @@ export const FormDateTimeFieldInput = ({
   onChange,
   VariablePicker,
   readonly,
-  placeholder,
+  timeZone,
+  variant = 'default',
 }: FormDateTimeFieldInputProps) => {
   const instanceId = useId();
-
-  const { parseJSDateToDateTimeInputString: parseDateTimeToString } =
-    useParseJSDateToIMaskDateTimeInputString();
-  const { parseDateTimeInputStringToJSDate: parseStringToDateTime } =
-    useParseDateTimeInputStringToJSDate();
 
   const [draftValue, setDraftValue] = useState<DraftValue>(
     isStandaloneVariableString(defaultValue)
@@ -109,34 +95,28 @@ export const FormDateTimeFieldInput = ({
         }
       : {
           type: 'static',
-          value: defaultValue ?? null,
+          value: defaultValue !== 'null' ? (defaultValue ?? null) : null,
           mode: 'view',
         },
   );
 
-  const draftValueAsDate =
-    isDefined(draftValue.value) &&
-    isNonEmptyString(draftValue.value) &&
-    draftValue.type === 'static'
-      ? new Date(draftValue.value)
-      : null;
-
-  const [pickerDate, setPickerDate] =
-    useState<Nullable<Date>>(draftValueAsDate);
-
   const datePickerWrapperRef = useRef<HTMLDivElement>(null);
 
-  const [inputDateTime, setInputDateTime] = useState(
-    isDefined(draftValueAsDate) && !isStandaloneVariableString(defaultValue)
-      ? parseDateTimeToString(draftValueAsDate)
-      : '',
-  );
+  const displayDatePicker =
+    draftValue.type === 'static' && draftValue.mode === 'edit';
 
-  const persistDate = (newDate: Nullable<Date>) => {
+  const { refs, floatingStyles } = useFloating({
+    open: displayDatePicker,
+    placement: 'bottom-start',
+    middleware: [offset(4), flip()],
+    whileElementsMounted: autoUpdate,
+  });
+
+  const persistDate = (newDate: Nullable<Temporal.ZonedDateTime>) => {
     if (!isDefined(newDate)) {
       onChange(null);
     } else {
-      const newDateISO = newDate.toISOString();
+      const newDateISO = newDate.toInstant().toString();
 
       onChange(newDateISO);
     }
@@ -144,11 +124,6 @@ export const FormDateTimeFieldInput = ({
 
   const { closeDropdown: closeDropdownMonthSelect } = useCloseDropdown();
   const { closeDropdown: closeDropdownYearSelect } = useCloseDropdown();
-
-  const displayDatePicker =
-    draftValue.type === 'static' && draftValue.mode === 'edit';
-
-  const placeholderToDisplay = placeholder ?? 'mm/dd/yyyy hh:mm';
 
   useListenClickOutside({
     refs: [datePickerWrapperRef],
@@ -162,21 +137,19 @@ export const FormDateTimeFieldInput = ({
     },
     enabled: displayDatePicker,
     excludedClickOutsideIds: [
+      FORM_DATE_TIME_FIELD_PICKER_CLICK_OUTSIDE_ID,
+      DATE_TIME_PICKER_MONTH_YEAR_PANEL_DROPDOWN_ID,
       MONTH_AND_YEAR_DROPDOWN_MONTH_SELECT_ID,
       MONTH_AND_YEAR_DROPDOWN_YEAR_SELECT_ID,
     ],
   });
 
-  const handlePickerChange = (newDate: Nullable<Date>) => {
+  const handlePickerChange = (newDate: Nullable<Temporal.ZonedDateTime>) => {
     setDraftValue({
       type: 'static',
       mode: 'edit',
-      value: newDate?.toDateString() ?? null,
+      value: newDate?.toPlainDate().toString() ?? null,
     });
-
-    setInputDateTime(isDefined(newDate) ? parseDateTimeToString(newDate) : '');
-
-    setPickerDate(newDate);
 
     persistDate(newDate);
   };
@@ -184,8 +157,6 @@ export const FormDateTimeFieldInput = ({
   const handlePickerEnter = () => {};
 
   const handlePickerEscape = () => {
-    // FIXME: Escape key is not handled properly by the underlying DateInput component. We need to solve that.
-
     setDraftValue({
       type: 'static',
       value: draftValue.value,
@@ -208,28 +179,22 @@ export const FormDateTimeFieldInput = ({
       mode: 'view',
     });
 
-    setPickerDate(null);
-
-    setInputDateTime('');
-
     persistDate(null);
   };
 
-  const handlePickerMouseSelect = (newDate: Nullable<Date>) => {
+  const handlePickerMouseSelect = (
+    newDate: Nullable<Temporal.ZonedDateTime>,
+  ) => {
     setDraftValue({
       type: 'static',
-      value: newDate?.toDateString() ?? null,
+      value: newDate?.toPlainDate().toString() ?? null,
       mode: 'view',
     });
-
-    setPickerDate(newDate);
-
-    setInputDateTime(isDefined(newDate) ? parseDateTimeToString(newDate) : '');
 
     persistDate(newDate);
   };
 
-  const handleInputFocus = () => {
+  const handleOpenPicker = () => {
     setDraftValue({
       type: 'static',
       mode: 'edit',
@@ -237,46 +202,18 @@ export const FormDateTimeFieldInput = ({
     });
   };
 
-  const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
-    setInputDateTime(event.target.value);
-  };
-
-  const handleInputKeydown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key !== 'Enter') {
+  const handleInputChange = (newDate: Temporal.ZonedDateTime | null) => {
+    if (!isDefined(newDate)) {
       return;
-    }
-
-    const inputDateTimeTrimmed = inputDateTime.trim();
-
-    if (inputDateTimeTrimmed === '') {
-      handlePickerClear();
-      return;
-    }
-
-    const parsedInputDateTime = parseStringToDateTime(inputDateTimeTrimmed);
-
-    if (!isDefined(parsedInputDateTime)) {
-      return;
-    }
-
-    let validatedDate = parsedInputDateTime;
-    if (parsedInputDateTime < MIN_DATE) {
-      validatedDate = MIN_DATE;
-    } else if (parsedInputDateTime > MAX_DATE) {
-      validatedDate = MAX_DATE;
     }
 
     setDraftValue({
       type: 'static',
-      value: validatedDate.toDateString(),
       mode: 'edit',
+      value: newDate.toPlainDate().toString(),
     });
 
-    setPickerDate(validatedDate);
-
-    setInputDateTime(parseDateTimeToString(validatedDate));
-
-    persistDate(validatedDate);
+    persistDate(newDate);
   };
 
   const handleVariableTagInsert = (variableName: string) => {
@@ -284,8 +221,6 @@ export const FormDateTimeFieldInput = ({
       type: 'variable',
       value: variableName,
     });
-
-    setInputDateTime('');
 
     onChange(variableName);
   };
@@ -297,8 +232,6 @@ export const FormDateTimeFieldInput = ({
       mode: 'view',
     });
 
-    setPickerDate(null);
-
     onChange(null);
   };
 
@@ -309,54 +242,87 @@ export const FormDateTimeFieldInput = ({
     dependencies: [handlePickerEscape],
   });
 
+  const { userTimezone } = useUserTimezone();
+
+  const isVariable = Boolean(isStandaloneVariableString(defaultValue));
+
+  const dateValue =
+    isVariable ||
+    !isDefined(defaultValue) ||
+    defaultValue === 'null' ||
+    defaultValue === ''
+      ? null
+      : defaultValue.includes('T')
+        ? Temporal.Instant.from(defaultValue).toZonedDateTimeISO(
+            timeZone ?? userTimezone,
+          )
+        : Temporal.PlainDate.from(defaultValue).toZonedDateTime(
+            timeZone ?? userTimezone,
+          );
+
   return (
     <FormFieldInputContainer>
-      {label ? <InputLabel>{label}</InputLabel> : null}
+      {label ? <Field.Label>{label}</Field.Label> : null}
 
       <FormFieldInputRowContainer>
-        <StyledInputContainer
-          formFieldInputInstanceId={instanceId}
-          ref={datePickerWrapperRef}
-          hasRightElement={isDefined(VariablePicker) && !readonly}
-        >
-          {draftValue.type === 'static' ? (
-            <>
-              <StyledDateInput
-                type="text"
-                placeholder={placeholderToDisplay}
-                value={inputDateTime}
-                onFocus={handleInputFocus}
-                onChange={handleInputChange}
-                onKeyDown={handleInputKeydown}
-                disabled={readonly}
+        <StyledDatePickerInputWrapper ref={datePickerWrapperRef}>
+          <FormFieldInputInnerContainer
+            ref={refs.setReference}
+            formFieldInputInstanceId={instanceId}
+            hasRightElement={isDefined(VariablePicker) && !readonly}
+            variant={variant}
+          >
+            {draftValue.type === 'static' ? (
+              <StyledDateInputTextContainer
+                isReadonly={readonly === true}
+                onPointerDownCapture={handleOpenPicker}
+              >
+                <DateTimePickerInput
+                  date={dateValue}
+                  onChange={handleInputChange}
+                  onFocus={handleOpenPicker}
+                  readonly={readonly}
+                  timeZone={timeZone}
+                  variant={variant}
+                />
+              </StyledDateInputTextContainer>
+            ) : (
+              <VariableChipStandalone
+                rawVariableName={draftValue.value}
+                onRemove={readonly ? undefined : handleUnlinkVariable}
               />
-
-              {draftValue.mode === 'edit' ? (
-                <StyledDateInputContainer>
-                  <StyledDateInputAbsoluteContainer>
-                    <OverlayContainer>
-                      <DateTimePicker
-                        date={pickerDate ?? new Date()}
-                        onChange={handlePickerChange}
-                        onClose={handlePickerMouseSelect}
-                        onEnter={handlePickerEnter}
-                        onEscape={handlePickerEscape}
-                        onClear={handlePickerClear}
-                        hideHeaderInput
-                      />
-                    </OverlayContainer>
-                  </StyledDateInputAbsoluteContainer>
-                </StyledDateInputContainer>
-              ) : null}
-            </>
-          ) : (
-            <VariableChipStandalone
-              rawVariableName={draftValue.value}
-              onRemove={readonly ? undefined : handleUnlinkVariable}
-            />
-          )}
-        </StyledInputContainer>
-
+            )}
+          </FormFieldInputInnerContainer>
+        </StyledDatePickerInputWrapper>
+        {draftValue.type === 'static' && draftValue.mode === 'edit' ? (
+          <FloatingPortal>
+            <div
+              ref={refs.setFloating}
+              style={floatingStyles}
+              data-click-outside-id={
+                FORM_DATE_TIME_FIELD_PICKER_CLICK_OUTSIDE_ID
+              }
+            >
+              <OverlayContainer>
+                <ParentClickOutsideIdContext.Provider
+                  value={FORM_DATE_TIME_FIELD_PICKER_CLICK_OUTSIDE_ID}
+                >
+                  <DateTimePicker
+                    instanceId={instanceId}
+                    date={dateValue}
+                    onChange={handlePickerChange}
+                    onClose={handlePickerMouseSelect}
+                    onEnter={handlePickerEnter}
+                    onEscape={handlePickerEscape}
+                    onClear={handlePickerClear}
+                    hideHeaderInput
+                    timeZone={timeZone}
+                  />
+                </ParentClickOutsideIdContext.Provider>
+              </OverlayContainer>
+            </div>
+          </FloatingPortal>
+        ) : null}
         {VariablePicker && !readonly ? (
           <VariablePicker
             instanceId={instanceId}

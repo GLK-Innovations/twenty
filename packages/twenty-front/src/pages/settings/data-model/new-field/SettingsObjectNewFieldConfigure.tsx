@@ -1,15 +1,16 @@
+import { isDDLLockedState } from '@/client-config/states/isDDLLockedState';
 import { useFieldMetadataItem } from '@/object-metadata/hooks/useFieldMetadataItem';
 import { useFilteredObjectMetadataItems } from '@/object-metadata/hooks/useFilteredObjectMetadataItems';
-import { SaveAndCancelButtons } from '@/settings/components/SaveAndCancelButtons/SaveAndCancelButtons';
 import { SettingsPageContainer } from '@/settings/components/SettingsPageContainer';
-import { SettingsDataModelNewFieldBreadcrumbDropDown } from '@/settings/data-model/components/SettingsDataModelNewFieldBreadcrumbDropDown';
+import { SettingsWizardStepBar } from '@/settings/components/layout/SettingsWizardStepBar';
 import { FIELD_NAME_MAXIMUM_LENGTH } from '@/settings/data-model/constants/FieldNameMaximumLength';
-import { SettingsDataModelFieldDescriptionForm } from '@/settings/data-model/fields/forms/components/SettingsDataModelFieldDescriptionForm';
+import { SettingsObjectNewFieldHeaderIcon } from '@/settings/data-model/fields/components/SettingsObjectNewFieldHeaderIcon';
 import { SettingsDataModelFieldIconLabelForm } from '@/settings/data-model/fields/forms/components/SettingsDataModelFieldIconLabelForm';
 import { SettingsDataModelFieldSettingsFormCard } from '@/settings/data-model/fields/forms/components/SettingsDataModelFieldSettingsFormCard';
 import { settingsFieldFormSchema } from '@/settings/data-model/fields/forms/validation-schemas/settingsFieldFormSchema';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
-import { SubMenuTopBarContainer } from '@/ui/layout/page/components/SubMenuTopBarContainer';
+import { SettingsPageLayout } from '@/settings/components/layout/SettingsPageLayout';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useLingui } from '@lingui/react/macro';
 import { useEffect, useState } from 'react';
@@ -20,9 +21,11 @@ import {
   type RelationCreationPayload,
   SettingsPath,
 } from 'twenty-shared/types';
-import { getSettingsPath } from 'twenty-shared/utils';
-import { H2Title } from 'twenty-ui/display';
+import { getSettingsPath, isDefined } from 'twenty-shared/utils';
+import { H2Title } from 'twenty-ui/typography';
+import { Button } from 'twenty-ui/input';
 import { Section } from 'twenty-ui/layout';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
 import { type z } from 'zod';
 import { FieldMetadataType } from '~/generated-metadata/graphql';
 import { useNavigateApp } from '~/hooks/useNavigateApp';
@@ -49,25 +52,27 @@ export const SettingsObjectNewFieldConfigure = () => {
     FieldMetadataType.TEXT;
   const { enqueueErrorSnackBar } = useSnackBar();
 
-  const { findActiveObjectMetadataItemByNamePlural } =
+  const { findObjectMetadataItemByNamePlural } =
     useFilteredObjectMetadataItems();
   const activeObjectMetadataItem =
-    findActiveObjectMetadataItemByNamePlural(objectNamePlural);
+    findObjectMetadataItemByNamePlural(objectNamePlural);
   const { createMetadataField } = useFieldMetadataItem();
 
   const formConfig = useForm<SettingsDataModelNewFieldFormValues>({
     mode: 'onTouched',
     resolver: zodResolver(
-      settingsFieldFormSchema(
-        activeObjectMetadataItem?.fields.map((value) => value.name),
-      ),
+      settingsFieldFormSchema({
+        existingOtherLabels: activeObjectMetadataItem?.fields.map(
+          (value) => value.name,
+        ),
+        sourceObjectMetadataId: activeObjectMetadataItem?.id,
+      }),
     ),
     defaultValues: {
       type: fieldType,
       icon:
         DEFAULT_ICONS_BY_FIELD_TYPE[fieldType] ?? DEFAULT_ICON_FOR_NEW_FIELD,
       label: '',
-      description: '',
       name: '',
     },
   });
@@ -82,16 +87,18 @@ export const SettingsObjectNewFieldConfigure = () => {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (!activeObjectMetadataItem) {
+    if (!isDefined(activeObjectMetadataItem)) {
       navigateApp(AppPath.NotFound);
     }
   }, [activeObjectMetadataItem, navigateApp]);
 
-  if (!activeObjectMetadataItem) return null;
+  const isDDLLocked = useAtomStateValue(isDDLLockedState);
+
+  if (!isDefined(activeObjectMetadataItem)) return null;
 
   const { isValid, isSubmitting } = formConfig.formState;
 
-  const canSave = isValid && !isSubmitting;
+  const canSave = isValid && !isSubmitting && !isDDLLocked;
 
   const handleSave = async (
     formValues: SettingsDataModelNewFieldFormValues,
@@ -169,18 +176,24 @@ export const SettingsObjectNewFieldConfigure = () => {
     }
   };
 
-  if (!activeObjectMetadataItem) return null;
+  if (!isDefined(activeObjectMetadataItem)) return null;
 
   return (
-    <FormProvider // eslint-disable-next-line react/jsx-props-no-spreading
+    <FormProvider // oxlint-disable-next-line react/jsx-props-no-spreading
       {...formConfig}
     >
-      <SubMenuTopBarContainer
-        title={t`2. Configure field`}
+      <SettingsPageLayout
+        title={activeObjectMetadataItem.labelPlural}
+        icon={
+          <SettingsObjectNewFieldHeaderIcon
+            objectMetadataItem={activeObjectMetadataItem}
+          />
+        }
+        titleColor={themeCssVariables.font.color.tertiary}
         links={[
           {
             children: t`Workspace`,
-            href: getSettingsPath(SettingsPath.Workspace),
+            href: getSettingsPath(SettingsPath.General),
           },
           {
             children: t`Objects`,
@@ -192,26 +205,28 @@ export const SettingsObjectNewFieldConfigure = () => {
               objectNamePlural,
             }),
           },
-
-          { children: <SettingsDataModelNewFieldBreadcrumbDropDown /> },
+          { children: t`New field` },
         ]}
-        actionButton={
-          <SaveAndCancelButtons
-            isLoading={isSaving}
-            isSaveDisabled={!canSave}
-            isCancelDisabled={isSubmitting}
-            onCancel={() =>
+        secondaryBar={
+          <SettingsWizardStepBar
+            label={t`2. Configure field`}
+            onBack={() =>
               navigate(
                 SettingsPath.ObjectNewFieldSelect,
-                {
-                  objectNamePlural,
-                },
-                {
-                  fieldType,
-                },
+                { objectNamePlural },
+                { fieldType },
               )
             }
-            onSave={formConfig.handleSubmit(handleSave)}
+            trailing={
+              <Button
+                title={t`Save`}
+                variant="primary"
+                size="small"
+                accent="blue"
+                onClick={formConfig.handleSubmit(handleSave)}
+                disabled={!canSave || isSaving}
+              />
+            }
           />
         }
       >
@@ -237,15 +252,8 @@ export const SettingsObjectNewFieldConfigure = () => {
               objectNameSingular={activeObjectMetadataItem.nameSingular}
             />
           </Section>
-          <Section>
-            <H2Title
-              title={t`Description`}
-              description={t`The description of this field`}
-            />
-            <SettingsDataModelFieldDescriptionForm />
-          </Section>
         </SettingsPageContainer>
-      </SubMenuTopBarContainer>
+      </SettingsPageLayout>
     </FormProvider>
   );
 };

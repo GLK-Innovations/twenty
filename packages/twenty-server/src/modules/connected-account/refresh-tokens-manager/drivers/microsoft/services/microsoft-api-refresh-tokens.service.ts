@@ -1,67 +1,64 @@
 import { Injectable } from '@nestjs/common';
 
-import axios, { AxiosError } from 'axios';
+import { ConfidentialClientApplication } from '@azure/msal-node';
 
+import { type PlaintextString } from 'src/engine/core-modules/secret-encryption/branded-strings/plaintext-string.type';
 import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
 import {
   ConnectedAccountRefreshAccessTokenException,
   ConnectedAccountRefreshAccessTokenExceptionCode,
-} from 'src/modules/connected-account/refresh-tokens-manager/exceptions/connected-account-refresh-tokens.exception';
-import { type ConnectedAccountTokens } from 'src/modules/connected-account/refresh-tokens-manager/services/connected-account-refresh-tokens.service';
-
-export type MicrosoftTokens = {
-  accessToken: string;
-  refreshToken: string;
-};
-
-interface MicrosoftRefreshTokenResponse {
-  access_token: string;
-  refresh_token: string;
-  scope: string;
-  token_type: string;
-  expires_in: number;
-  id_token?: string;
-}
+} from 'src/engine/metadata-modules/connected-account/exceptions/connected-account-refresh-tokens.exception';
+import { parseMsalError } from 'src/modules/connected-account/refresh-tokens-manager/drivers/microsoft/utils/parse-msal-error.util';
+import type { ConnectedAccountPlaintextTokens } from 'src/modules/connected-account/refresh-tokens-manager/services/connected-account-refresh-tokens.service';
 
 @Injectable()
 export class MicrosoftAPIRefreshAccessTokenService {
-  constructor(private readonly twentyConfigService: TwentyConfigService) {}
+  constructor(private readonly config: TwentyConfigService) {}
 
-  async refreshTokens(refreshToken: string): Promise<ConnectedAccountTokens> {
+  async refreshTokens(
+    refreshToken: PlaintextString,
+  ): Promise<ConnectedAccountPlaintextTokens> {
+    const msalClient = new ConfidentialClientApplication({
+      auth: {
+        clientId: this.config.get('AUTH_MICROSOFT_CLIENT_ID'),
+        clientSecret: this.config.get('AUTH_MICROSOFT_CLIENT_SECRET'),
+        authority: 'https://login.microsoftonline.com/common',
+      },
+    });
+
     try {
-      const response = await axios.post<MicrosoftRefreshTokenResponse>(
-        'https://login.microsoftonline.com/common/oauth2/v2.0/token',
-        new URLSearchParams({
-          client_id: this.twentyConfigService.get('AUTH_MICROSOFT_CLIENT_ID'),
-          client_secret: this.twentyConfigService.get(
-            'AUTH_MICROSOFT_CLIENT_SECRET',
-          ),
-          refresh_token: refreshToken,
-          grant_type: 'refresh_token',
-        }),
-        {
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-        },
-      );
-      const responseData = response.data as MicrosoftRefreshTokenResponse;
+      const response = await msalClient.acquireTokenByRefreshToken({
+        refreshToken,
+        scopes: ['https://graph.microsoft.com/.default'],
+        forceCache: true,
+      });
 
-      return {
-        accessToken: responseData.access_token,
-        refreshToken: responseData.refresh_token,
-      };
-    } catch (error) {
-      if (
-        error instanceof AxiosError &&
-        error.response?.data?.error === 'invalid_grant'
-      ) {
+      if (!response) {
         throw new ConnectedAccountRefreshAccessTokenException(
-          `Failed to refresh Microsoft token: ${error.response?.data?.error} - ${error.response?.data?.error_description}`,
+          'No response received from Microsoft token endpoint',
           ConnectedAccountRefreshAccessTokenExceptionCode.INVALID_REFRESH_TOKEN,
         );
       }
-      throw error;
+
+      return {
+        accessToken: response.accessToken as PlaintextString,
+        refreshToken: this.extractRefreshTokenFromCache(msalClient),
+      };
+    } catch (error) {
+      if (error instanceof ConnectedAccountRefreshAccessTokenException) {
+        throw error;
+      }
+
+      throw parseMsalError(error);
     }
+  }
+
+  private extractRefreshTokenFromCache(
+    msalClient: ConfidentialClientApplication,
+  ): PlaintextString {
+    const tokenCache = JSON.parse(msalClient.getTokenCache().serialize());
+    const refreshTokenKey = Object.keys(tokenCache.RefreshToken)[0];
+
+    return tokenCache.RefreshToken[refreshTokenKey].secret;
   }
 }

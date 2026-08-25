@@ -1,5 +1,7 @@
-import { useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
+import { t } from '@lingui/core/macro';
+import { useContext } from 'react';
+import { ThemeContext, themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { useApplyObjectFilterDropdownFilterValue } from '@/object-record/object-filter-dropdown/hooks/useApplyObjectFilterDropdownFilterValue';
 import { useObjectFilterDropdownFilterValue } from '@/object-record/object-filter-dropdown/hooks/useObjectFilterDropdownFilterValue';
@@ -9,29 +11,29 @@ import { DropdownMenuItemsContainer } from '@/ui/layout/dropdown/components/Drop
 import { GenericDropdownContentWidth } from '@/ui/layout/dropdown/constants/GenericDropdownContentWidth';
 import { useCloseDropdown } from '@/ui/layout/dropdown/hooks/useCloseDropdown';
 import { SelectableList } from '@/ui/layout/selectable-list/components/SelectableList';
-import { IconCheck } from 'twenty-ui/display';
+import { IconCheck } from 'twenty-ui/icon';
 
 const StyledBooleanSelectContainer = styled.div<{ selected?: boolean }>`
   align-items: center;
+  border-radius: ${themeCssVariables.border.radius.sm};
+  color: ${themeCssVariables.font.color.primary};
   cursor: pointer;
   display: flex;
-  padding: ${({ theme }) =>
-    `${theme.spacing(2)} ${theme.spacing(2)} ${theme.spacing(2)} ${theme.spacing(1)}`};
-  border-radius: ${({ theme }) => theme.border.radius.sm};
-  color: ${({ theme }) => theme.font.color.primary};
+  padding: ${themeCssVariables.spacing[2]} ${themeCssVariables.spacing[2]}
+    ${themeCssVariables.spacing[2]} ${themeCssVariables.spacing[1]};
   &:hover {
-    background: ${({ theme }) => theme.background.transparent.light};
+    background: ${themeCssVariables.background.transparent.light};
   }
 `;
 
 const StyledIconCheckContainer = styled.div`
-  flex: 1;
   display: flex;
+  flex: 1;
   justify-content: flex-end;
 `;
 
 export const ObjectFilterDropdownBooleanSelect = () => {
-  const theme = useTheme();
+  const { theme } = useContext(ThemeContext);
   const options = [true, false];
 
   const { objectFilterDropdownFilterValue } =
@@ -45,7 +47,7 @@ export const ObjectFilterDropdownBooleanSelect = () => {
   const handleOptionSelect = (newValue: boolean) => {
     applyObjectFilterDropdownFilterValue(
       newValue.toString(),
-      newValue ? 'True' : 'False',
+      newValue ? t`True` : t`False`,
     );
 
     closeDropdown();

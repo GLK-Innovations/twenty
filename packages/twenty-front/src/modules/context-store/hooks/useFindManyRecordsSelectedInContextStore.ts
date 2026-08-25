@@ -5,12 +5,13 @@ import { contextStoreFiltersComponentState } from '@/context-store/states/contex
 import { contextStoreTargetedRecordsRuleComponentState } from '@/context-store/states/contextStoreTargetedRecordsRuleComponentState';
 import { computeContextStoreFilters } from '@/context-store/utils/computeContextStoreFilters';
 import { useObjectMetadataItemById } from '@/object-metadata/hooks/useObjectMetadataItemById';
-import { objectMetadataItemsState } from '@/object-metadata/states/objectMetadataItemsState';
+import { fieldMetadataItemByIdMapSelector } from '@/object-metadata/states/fieldMetadataItemByIdMapSelector';
+import { flattenedFieldMetadataItemsSelector } from '@/object-metadata/states/flattenedFieldMetadataItemsSelector';
 import { useFindManyRecords } from '@/object-record/hooks/useFindManyRecords';
 import { useFilterValueDependencies } from '@/object-record/record-filter/hooks/useFilterValueDependencies';
 import { RecordFilterOperand } from '@/object-record/record-filter/types/RecordFilterOperand';
-import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
-import { useRecoilValue } from 'recoil';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 
 export const useFindManyRecordsSelectedInContextStore = ({
   instanceId,
@@ -19,7 +20,7 @@ export const useFindManyRecordsSelectedInContextStore = ({
   instanceId?: string;
   limit?: number;
 }) => {
-  const contextStoreCurrentObjectMetadataItemId = useRecoilComponentValue(
+  const contextStoreCurrentObjectMetadataItemId = useAtomComponentStateValue(
     contextStoreCurrentObjectMetadataItemIdComponentState,
     instanceId,
   );
@@ -28,50 +29,48 @@ export const useFindManyRecordsSelectedInContextStore = ({
     objectId: contextStoreCurrentObjectMetadataItemId ?? '',
   });
 
-  const contextStoreTargetedRecordsRule = useRecoilComponentValue(
+  const contextStoreTargetedRecordsRule = useAtomComponentStateValue(
     contextStoreTargetedRecordsRuleComponentState,
     instanceId,
   );
 
-  const contextStoreFilters = useRecoilComponentValue(
+  const contextStoreFilters = useAtomComponentStateValue(
     contextStoreFiltersComponentState,
     instanceId,
   );
 
-  const contextStoreFilterGroups = useRecoilComponentValue(
+  const contextStoreFilterGroups = useAtomComponentStateValue(
     contextStoreFilterGroupsComponentState,
     instanceId,
   );
 
-  const contextStoreAnyFieldFilterValue = useRecoilComponentValue(
+  const contextStoreAnyFieldFilterValue = useAtomComponentStateValue(
     contextStoreAnyFieldFilterValueComponentState,
     instanceId,
   );
 
   const { filterValueDependencies } = useFilterValueDependencies();
 
-  const objectMetadataItems = useRecoilValue(objectMetadataItemsState);
-
-  const allFieldMetadataItems = objectMetadataItems.flatMap(
-    (objectMetadataItem) => objectMetadataItem.fields,
+  const fieldMetadataItemByIdMap = useAtomStateValue(
+    fieldMetadataItemByIdMapSelector,
   );
 
-  const isSoftDeleteFilterActive = contextStoreFilters.some((filter) => {
-    const foundFieldMetadataItem = allFieldMetadataItems.find(
-      (fieldMetadataItem) => fieldMetadataItem.id === filter.fieldMetadataId,
-    );
+  const flattenedFieldMetadataItems = useAtomStateValue(
+    flattenedFieldMetadataItemsSelector,
+  );
 
-    return (
-      foundFieldMetadataItem?.name === 'deletedAt' &&
-      filter.operand === RecordFilterOperand.IS_NOT_EMPTY
-    );
-  });
+  const isSoftDeleteFilterActive = contextStoreFilters.some(
+    (filter) =>
+      fieldMetadataItemByIdMap.get(filter.fieldMetadataId)?.name ===
+        'deletedAt' && filter.operand === RecordFilterOperand.IS_NOT_EMPTY,
+  );
 
   const queryFilter = computeContextStoreFilters({
     contextStoreTargetedRecordsRule,
     contextStoreFilters,
     contextStoreFilterGroups,
     objectMetadataItem,
+    fieldMetadataItems: flattenedFieldMetadataItems,
     filterValueDependencies,
     contextStoreAnyFieldFilterValue,
   });

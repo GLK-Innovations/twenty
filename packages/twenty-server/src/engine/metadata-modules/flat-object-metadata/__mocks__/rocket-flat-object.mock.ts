@@ -2,16 +2,14 @@ import { getFlatObjectMetadataMock } from 'src/engine/metadata-modules/flat-obje
 
 export const ROCKET_FLAT_OBJECT_MOCK = getFlatObjectMetadataMock({
   id: 'd78ec657-74a4-4652-a350-1f44ff62970a',
-  standardId: null,
   nameSingular: 'rocket',
   namePlural: 'rockets',
   labelSingular: 'Rocket',
   labelPlural: 'Rockets',
   description: 'A rocket',
   icon: 'IconRocket',
-  standardOverrides: null,
+  overrides: null,
   targetTableName: 'DEPRECATED',
-  isCustom: true,
   isRemote: false,
   isActive: true,
   isSystem: false,

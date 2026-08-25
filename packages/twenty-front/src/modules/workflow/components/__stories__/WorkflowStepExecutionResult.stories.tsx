@@ -1,7 +1,7 @@
-import { type Meta, type StoryObj } from '@storybook/react';
+import { type Meta, type StoryObj } from '@storybook/react-vite';
 import { ComponentDecorator } from 'twenty-ui/testing';
 
-import { I18nFrontDecorator } from '~/testing/decorators/I18nFrontDecorator';
+import { ARGOS_CAPTURE_DISABLED } from '~/testing/constants/ArgosCaptureDisabled';
 import { SnackBarDecorator } from '~/testing/decorators/SnackBarDecorator';
 
 import { WorkflowStepExecutionResult } from '@/workflow/components/WorkflowStepExecutionResult';
@@ -9,7 +9,10 @@ import { WorkflowStepExecutionResult } from '@/workflow/components/WorkflowStepE
 const meta: Meta<typeof WorkflowStepExecutionResult> = {
   title: 'Modules/Workflow/Components/StepExecutionResult',
   component: WorkflowStepExecutionResult,
-  decorators: [ComponentDecorator, SnackBarDecorator, I18nFrontDecorator],
+  decorators: [ComponentDecorator, SnackBarDecorator],
+  parameters: {
+    argos: ARGOS_CAPTURE_DISABLED,
+  },
   args: {
     result: JSON.stringify(
       { message: 'Hello World', status: 'success' },

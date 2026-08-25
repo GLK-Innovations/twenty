@@ -1,64 +1,86 @@
-import { extractAndSanitizeObjectStringFields } from 'twenty-shared/utils';
+import { MetadataWritability } from 'twenty-shared/types';
+import {
+  extractAndSanitizeObjectStringFields,
+  isDefined,
+} from 'twenty-shared/utils';
+import { v4 } from 'uuid';
 
 import { type CreateFieldInput } from 'src/engine/metadata-modules/field-metadata/dtos/create-field.input';
 import { generateDefaultValue } from 'src/engine/metadata-modules/field-metadata/utils/generate-default-value';
 import { generateNullable } from 'src/engine/metadata-modules/field-metadata/utils/generate-nullable';
-import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
+import { isCompositeFieldMetadataType } from 'src/engine/metadata-modules/field-metadata/utils/is-composite-field-metadata-type.util';
+import { nullifyEmptyCompositeDefaultValue } from 'src/engine/metadata-modules/flat-field-metadata/utils/nullify-empty-composite-default-value.util';
+import { type UniversalFlatFieldMetadata } from 'src/engine/workspace-manager/workspace-migration/universal-flat-entity/types/universal-flat-field-metadata.type';
 
 type GetDefaultFlatFieldMetadataArgs = {
-  fieldMetadataId: string;
-  createFieldInput: Omit<CreateFieldInput, 'workspaceId'>;
-  workspaceId: string;
+  createFieldInput: Omit<CreateFieldInput, 'workspaceId' | 'objectMetadataId'>;
+  applicationUniversalIdentifier: string;
+  objectMetadataUniversalIdentifier: string;
+  isSystemSideEffect?: boolean;
 };
 export const getDefaultFlatFieldMetadata = ({
   createFieldInput,
-  fieldMetadataId,
-  workspaceId,
+  applicationUniversalIdentifier,
+  objectMetadataUniversalIdentifier,
+  isSystemSideEffect = false,
 }: GetDefaultFlatFieldMetadataArgs) => {
   const { defaultValue, settings } = extractAndSanitizeObjectStringFields(
     createFieldInput,
     ['defaultValue', 'settings'],
   );
 
-  const createdAt = new Date();
+  const createdAt = new Date().toISOString();
+  const resolvedDefaultValue =
+    defaultValue ?? generateDefaultValue(createFieldInput.type);
 
   return {
-    calendarViewIds: [],
-    viewFieldIds: [],
     description: createFieldInput.description ?? null,
-    id: fieldMetadataId,
     icon: createFieldInput.icon ?? null,
     isActive: true,
-    isCustom: true,
     isLabelSyncedWithName: createFieldInput.isLabelSyncedWithName ?? false,
     isNullable: generateNullable(
-      createFieldInput.type,
       createFieldInput.isNullable,
       createFieldInput.isRemoteCreation,
     ),
-    isSystem: false,
-    isUnique: createFieldInput.isUnique ?? null,
+    isSystem: createFieldInput.isSystem ?? false,
+    isSystemSideEffect,
+    isUnique: createFieldInput.isUnique ?? false,
     label: createFieldInput.label,
     name: createFieldInput.name,
-    objectMetadataId: createFieldInput.objectMetadataId,
-    relationTargetFieldMetadataId: null,
-    relationTargetObjectMetadataId: null,
-    standardId: createFieldInput.standardId ?? null,
-    standardOverrides: null,
+    overrides: null,
     type: createFieldInput.type,
-    universalIdentifier:
-      createFieldInput.universalIdentifier ?? fieldMetadataId,
-    workspaceId,
+    universalIdentifier: createFieldInput.universalIdentifier ?? v4(),
     options: createFieldInput.options ?? null,
-    defaultValue: defaultValue ?? generateDefaultValue(createFieldInput.type),
-    settings: settings ?? null,
+    defaultValue: isCompositeFieldMetadataType(createFieldInput.type)
+      ? nullifyEmptyCompositeDefaultValue({
+          defaultValue: resolvedDefaultValue,
+          fieldType: createFieldInput.type,
+        })
+      : resolvedDefaultValue,
     createdAt,
     updatedAt: createdAt,
-    isUIReadOnly: createFieldInput.isUIReadOnly ?? false,
+    // isUIReadOnly is the deprecated alias of isUIEditable (inverted
+    // polarity), kept for one release; isUIEditable wins when both are set.
+    isUIEditable:
+      createFieldInput.isUIEditable ??
+      (isDefined(createFieldInput.isUIReadOnly)
+        ? !createFieldInput.isUIReadOnly
+        : true),
+    writability: MetadataWritability.OPEN,
     morphId: null,
-    applicationId: createFieldInput.applicationId ?? null,
-    viewFilterIds: [],
-    viewGroupIds: [],
-    kanbanAggregateOperationViewIds: [],
-  } as const satisfies FlatFieldMetadata;
+    applicationUniversalIdentifier,
+    objectMetadataUniversalIdentifier,
+    relationTargetObjectMetadataUniversalIdentifier: null,
+    relationTargetFieldMetadataUniversalIdentifier: null,
+    viewFilterUniversalIdentifiers: [],
+    viewFieldUniversalIdentifiers: [],
+    fieldPermissionUniversalIdentifiers: [],
+    kanbanAggregateOperationViewUniversalIdentifiers: [],
+    calendarViewUniversalIdentifiers: [],
+    calendarEndViewUniversalIdentifiers: [],
+    mainGroupByFieldMetadataViewUniversalIdentifiers: [],
+    universalSettings: settings ?? null,
+    viewSortUniversalIdentifiers: [],
+    searchFieldMetadataUniversalIdentifiers: [],
+  } as const satisfies UniversalFlatFieldMetadata;
 };

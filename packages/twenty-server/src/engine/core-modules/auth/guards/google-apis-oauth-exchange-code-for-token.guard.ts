@@ -3,7 +3,6 @@ import { AuthGuard } from '@nestjs/passport';
 import { InjectRepository } from '@nestjs/typeorm';
 
 import { Repository } from 'typeorm';
-
 import {
   AuthException,
   AuthExceptionCode,
@@ -46,6 +45,10 @@ export class GoogleAPIsOauthExchangeCodeForTokenGuard extends AuthGuard(
         );
       }
 
+      await this.transientTokenService.verifyTransientToken(
+        state.transientToken,
+      );
+
       new GoogleAPIsOauthExchangeCodeForTokenStrategy(this.twentyConfigService);
 
       setRequestExtraParams(request, {
@@ -53,6 +56,7 @@ export class GoogleAPIsOauthExchangeCodeForTokenGuard extends AuthGuard(
         redirectLocation: state.redirectLocation,
         calendarVisibility: state.calendarVisibility,
         messageVisibility: state.messageVisibility,
+        skipMessageChannelConfiguration: state.skipMessageChannelConfiguration,
       });
 
       return (await super.canActivate(context)) as boolean;

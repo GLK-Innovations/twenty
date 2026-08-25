@@ -1,32 +1,56 @@
 import { MAIN_CONTEXT_STORE_INSTANCE_ID } from '@/context-store/constants/MainContextStoreInstanceId';
 import { contextStoreRecordShowParentViewComponentState } from '@/context-store/states/contextStoreRecordShowParentViewComponentState';
-import { type ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
+import { useObjectMetadataItems } from '@/object-metadata/hooks/useObjectMetadataItems';
+import { flattenedFieldMetadataItemsSelector } from '@/object-metadata/states/flattenedFieldMetadataItemsSelector';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
 import { useFilterValueDependencies } from '@/object-record/record-filter/hooks/useFilterValueDependencies';
-import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
-import { getQueryVariablesFromFiltersAndSorts } from '../utils/getQueryVariablesFromFiltersAndSorts';
+import { isRecordFilterAboutSoftDelete } from '@/object-record/record-filter/utils/isRecordFilterAboutSoftDelete';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { getQueryVariablesFromFiltersAndSorts } from '@/views/utils/getQueryVariablesFromFiltersAndSorts';
 
 export const useQueryVariablesFromParentView = ({
   objectMetadataItem,
 }: {
-  objectMetadataItem: ObjectMetadataItem;
+  objectMetadataItem: EnrichedObjectMetadataItem;
 }) => {
-  const recordShowParentView = useRecoilComponentValue(
+  const { objectMetadataItems } = useObjectMetadataItems();
+
+  const flattenedFieldMetadataItems = useAtomStateValue(
+    flattenedFieldMetadataItemsSelector,
+  );
+
+  const contextStoreRecordShowParentView = useAtomComponentStateValue(
     contextStoreRecordShowParentViewComponentState,
     MAIN_CONTEXT_STORE_INSTANCE_ID,
   );
 
   const { filterValueDependencies } = useFilterValueDependencies();
 
+  const parentView =
+    contextStoreRecordShowParentView?.parentViewObjectNameSingular ===
+    objectMetadataItem.nameSingular
+      ? contextStoreRecordShowParentView
+      : undefined;
+
   const { filter, orderBy } = getQueryVariablesFromFiltersAndSorts({
-    recordFilterGroups: recordShowParentView?.parentViewFilterGroups ?? [],
-    recordFilters: recordShowParentView?.parentViewFilters ?? [],
-    recordSorts: recordShowParentView?.parentViewSorts ?? [],
+    recordFilterGroups: parentView?.parentViewFilterGroups ?? [],
+    recordFilters: parentView?.parentViewFilters ?? [],
+    recordSorts: parentView?.parentViewSorts ?? [],
     objectMetadataItem,
+    objectMetadataItems,
+    fieldMetadataItems: flattenedFieldMetadataItems,
     filterValueDependencies,
   });
+
+  const isSoftDeleteFilterActive =
+    parentView?.parentViewFilters.some((recordFilter) =>
+      isRecordFilterAboutSoftDelete({ recordFilter, objectMetadataItems }),
+    ) ?? false;
 
   return {
     filter,
     orderBy,
+    isSoftDeleteFilterActive,
   };
 };

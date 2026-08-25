@@ -1,9 +1,20 @@
 import { Injectable, Logger } from '@nestjs/common';
 
+import { QUERY_MAX_RECORDS } from 'twenty-shared/constants';
+import { OrderByDirection, type ObjectRecord } from 'twenty-shared/types';
+
+import { type ObjectRecordOrderBy } from 'src/engine/api/graphql/workspace-query-builder/interfaces/object-record.interface';
+
+import { isNonEmptyArray } from '@sniptt/guards';
 import { CommonFindManyQueryRunnerService } from 'src/engine/api/common/common-query-runners/common-find-many-query-runner.service';
+import { getRelationsSelectFields } from 'src/engine/api/common/common-select-fields/utils/get-relations-select-fields.util';
+import { CommonApiContextBuilderService } from 'src/engine/core-modules/record-crud/services/common-api-context-builder.service';
 import { type FindRecordsParams } from 'src/engine/core-modules/record-crud/types/find-records-params.type';
-import { CommonApiContextBuilder } from 'src/engine/core-modules/record-crud/utils/common-api-context-builder.util';
+import { type FindRecordsResult } from 'src/engine/core-modules/record-crud/types/find-records-result.type';
+import { buildEffectiveSelectedFields } from 'src/engine/core-modules/record-crud/utils/build-effective-selected-fields.util';
+import { getRecordDisplayName } from 'src/engine/core-modules/record-crud/utils/get-record-display-name.util';
 import { type ToolOutput } from 'src/engine/core-modules/tool/types/tool-output.type';
+import { isDefined } from 'twenty-shared/utils';
 
 @Injectable()
 export class FindRecordsService {
@@ -11,61 +22,117 @@ export class FindRecordsService {
 
   constructor(
     private readonly commonFindManyRunner: CommonFindManyQueryRunnerService,
-    private readonly commonApiContextBuilder: CommonApiContextBuilder,
+    private readonly commonApiContextBuilder: CommonApiContextBuilderService,
   ) {}
 
   async execute(
     params: FindRecordsParams,
-  ): Promise<ToolOutput<{ records: unknown[]; totalCount: number }>> {
+  ): Promise<ToolOutput<FindRecordsResult>> {
     const {
       objectName,
       filter,
       orderBy,
       limit,
-      offset,
-      workspaceId,
+      offset = 0,
+      authContext,
       rolePermissionConfig,
-      userWorkspaceId,
-      apiKey,
-      createdBy,
+      select,
+      shouldBuildEffectiveSelectFields,
     } = params;
 
-    try {
-      const { queryRunnerContext, selectedFields } =
-        await this.commonApiContextBuilder.build({
-          objectName,
-          workspaceId,
-          rolePermissionConfig,
-          userWorkspaceId,
-          apiKey,
-          actorContext: createdBy,
-        });
+    if (shouldBuildEffectiveSelectFields && !isNonEmptyArray(select)) {
+      return {
+        success: false,
+        message: 'Select at least one field in select parameter',
+        error: 'Select is required',
+      };
+    }
 
-      const result = await this.commonFindManyRunner.execute(
+    try {
+      const {
+        queryRunnerContext,
+        selectedFields: allSelectableFields,
+        flatObjectMetadata,
+        flatObjectMetadataMaps,
+        flatFieldMetadataMaps,
+        objectsPermissions,
+      } = await this.commonApiContextBuilder.build({
+        authContext,
+        objectName,
+        rolePermissionConfig,
+      });
+
+      const { effectiveSelectedFields, warnings } =
+        shouldBuildEffectiveSelectFields && isDefined(select)
+          ? buildEffectiveSelectedFields({
+              select,
+              filter,
+              orderBy,
+              objectName,
+              flatObjectMetadata,
+              flatFieldMetadataMaps,
+              flatObjectMetadataMaps,
+              selectedFields: allSelectableFields,
+              objectsPermissions,
+              selectableRelationFields: getRelationsSelectFields({
+                flatObjectMetadataMaps,
+                flatFieldMetadataMaps,
+                flatObjectMetadata,
+                objectsPermissions,
+                depth: 1,
+                onlyUseLabelIdentifierFieldsInRelations: true,
+              }),
+            })
+          : { effectiveSelectedFields: allSelectableFields, warnings: [] };
+
+      // Add id to orderBy for consistent pagination
+      const orderByWithIdCondition: ObjectRecordOrderBy = [
+        ...(orderBy ?? []).filter((item) => item !== undefined),
+        { id: OrderByDirection.AscNullsFirst },
+      ];
+
+      const {
+        results: { records, totalCount, pageInfo },
+      } = await this.commonFindManyRunner.execute(
         {
-          filter: filter || {},
-          orderBy,
-          first: limit ?? 50,
-          offset: offset ?? 0,
-          selectedFields,
+          filter,
+          orderBy: orderByWithIdCondition,
+          first: limit ? Math.min(limit, QUERY_MAX_RECORDS) : QUERY_MAX_RECORDS,
+          offset,
+          selectedFields: { ...effectiveSelectedFields, totalCount: true },
         },
         queryRunnerContext,
       );
 
+      this.logger.log(`Found ${records.length} records in ${objectName}`);
+
+      const recordReferences = records.map((record: ObjectRecord) => ({
+        objectNameSingular: objectName,
+        recordId: record.id as string,
+        displayName: getRecordDisplayName(
+          record,
+          flatObjectMetadata,
+          flatFieldMetadataMaps,
+        ),
+      }));
+
       return {
         success: true,
-        message: `Found ${result.records.length} records in ${objectName}`,
+        message: `Found ${records.length} ${objectName} records`,
         result: {
-          records: result.records,
-          totalCount: result.totalCount,
+          records,
+          count: totalCount ?? 0,
+          hasNextPage: pageInfo.hasNextPage,
         },
+        ...(isNonEmptyArray(warnings) ? { warnings: warnings } : {}),
+        recordReferences,
       };
     } catch (error) {
       this.logger.error(`Failed to find records: ${error}`);
 
       return {
         success: false,
-        message: `Failed to find records in ${objectName}`,
+        message: `Failed to find ${objectName} records`,
         error:
           error instanceof Error ? error.message : 'Failed to find records',
       };

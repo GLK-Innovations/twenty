@@ -1,5 +1,7 @@
+import { isDefined } from 'twenty-shared/utils';
+
 import { type MessageWithParticipants } from 'src/modules/messaging/message-import-manager/types/message';
-import { getDomainNameByEmail } from 'src/utils/get-domain-name-by-email';
+import { getDomainFromEmailOrThrow } from 'src/utils/get-domain-from-email-or-throw';
 
 export const filterOutInternals = (
   primaryHandle: string,
@@ -10,14 +12,16 @@ export const filterOutInternals = (
       return true;
     }
 
-    const primaryHandleDomain = getDomainNameByEmail(primaryHandle);
+    const primaryHandleDomain = getDomainFromEmailOrThrow(primaryHandle);
 
     try {
       const isAllHandlesFromSameDomain = message.participants
-        .filter((participant) => !!participant.handle)
+        .filter((participant) => isDefined(participant.handle))
         .every(
           (participant) =>
-            getDomainNameByEmail(participant.handle) === primaryHandleDomain,
+            isDefined(participant.handle) &&
+            getDomainFromEmailOrThrow(participant.handle) ===
+              primaryHandleDomain,
         );
 
       if (isAllHandlesFromSameDomain) {

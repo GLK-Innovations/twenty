@@ -1,22 +1,9 @@
-import { isNonEmptyString } from '@sniptt/guards';
+import { Temporal } from 'temporal-polyfill';
 import {
-  endOfDay,
-  endOfMonth,
-  endOfWeek,
-  endOfYear,
-  isWithinInterval,
-  startOfDay,
-  startOfMonth,
-  startOfWeek,
-  startOfYear,
-} from 'date-fns';
-import {
-  addUnitToDateTime,
-  getFirstDayOfTheWeekAsANumberForDateFNS,
   isDefined,
   type RelativeDateFilter,
-  safeParseRelativeDateFilterJSONStringified,
-  subUnitFromDateTime,
+  resolveRelativeDateTimeFilter,
+  safeParseRelativeDateFilterJsonStringified,
 } from 'twenty-shared/utils';
 
 export const parseAndEvaluateRelativeDateFilter = ({
@@ -27,7 +14,7 @@ export const parseAndEvaluateRelativeDateFilter = ({
   relativeDateString: string;
 }): boolean => {
   const relativeDateFilterValue =
-    safeParseRelativeDateFilterJSONStringified(relativeDateString);
+    safeParseRelativeDateFilterJsonStringified(relativeDateString);
 
   if (!relativeDateFilterValue) {
     return false;
@@ -46,107 +33,31 @@ export const evaluateRelativeDateFilter = ({
   dateToCheck: Date;
   relativeDateFilterValue: RelativeDateFilter;
 }): boolean => {
-  const now = new Date();
-
-  switch (relativeDateFilterValue.direction) {
-    case 'NEXT':
-      return evaluateNextDirection(dateToCheck, relativeDateFilterValue, now);
-    case 'THIS':
-      return evaluateThisDirection(dateToCheck, relativeDateFilterValue, now);
-    case 'PAST':
-      return evaluatePastDirection(dateToCheck, relativeDateFilterValue, now);
-    default:
-      return false;
+  if (
+    relativeDateFilterValue.direction !== 'THIS' &&
+    !isDefined(relativeDateFilterValue.amount)
+  ) {
+    return false;
   }
+
+  const referenceZonedDateTime = Temporal.Instant.fromEpochMilliseconds(
+    new Date().getTime(),
+  ).toZonedDateTimeISO('UTC');
+
+  const { start, end } = resolveRelativeDateTimeFilter(
+    relativeDateFilterValue,
+    referenceZonedDateTime,
+  );
+
+  const dateToCheckInstant = Temporal.Instant.fromEpochMilliseconds(
+    dateToCheck.getTime(),
+  );
+
+  // Half-open [start, end): the period end is exclusive (it is the start of the
+  // next period), so a value that lands exactly on a boundary is only counted in
+  // one of two adjacent periods.
+  return (
+    Temporal.Instant.compare(dateToCheckInstant, start.toInstant()) >= 0 &&
+    Temporal.Instant.compare(dateToCheckInstant, end.toInstant()) < 0
+  );
 };
-
-const evaluateNextDirection = (
-  dateToCheck: Date,
-  relativeDateFilterValue: RelativeDateFilter,
-  now: Date,
-): boolean => {
-  if (!isDefined(relativeDateFilterValue.amount)) {
-    return false;
-  }
-
-  const { amount, unit } = relativeDateFilterValue;
-
-  const endOfPeriod = addUnitToDateTime(now, amount, unit);
-
-  if (!endOfPeriod) {
-    return false;
-  }
-
-  return isWithinInterval(dateToCheck, {
-    start: now,
-    end: endOfPeriod,
-  });
-};
-
-function evaluatePastDirection(
-  dateToCheck: Date,
-  relativeDateFilterValue: RelativeDateFilter,
-  now: Date,
-): boolean {
-  if (!isDefined(relativeDateFilterValue.amount)) {
-    return false;
-  }
-
-  const { amount, unit } = relativeDateFilterValue;
-
-  const startOfPeriod = subUnitFromDateTime(now, amount, unit);
-
-  if (!startOfPeriod) {
-    return false;
-  }
-
-  return isWithinInterval(dateToCheck, {
-    start: startOfPeriod,
-    end: now,
-  });
-}
-
-function evaluateThisDirection(
-  dateToCheck: Date,
-  relativeDateValue: RelativeDateFilter,
-  now: Date,
-): boolean {
-  const { unit } = relativeDateValue;
-
-  const firstDayOfTheWeekAsANumberForDateFNS = isNonEmptyString(
-    relativeDateValue.firstDayOfTheWeek,
-  )
-    ? getFirstDayOfTheWeekAsANumberForDateFNS(
-        relativeDateValue.firstDayOfTheWeek,
-      )
-    : 1;
-
-  switch (unit) {
-    case 'DAY':
-      return isWithinInterval(dateToCheck, {
-        start: startOfDay(now),
-        end: endOfDay(now),
-      });
-    case 'WEEK':
-      return isWithinInterval(dateToCheck, {
-        start: startOfWeek(now, {
-          weekStartsOn: firstDayOfTheWeekAsANumberForDateFNS,
-        }),
-        end: endOfWeek(now, {
-          weekStartsOn: firstDayOfTheWeekAsANumberForDateFNS,
-        }),
-      });
-    case 'MONTH':
-      return isWithinInterval(dateToCheck, {
-        start: startOfMonth(now),
-        end: endOfMonth(now),
-      });
-    case 'YEAR':
-      return isWithinInterval(dateToCheck, {
-        start: startOfYear(now),
-        end: endOfYear(now),
-      });
-    default:
-      return false;
-  }
-}

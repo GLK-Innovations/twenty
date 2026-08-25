@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
+import { isDefined } from 'twenty-shared/utils';
 
-import { TwentyORMManager } from 'src/engine/twenty-orm/twenty-orm.manager';
+import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
+import { type WorkspaceTransactionScope } from 'src/engine/twenty-orm/types/workspace-transaction-scope.type';
+import { buildSystemAuthContext } from 'src/engine/twenty-orm/utils/build-system-auth-context.util';
 import {
   type AutomatedTriggerType,
   type WorkflowAutomatedTriggerWorkspaceEntity,
@@ -9,35 +12,75 @@ import { type AutomatedTriggerSettings } from 'src/modules/workflow/workflow-tri
 
 @Injectable()
 export class AutomatedTriggerWorkspaceService {
-  constructor(private readonly twentyORMManager: TwentyORMManager) {}
+  constructor(private readonly workspaceOrmManager: WorkspaceOrmManager) {}
 
   async addAutomatedTrigger({
     workflowId,
     type,
     settings,
+    workspaceId,
+    transactionScope,
   }: {
     workflowId: string;
     type: AutomatedTriggerType;
     settings: AutomatedTriggerSettings;
+    workspaceId: string;
+    transactionScope?: WorkspaceTransactionScope;
   }) {
-    const workflowAutomatedTriggerRepository =
-      await this.twentyORMManager.getRepository<WorkflowAutomatedTriggerWorkspaceEntity>(
-        'workflowAutomatedTrigger',
-      );
+    if (isDefined(transactionScope)) {
+      await transactionScope
+        .getRepository<WorkflowAutomatedTriggerWorkspaceEntity>(
+          'workflowAutomatedTrigger',
+        )
+        .insert({ type, settings, workflowId });
 
-    await workflowAutomatedTriggerRepository.insert({
-      type,
-      settings,
-      workflowId,
-    });
+      return;
+    }
+
+    const authContext = buildSystemAuthContext(workspaceId);
+
+    await this.workspaceOrmManager.executeInWorkspaceContext(async () => {
+      const workflowAutomatedTriggerRepository =
+        this.workspaceOrmManager.getRepository<WorkflowAutomatedTriggerWorkspaceEntity>(
+          'workflowAutomatedTrigger',
+        );
+
+      await workflowAutomatedTriggerRepository.insert({
+        type,
+        settings,
+        workflowId,
+      });
+    }, authContext);
   }
 
-  async deleteAutomatedTrigger({ workflowId }: { workflowId: string }) {
-    const workflowAutomatedTriggerRepository =
-      await this.twentyORMManager.getRepository<WorkflowAutomatedTriggerWorkspaceEntity>(
-        'workflowAutomatedTrigger',
-      );
+  async deleteAutomatedTrigger({
+    workflowId,
+    workspaceId,
+    transactionScope,
+  }: {
+    workflowId: string;
+    workspaceId: string;
+    transactionScope?: WorkspaceTransactionScope;
+  }) {
+    if (isDefined(transactionScope)) {
+      await transactionScope
+        .getRepository<WorkflowAutomatedTriggerWorkspaceEntity>(
+          'workflowAutomatedTrigger',
+        )
+        .delete({ workflowId });
 
-    await workflowAutomatedTriggerRepository.delete({ workflowId });
+      return;
+    }
+
+    const authContext = buildSystemAuthContext(workspaceId);
+
+    await this.workspaceOrmManager.executeInWorkspaceContext(async () => {
+      const workflowAutomatedTriggerRepository =
+        this.workspaceOrmManager.getRepository<WorkflowAutomatedTriggerWorkspaceEntity>(
+          'workflowAutomatedTrigger',
+        );
+
+      await workflowAutomatedTriggerRepository.delete({ workflowId });
+    }, authContext);
   }
 }

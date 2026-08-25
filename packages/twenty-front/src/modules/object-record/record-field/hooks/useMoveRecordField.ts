@@ -1,14 +1,16 @@
+import { useStore } from 'jotai';
+import { useCallback } from 'react';
+
 import { useUpdateRecordField } from '@/object-record/record-field/hooks/useUpdateRecordField';
-import { currentRecordFieldsComponentState } from '@/object-record/record-field/states/currentRecordFieldsComponentState';
-import { useRecoilComponentCallbackState } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentCallbackState';
+import { visibleRecordFieldsComponentSelector } from '@/object-record/record-field/states/visibleRecordFieldsComponentSelector';
+import { useAtomComponentSelectorCallbackState } from '@/ui/utilities/state/jotai/hooks/useAtomComponentSelectorCallbackState';
 import { useSaveCurrentViewFields } from '@/views/hooks/useSaveCurrentViewFields';
 import { mapRecordFieldToViewField } from '@/views/utils/mapRecordFieldToViewField';
-import { useRecoilCallback } from 'recoil';
-import { sortByProperty } from '~/utils/array/sortByProperty';
 
 export const useMoveRecordField = (recordTableId?: string) => {
-  const currentRecordFieldsCallbackState = useRecoilComponentCallbackState(
-    currentRecordFieldsComponentState,
+  const store = useStore();
+  const visibleRecordFields = useAtomComponentSelectorCallbackState(
+    visibleRecordFieldsComponentSelector,
     recordTableId,
   );
 
@@ -16,76 +18,64 @@ export const useMoveRecordField = (recordTableId?: string) => {
 
   const { updateRecordField } = useUpdateRecordField(recordTableId);
 
-  // TODO: fix this we want to move left and right of VISIBLE record fields,
-  // because otherwise it will just do nothing while moving left and right of non visible record fields
-  const moveRecordField = useRecoilCallback(
-    ({ snapshot }) =>
-      async ({
-        direction,
-        fieldMetadataItemIdToMove,
-      }: {
-        direction: 'before' | 'after';
-        fieldMetadataItemIdToMove: string;
-      }) => {
-        const currentRecordFields = snapshot
-          .getLoadable(currentRecordFieldsCallbackState)
-          .getValue();
+  const moveRecordField = useCallback(
+    async ({
+      direction,
+      fieldMetadataItemIdToMove,
+    }: {
+      direction: 'before' | 'after';
+      fieldMetadataItemIdToMove: string;
+    }) => {
+      const visibleRecordFieldsValue = store.get(visibleRecordFields);
 
-        const sortedRecordFields = currentRecordFields.toSorted(
-          sortByProperty('position'),
-        );
+      const indexOfRecordFieldToMove = visibleRecordFieldsValue.findIndex(
+        (recordField) =>
+          recordField.fieldMetadataItemId === fieldMetadataItemIdToMove,
+      );
 
-        const indexOfRecordFieldToMove = sortedRecordFields.findIndex(
-          (recordField) =>
-            recordField.fieldMetadataItemId === fieldMetadataItemIdToMove,
-        );
+      if (indexOfRecordFieldToMove === -1) {
+        return;
+      }
 
-        if (indexOfRecordFieldToMove === -1) {
-          return;
-        }
+      const targetArrayIndex =
+        direction === 'before'
+          ? indexOfRecordFieldToMove - 1
+          : indexOfRecordFieldToMove + 1;
 
-        const newRecordFields = [...sortedRecordFields];
+      if (
+        targetArrayIndex < 0 ||
+        targetArrayIndex > visibleRecordFieldsValue.length - 1
+      ) {
+        return;
+      }
 
-        const targetArrayIndex =
-          direction === 'before'
-            ? indexOfRecordFieldToMove - 1
-            : indexOfRecordFieldToMove + 1;
+      const currentRecordField =
+        visibleRecordFieldsValue[indexOfRecordFieldToMove];
+      const targetRecordField = visibleRecordFieldsValue[targetArrayIndex];
 
-        const targetArraySize = newRecordFields.length - 1;
+      const targetRecordFieldNewPosition = currentRecordField.position;
+      const currentRecordFieldNewPosition = targetRecordField.position;
 
-        if (
-          indexOfRecordFieldToMove >= 0 &&
-          targetArrayIndex >= 0 &&
-          indexOfRecordFieldToMove <= targetArraySize &&
-          targetArrayIndex <= targetArraySize
-        ) {
-          const currentRecordField = newRecordFields[indexOfRecordFieldToMove];
-          const targetRecordField = newRecordFields[targetArrayIndex];
+      updateRecordField(targetRecordField.fieldMetadataItemId, {
+        position: targetRecordFieldNewPosition,
+      });
 
-          const targetRecordFieldNewPosition = currentRecordField.position;
-          const currentRecordFieldNewPosition = targetRecordField.position;
+      updateRecordField(currentRecordField.fieldMetadataItemId, {
+        position: currentRecordFieldNewPosition,
+      });
 
-          updateRecordField(targetRecordField.fieldMetadataItemId, {
-            position: targetRecordFieldNewPosition,
-          });
-
-          updateRecordField(currentRecordField.fieldMetadataItemId, {
-            position: currentRecordFieldNewPosition,
-          });
-
-          await saveViewFields([
-            mapRecordFieldToViewField({
-              ...targetRecordField,
-              position: targetRecordFieldNewPosition,
-            }),
-            mapRecordFieldToViewField({
-              ...currentRecordField,
-              position: currentRecordFieldNewPosition,
-            }),
-          ]);
-        }
-      },
-    [currentRecordFieldsCallbackState, saveViewFields, updateRecordField],
+      await saveViewFields([
+        mapRecordFieldToViewField({
+          ...targetRecordField,
+          position: targetRecordFieldNewPosition,
+        }),
+        mapRecordFieldToViewField({
+          ...currentRecordField,
+          position: currentRecordFieldNewPosition,
+        }),
+      ]);
+    },
+    [visibleRecordFields, saveViewFields, updateRecordField, store],
   );
 
   return { moveRecordField };

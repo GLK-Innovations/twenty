@@ -2,17 +2,22 @@ import { useCallback } from 'react';
 
 import { currentUserState } from '@/auth/states/currentUserState';
 import { workspacePublicDataState } from '@/auth/states/workspacePublicDataState';
+import { useReadCaptchaToken } from '@/captcha/hooks/useReadCaptchaToken';
+import { useCaptcha } from '@/client-config/hooks/useCaptcha';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
-import { ApolloError } from '@apollo/client';
+import { CombinedGraphQLErrors } from '@apollo/client/errors';
 import { useLingui } from '@lingui/react/macro';
-import { useRecoilValue } from 'recoil';
-import { useEmailPasswordResetLinkMutation } from '~/generated-metadata/graphql';
+import { useMutation } from '@apollo/client/react';
+import { EmailPasswordResetLinkDocument } from '~/generated-metadata/graphql';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 
 export const useHandleResetPassword = () => {
   const { enqueueErrorSnackBar, enqueueSuccessSnackBar } = useSnackBar();
-  const [emailPasswordResetLink] = useEmailPasswordResetLinkMutation();
-  const workspacePublicData = useRecoilValue(workspacePublicDataState);
-  const currentUser = useRecoilValue(currentUserState);
+  const [emailPasswordResetLink] = useMutation(EmailPasswordResetLinkDocument);
+  const workspacePublicData = useAtomStateValue(workspacePublicDataState);
+  const currentUser = useAtomStateValue(currentUserState);
+  const { isCaptchaReady } = useCaptcha();
+  const { readCaptchaToken } = useReadCaptchaToken();
 
   const { t } = useLingui();
 
@@ -26,29 +31,35 @@ export const useHandleResetPassword = () => {
           return;
         }
 
-        if (!workspacePublicData?.id) {
+        if (!isCaptchaReady) {
           enqueueErrorSnackBar({
-            message: t`Invalid workspace`,
+            message: t`Captcha (anti-bot check) is still loading, try again`,
           });
           return;
         }
 
+        const captchaToken = readCaptchaToken();
+
         try {
           const { data } = await emailPasswordResetLink({
-            variables: { email, workspaceId: workspacePublicData.id },
+            variables: workspacePublicData?.id
+              ? { email, workspaceId: workspacePublicData.id, captchaToken }
+              : { email, captchaToken },
           });
 
           if (data?.emailPasswordResetLink?.success === true) {
             enqueueSuccessSnackBar({
-              message: t`Password reset link has been sent to the email`,
+              message: t`If this email is registered, a password reset link has been sent`,
             });
           } else {
             enqueueErrorSnackBar({});
           }
         } catch (error) {
-          enqueueErrorSnackBar({
-            ...(error instanceof ApolloError ? { apolloError: error } : {}),
-          });
+          enqueueErrorSnackBar(
+            CombinedGraphQLErrors.is(error)
+              ? { apolloError: error }
+              : { message: error instanceof Error ? error.message : undefined },
+          );
         }
       };
     },
@@ -59,6 +70,8 @@ export const useHandleResetPassword = () => {
       enqueueSuccessSnackBar,
       t,
       emailPasswordResetLink,
+      isCaptchaReady,
+      readCaptchaToken,
     ],
   );
 

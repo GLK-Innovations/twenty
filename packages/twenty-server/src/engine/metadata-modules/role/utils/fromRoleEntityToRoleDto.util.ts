@@ -1,15 +1,17 @@
+import { PermissionFlagType } from 'twenty-shared/constants';
+
 import { type RoleDTO } from 'src/engine/metadata-modules/role/dtos/role.dto';
 import { type RoleEntity } from 'src/engine/metadata-modules/role/role.entity';
 
 export const fromRoleEntityToRoleDto = (role: RoleEntity): RoleDTO => {
   return {
     id: role.id,
-    standardId: role.standardId,
     label: role.label,
+    universalIdentifier: role.universalIdentifier,
     canUpdateAllSettings: role.canUpdateAllSettings,
     canAccessAllTools: role.canAccessAllTools,
-    description: role.description,
-    icon: role.icon,
+    description: role.description ?? undefined,
+    icon: role.icon ?? undefined,
     isEditable: role.isEditable,
     canReadAllObjectRecords: role.canReadAllObjectRecords,
     canUpdateAllObjectRecords: role.canUpdateAllObjectRecords,
@@ -19,6 +21,13 @@ export const fromRoleEntityToRoleDto = (role: RoleEntity): RoleDTO => {
     canBeAssignedToAgents: role.canBeAssignedToAgents,
     canBeAssignedToApiKeys: role.canBeAssignedToApiKeys,
     roleTargets: role.roleTargets,
+    permissionFlags: role.rolePermissionFlags?.map((rolePermissionFlag) => ({
+      id: rolePermissionFlag.id,
+      roleId: rolePermissionFlag.roleId,
+      flag: rolePermissionFlag.permissionFlag.key as PermissionFlagType,
+    })),
+    objectPermissions: role.objectPermissions,
+    fieldPermissions: role.fieldPermissions,
   };
 };
 

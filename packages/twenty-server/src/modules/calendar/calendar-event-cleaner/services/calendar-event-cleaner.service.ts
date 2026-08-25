@@ -1,37 +1,124 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
-import { Any, IsNull } from 'typeorm';
+import { isDefined } from 'twenty-shared/utils';
+import { In, MoreThan } from 'typeorm';
 
-import { TwentyORMManager } from 'src/engine/twenty-orm/twenty-orm.manager';
-import { deleteUsingPagination } from 'src/modules/messaging/message-cleaner/utils/delete-using-pagination.util';
+import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
+import { buildSystemAuthContext } from 'src/engine/twenty-orm/utils/build-system-auth-context.util';
+import { type CalendarChannelEventAssociationWorkspaceEntity } from 'src/modules/calendar/common/standard-objects/calendar-channel-event-association.workspace-entity';
+import { type CalendarEventWorkspaceEntity } from 'src/modules/calendar/common/standard-objects/calendar-event.workspace-entity';
+
+const CALENDAR_CLEANUP_PAGE_SIZE = 500;
 
 @Injectable()
 export class CalendarEventCleanerService {
-  constructor(private readonly twentyORMManager: TwentyORMManager) {}
+  private readonly logger = new Logger(CalendarEventCleanerService.name);
+
+  constructor(private readonly workspaceOrmManager: WorkspaceOrmManager) {}
+
+  async deleteCalendarChannelEventAssociationsByChannelId({
+    workspaceId,
+    calendarChannelId,
+  }: {
+    workspaceId: string;
+    calendarChannelId: string;
+  }) {
+    const authContext = buildSystemAuthContext(workspaceId);
+
+    await this.workspaceOrmManager.executeInWorkspaceContext(
+      async () => {
+        await this.workspaceOrmManager.runInWorkspaceTransaction(
+          async (transactionScope) => {
+            const calendarChannelEventAssociationRepository =
+              transactionScope.getRepository<CalendarChannelEventAssociationWorkspaceEntity>(
+                'calendarChannelEventAssociation',
+              );
+
+            for (;;) {
+              const associations =
+                await calendarChannelEventAssociationRepository.find({
+                  where: { calendarChannelId },
+                  take: CALENDAR_CLEANUP_PAGE_SIZE,
+                  select: { id: true },
+                });
+
+              if (associations.length === 0) {
+                break;
+              }
+
+              const ids = associations.map(({ id }) => id);
+
+              this.logger.log(
+                `WorkspaceId: ${workspaceId} Deleting ${ids.length} calendar channel event associations for channel ${calendarChannelId}`,
+              );
+
+              await calendarChannelEventAssociationRepository.delete(ids);
+            }
+          },
+        );
+      },
+      authContext,
+      { lite: true },
+    );
+  }
 
   public async cleanWorkspaceCalendarEvents(workspaceId: string) {
-    const calendarEventRepository =
-      await this.twentyORMManager.getRepository('calendarEvent');
+    const authContext = buildSystemAuthContext(workspaceId);
 
-    await deleteUsingPagination(
-      workspaceId,
-      500,
-      async (limit, offset) => {
-        const nonAssociatedCalendarEvents = await calendarEventRepository.find({
-          where: {
-            calendarChannelEventAssociations: {
-              id: IsNull(),
-            },
+    await this.workspaceOrmManager.executeInWorkspaceContext(
+      async () => {
+        await this.workspaceOrmManager.runInWorkspaceTransaction(
+          async (transactionScope) => {
+            const calendarEventRepository =
+              transactionScope.getRepository<CalendarEventWorkspaceEntity>(
+                'calendarEvent',
+              );
+            const calendarChannelEventAssociationRepository =
+              transactionScope.getRepository<CalendarChannelEventAssociationWorkspaceEntity>(
+                'calendarChannelEventAssociation',
+              );
+
+            let cursor: string | undefined;
+
+            for (;;) {
+              const page = await calendarEventRepository.find({
+                where: isDefined(cursor) ? { id: MoreThan(cursor) } : {},
+                order: { id: 'ASC' },
+                take: CALENDAR_CLEANUP_PAGE_SIZE,
+                select: { id: true },
+              });
+
+              if (page.length === 0) {
+                break;
+              }
+
+              cursor = page[page.length - 1].id;
+
+              const pageIds = page.map(({ id }) => id);
+
+              const associations =
+                await calendarChannelEventAssociationRepository.find({
+                  where: { calendarEventId: In(pageIds) },
+                  select: { calendarEventId: true },
+                });
+
+              const referencedEventIds = new Set(
+                associations.map(({ calendarEventId }) => calendarEventId),
+              );
+
+              const orphanEventIds = pageIds.filter(
+                (eventId) => !referencedEventIds.has(eventId),
+              );
+
+              if (orphanEventIds.length > 0) {
+                await calendarEventRepository.delete(orphanEventIds);
+              }
+            }
           },
-          take: limit,
-          skip: offset,
-        });
-
-        return nonAssociatedCalendarEvents.map(({ id }) => id);
+        );
       },
-      async (ids) => {
-        await calendarEventRepository.delete({ id: Any(ids) });
-      },
+      authContext,
+      { lite: true },
     );
   }
 }

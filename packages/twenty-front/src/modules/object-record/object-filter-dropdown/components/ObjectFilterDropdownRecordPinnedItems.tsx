@@ -1,12 +1,14 @@
 import { type SelectableItem } from '@/object-record/select/types/SelectableItem';
-import styled from '@emotion/styled';
-import { Avatar } from 'twenty-ui/display';
+import { styled } from '@linaria/react';
+import { Avatar } from 'twenty-ui/data-display';
 import { MenuItemMultiSelectAvatar } from 'twenty-ui/navigation';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
+import { getAbsoluteImageUrl } from '~/utils/image/getAbsoluteImageUrl';
 
 const StyledPinnedItemsContainer = styled.div`
   display: flex;
   flex-direction: column;
-  padding: ${({ theme }) => theme.spacing(1)};
+  padding: ${themeCssVariables.spacing[1]};
 `;
 
 export const ObjectFilterDropdownRecordPinnedItems = (props: {
@@ -30,7 +32,7 @@ export const ObjectFilterDropdownRecordPinnedItems = (props: {
             avatar={
               selectableItem.avatarUrl ? (
                 <Avatar
-                  avatarUrl={selectableItem.avatarUrl}
+                  avatarUrl={getAbsoluteImageUrl(selectableItem.avatarUrl)}
                   placeholderColorSeed={selectableItem.id}
                   placeholder={selectableItem.name}
                   type={selectableItem.avatarType}

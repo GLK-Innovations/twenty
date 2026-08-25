@@ -10,16 +10,30 @@
       "options": {
         "cwd": "packages/twenty-server",
         "parallel": false,
-        "commands": ["rimraf dist", "nest build --path ./tsconfig.build.json"]
+        "commands": [
+          "rimraf dist",
+          "nest build --path ./tsconfig.build.json",
+          "mkdir -p dist/assets/twenty-client-sdk && cp ../twenty-client-sdk/package.json dist/assets/twenty-client-sdk/ && cp -r ../twenty-client-sdk/dist dist/assets/twenty-client-sdk/dist"
+        ]
       },
       "dependsOn": ["^build"]
+    },
+    "test:integration:secure": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "packages/twenty-server",
+        "commands": [
+          "NODE_ENV=test NODE_OPTIONS=\"--max-old-space-size=6144\" nx jest --config ./jest-integration-secure.config.ts --logHeapUsage"
+        ]
+      },
+      "parallel": false
     },
     "test:integration": {
       "executor": "nx:run-commands",
       "options": {
         "cwd": "packages/twenty-server",
         "commands": [
-          "NODE_ENV=test NODE_OPTIONS=\"--max-old-space-size=8192\" nx jest --config ./jest-integration.config.ts"
+          "NODE_ENV=test NODE_OPTIONS=\"--max-old-space-size=6144\" nx jest --config ./jest-integration.config.ts --logHeapUsage"
         ]
       },
       "parallel": false,
@@ -27,34 +41,45 @@
         "with-db-reset": {
           "cwd": "packages/twenty-server",
           "commands": [
-            "NODE_ENV=test NODE_OPTIONS=\"--max-old-space-size=8192\" nx database:reset > reset-logs.log && NODE_ENV=test NODE_OPTIONS=\"--max-old-space-size=8192\" nx jest --config ./jest-integration.config.ts"
+            "NODE_ENV=test NODE_OPTIONS=\"--max-old-space-size=12288 --import tsx/esm\" nx database:reset > reset-logs.log && NODE_ENV=test NODE_OPTIONS=\"--max-old-space-size=6144\" nx jest --config ./jest-integration.config.ts --logHeapUsage"
           ]
         }
+      }
+    },
+    "test:ci": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["^build"],
+      "options": {
+        "cwd": "packages/twenty-server",
+        "command": "jest --config ./jest.config.mjs --ci --runInBand"
       }
     },
     "build:packageJson": {
       "executor": "@nx/js:tsc",
       "options": {
-        "main": "packages/twenty-server/dist/src/main.js",
+        "main": "packages/twenty-server/dist/main.js",
         "tsConfig": "packages/twenty-server/tsconfig.json",
         "outputPath": "packages/twenty-server/dist",
         "updateBuildableProjectDepsInPackageJson": true
       }
     },
-    "typecheck": {},
+    "typecheck": {
+      "dependsOn": ["^build"]
+    },
     "start": {
       "executor": "nx:run-commands",
-      "dependsOn": ["typecheck", "build"],
+      "cache": false,
+      "dependsOn": ["^build"],
       "options": {
         "cwd": "packages/twenty-server",
-        "command": "NODE_ENV=development && nest start --watch"
+        "command": "rimraf dist && NODE_ENV=development nest start --watch"
       }
     },
     "start:ci": {
       "executor": "nx:run-commands",
       "options": {
         "cwd": "packages/twenty-server",
-        "command": "NODE_ENV=development && nest start"
+        "command": "NODE_ENV=development nest start"
       }
     },
     "start:ci-if-needed": {
@@ -62,15 +87,15 @@
       "dependsOn": ["build"],
       "options": {
         "cwd": "packages/twenty-server",
-        "command": "curl -f -s http://localhost:3000/healthz > /dev/null 2>&1 && echo '✅ Server already running' || (echo '🚀 Server not running, starting...' && nohup nest start > server.log 2>&1 &)"
+        "command": "curl -f -s http://localhost:3000/healthz > /dev/null 2>&1 && echo '✅ Server already running' || (echo '🚀 Server not running, starting...' && nohup nest start &)"
       }
     },
     "start:debug": {
       "executor": "nx:run-commands",
-      "dependsOn": ["build"],
+      "dependsOn": ["^build"],
       "options": {
         "cwd": "packages/twenty-server",
-        "command": "nx start --debug"
+        "command": "rimraf dist && NODE_ENV=development nest start --watch --debug"
       }
     },
     "reset:env": {
@@ -83,39 +108,42 @@
         "command": "cp .env.example .env"
       }
     },
+    "reset:env:e2e-testing-server": {
+      "executor": "nx:run-commands",
+      "inputs": ["{projectRoot}/.env.e2e-testing-server"],
+      "outputs": ["{projectRoot}/.env"],
+      "cache": true,
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "cp .env.e2e-testing-server .env"
+      }
+    },
     "command": {
       "executor": "nx:run-commands",
       "dependsOn": ["build"],
       "options": {
         "cwd": "packages/twenty-server",
-        "command": "node dist/src/command/command.js"
+        "command": "node dist/command/command.js"
       }
     },
     "command-no-deps": {
       "executor": "nx:run-commands",
       "options": {
         "cwd": "packages/twenty-server",
-        "command": "node dist/src/command/command.js"
+        "command": "node dist/command/command.js"
       }
     },
     "worker": {
       "executor": "nx:run-commands",
-      "dependsOn": ["build"],
+      "dependsOn": ["^build"],
       "options": {
         "cwd": "packages/twenty-server",
-        "command": "node dist/src/queue-worker/queue-worker.js"
-      }
-    },
-    "typeorm": {
-      "executor": "nx:run-commands",
-      "options": {
-        "cwd": "packages/twenty-server",
-        "command": "ts-node --transpile-only -P tsconfig.json ../../node_modules/typeorm/cli.js"
+        "command": "NODE_ENV=development nest start --watch --entryFile queue-worker/queue-worker"
       }
     },
     "ts-node": {
       "executor": "nx:run-commands",
-      "dependsOn": ["build"],
+      "dependsOn": ["^build"],
       "options": {
         "cwd": "packages/twenty-server",
         "command": "ts-node"
@@ -136,16 +164,45 @@
       }
     },
     "lint": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "dependsOn": ["twenty-oxlint-rules:build"],
+      "inputs": [
+        "{projectRoot}/src/**/*.{ts,tsx}",
+        "{projectRoot}/tsconfig*.json",
+        "{workspaceRoot}/tsconfig.base.json",
+        "{projectRoot}/.oxlintrc.json",
+        "{workspaceRoot}/packages/twenty-oxlint-rules/dist/oxlint-plugin.mjs"
+      ],
       "options": {
-        "lintFilePatterns": ["{projectRoot}/src/**/*.{ts,json}"],
-        "maxWarnings": 0
+        "cwd": "{projectRoot}",
+        "command": "npx oxlint --type-aware -c .oxlintrc.json src/ && (npx oxfmt --check src/ || (echo 'ERROR: oxfmt formatting check failed! Fix with: npx nx lint twenty-server --configuration=fix' && false))"
       },
       "configurations": {
-        "ci": { "lintFilePatterns": ["{projectRoot}/**/*.{ts,json}"] },
-        "fix": {}
+        "ci": {},
+        "fix": {
+          "command": "npx oxlint --type-aware --fix -c .oxlintrc.json src/ && npx oxfmt src/"
+        }
       }
     },
-    "test": {},
+    "lint:diff-with-main": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["twenty-oxlint-rules:build"],
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "FILES=$(git diff --name-only --relative --diff-filter=d main...HEAD -- src/ | grep -E '\\.(ts|tsx)$'); [ -z \"$FILES\" ] && echo 'No changed files.' || (npx oxlint --type-aware -c .oxlintrc.json $FILES && (npx oxfmt --check $FILES || (echo 'ERROR: oxfmt formatting check failed! Fix with: npx nx lint:diff-with-main twenty-server --configuration=fix' && false)))"
+      },
+      "configurations": {
+        "fix": {
+          "command": "FILES=$(git diff --name-only --relative --diff-filter=d main...HEAD -- src/ | grep -E '\\.(ts|tsx)$'); [ -z \"$FILES\" ] && echo 'No changed files.' || (npx oxlint --type-aware --fix -c .oxlintrc.json $FILES && npx oxfmt $FILES)"
+        }
+      }
+    },
+    "test": {
+      "options": {
+        "maxWorkers": "50%"
+      }
+    },
     "test:debug": {
       "executor": "nx:run-commands",
       "options": {
@@ -165,27 +222,29 @@
       "dependsOn": ["build"],
       "options": {
         "cwd": "packages/twenty-server",
-        "commands": [
-          "nx typeorm -- migration:run -d src/database/typeorm/core/core.datasource"
-        ]
+        "command": "node dist/command/command.js run-instance-commands --force"
       }
     },
-    "database:migrate:generate": {
-      "executor": "nx:run-commands",
-      "options": {
-        "cwd": "packages/twenty-server",
-        "command": "npx nx typeorm -- migration:generate src/database/typeorm/core/migrations/common/{args.migrationName} -d src/database/typeorm/core/core.datasource.ts"
-      }
-    },
-    "database:migrate:revert": {
+    "database:init": {
       "executor": "nx:run-commands",
       "dependsOn": ["build"],
       "options": {
         "cwd": "packages/twenty-server",
         "commands": [
-          "nx typeorm -- migration:revert -d src/database/typeorm/core/core.datasource"
-        ]
+          "node dist/database/scripts/setup-db.js",
+          "nx database:migrate -- --include-slow"
+        ],
+        "parallel": false
       }
+    },
+    "database:migrate:generate": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "cwd": "packages/twenty-server",
+        "command": "node dist/command/command.js generate:instance-command"
+      },
+      "cache": false
     },
     "generate:integration-test": {
       "executor": "nx:run-commands",
@@ -204,9 +263,8 @@
         "no-seed": {
           "cwd": "packages/twenty-server",
           "commands": [
-            "nx ts-node-no-deps-transpile-only -- ./scripts/truncate-db.ts",
-            "nx ts-node-no-deps-transpile-only -- ./scripts/setup-db.ts",
-            "nx database:migrate",
+            "node dist/database/scripts/truncate-db.js",
+            "nx database:init",
             "nx command-no-deps -- cache:flush"
           ],
           "parallel": false
@@ -214,9 +272,8 @@
         "seed": {
           "cwd": "packages/twenty-server",
           "commands": [
-            "nx ts-node-no-deps-transpile-only -- ./scripts/truncate-db.ts",
-            "nx ts-node-no-deps-transpile-only -- ./scripts/setup-db.ts",
-            "nx database:migrate",
+            "node dist/database/scripts/truncate-db.js",
+            "nx database:init",
             "nx command-no-deps -- cache:flush",
             "nx command-no-deps -- workspace:seed:dev"
           ],
@@ -229,18 +286,19 @@
       "executor": "nx:run-commands",
       "options": {
         "cwd": "packages/twenty-server",
-        "command": "nx ts-node-no-deps -- src/database/clickHouse/migrations/run-migrations.ts"
+        "command": "nx ts-node-no-deps-transpile-only -- src/database/clickhouse/migrations/run-migrations.ts"
       }
     },
     "clickhouse:seed": {
       "executor": "nx:run-commands",
       "options": {
         "cwd": "packages/twenty-server",
-        "command": "nx ts-node-no-deps -- src/database/clickHouse/seeds/run-seeds.ts"
+        "command": "nx ts-node-no-deps-transpile-only -- src/database/clickhouse/seeds/run-seeds.ts"
       }
     },
     "lingui:extract": {
       "executor": "nx:run-commands",
+      "dependsOn": ["^build"],
       "options": {
         "cwd": "{projectRoot}",
         "command": "lingui extract --overwrite --clean"
@@ -248,9 +306,17 @@
     },
     "lingui:compile": {
       "executor": "nx:run-commands",
+      "dependsOn": ["^build"],
       "options": {
         "cwd": "{projectRoot}",
         "command": "lingui compile --typescript"
+      }
+    },
+    "version:bump": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "npx tsx scripts/bump-version.ts"
       }
     }
   }

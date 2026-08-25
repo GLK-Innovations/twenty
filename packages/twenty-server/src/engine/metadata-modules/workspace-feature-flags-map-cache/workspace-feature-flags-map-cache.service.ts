@@ -1,89 +1,31 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
+import { Injectable } from '@nestjs/common';
 
-import { Repository } from 'typeorm';
-
+import { WorkspaceCacheProvider } from 'src/engine/workspace-cache/interfaces/workspace-cache-provider.service';
 import { type FeatureFlagMap } from 'src/engine/core-modules/feature-flag/interfaces/feature-flag-map.interface';
 
 import { FeatureFlagEntity } from 'src/engine/core-modules/feature-flag/feature-flag.entity';
-import { TwentyORMExceptionCode } from 'src/engine/twenty-orm/exceptions/twenty-orm.exception';
-import { GetDataFromCacheWithRecomputeService } from 'src/engine/workspace-cache-storage/services/get-data-from-cache-with-recompute.service';
-import { WorkspaceCacheStorageService } from 'src/engine/workspace-cache-storage/workspace-cache-storage.service';
-
-const FEATURE_FLAG_MAP = 'Feature flag map';
+import { InjectWorkspaceScopedRepository } from 'src/engine/twenty-orm/workspace-scoped-repository/inject-workspace-scoped-repository.decorator';
+import { WorkspaceScopedRepository } from 'src/engine/twenty-orm/workspace-scoped-repository/workspace-scoped-repository';
+import { WorkspaceCache } from 'src/engine/workspace-cache/decorators/workspace-cache.decorator';
 
 @Injectable()
-export class WorkspaceFeatureFlagsMapCacheService {
-  logger = new Logger(WorkspaceFeatureFlagsMapCacheService.name);
-
+@WorkspaceCache('featureFlagsMap', { packingPonderation: 1 })
+export class WorkspaceFeatureFlagsMapCacheService extends WorkspaceCacheProvider<FeatureFlagMap> {
   constructor(
-    private readonly workspaceCacheStorageService: WorkspaceCacheStorageService,
-    @InjectRepository(FeatureFlagEntity)
-    private readonly featureFlagRepository: Repository<FeatureFlagEntity>,
-    private readonly getFromCacheWithRecomputeService: GetDataFromCacheWithRecomputeService<
-      string,
-      FeatureFlagMap
-    >,
-  ) {}
-
-  async getWorkspaceFeatureFlagsMap({
-    workspaceId,
-  }: {
-    workspaceId: string;
-  }): Promise<FeatureFlagMap> {
-    const { data: workspaceFeatureFlagsMap } =
-      await this.getWorkspaceFeatureFlagsMapAndVersion({ workspaceId });
-
-    return workspaceFeatureFlagsMap;
+    @InjectWorkspaceScopedRepository(FeatureFlagEntity)
+    private readonly featureFlagRepository: WorkspaceScopedRepository<FeatureFlagEntity>,
+  ) {
+    super();
   }
 
-  async getWorkspaceFeatureFlagsMapAndVersion({
-    workspaceId,
-  }: {
-    workspaceId: string;
-  }) {
-    return this.getFromCacheWithRecomputeService.getFromCacheWithRecompute({
-      workspaceId,
-      getCacheData: () =>
-        this.workspaceCacheStorageService.getFeatureFlagsMap(workspaceId),
-      getCacheVersion: () =>
-        this.workspaceCacheStorageService.getFeatureFlagsMapVersionFromCache(
-          workspaceId,
-        ),
-      recomputeCache: (params) => this.recomputeFeatureFlagsMapCache(params),
-      cachedEntityName: FEATURE_FLAG_MAP,
-      exceptionCode: TwentyORMExceptionCode.FEATURE_FLAG_MAP_VERSION_NOT_FOUND,
-    });
-  }
+  async computeForCache(workspaceId: string): Promise<FeatureFlagMap> {
+    const workspaceFeatureFlags =
+      await this.featureFlagRepository.find(workspaceId);
 
-  async recomputeFeatureFlagsMapCache({
-    workspaceId,
-  }: {
-    workspaceId: string;
-  }): Promise<void> {
-    const freshFeatureFlagMap =
-      await this.getFeatureFlagsMapFromDatabase(workspaceId);
+    return workspaceFeatureFlags.reduce((result, currentFeatureFlag) => {
+      result[currentFeatureFlag.key] = currentFeatureFlag.value;
 
-    await this.workspaceCacheStorageService.setFeatureFlagsMap(
-      workspaceId,
-      freshFeatureFlagMap,
-    );
-  }
-
-  private async getFeatureFlagsMapFromDatabase(workspaceId: string) {
-    const workspaceFeatureFlags = await this.featureFlagRepository.find({
-      where: { workspaceId },
-    });
-
-    const workspaceFeatureFlagsMap = workspaceFeatureFlags.reduce(
-      (result, currentFeatureFlag) => {
-        result[currentFeatureFlag.key] = currentFeatureFlag.value;
-
-        return result;
-      },
-      {} as FeatureFlagMap,
-    );
-
-    return workspaceFeatureFlagsMap;
+      return result;
+    }, {} as FeatureFlagMap);
   }
 }

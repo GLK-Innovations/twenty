@@ -2,13 +2,12 @@ import { type CurrentWorkspaceMember } from '@/auth/states/currentWorkspaceMembe
 import { SettingsRoleAssignmentEntityPickerDropdown } from '@/settings/roles/role-assignment/components/SettingsRoleAssignmentEntityPickerDropdown';
 import { SettingsRoleAssignmentWorkspaceMemberPickerDropdown } from '@/settings/roles/role-assignment/components/SettingsRoleAssignmentWorkspaceMemberPickerDropdown';
 import { t } from '@lingui/core/macro';
-import { type Agent } from '~/generated-metadata/graphql';
-import { type ApiKeyForRole } from '~/generated/graphql';
+import { type Agent, type ApiKeyForRole } from '~/generated-metadata/graphql';
 import {
   type PartialWorkspaceMember,
   type RoleWithPartialMembers,
-} from '../../types/RoleWithPartialMembers';
-import { type RoleMaps } from '../types/role-maps';
+} from '@/settings/roles/types/RoleWithPartialMembers';
+import { type RoleMaps } from '@/settings/roles/role-assignment/types/role-maps';
 
 export const ROLE_TARGET_CONFIG = {
   member: {
@@ -26,7 +25,6 @@ export const ROLE_TARGET_CONFIG = {
       settingsDraftRole.canBeAssignedToUsers,
     buttonTitle: () => t`Assign to member`,
     dropdownComponent: SettingsRoleAssignmentWorkspaceMemberPickerDropdown,
-    // Tooltip configuration for member type
     tooltip: {
       anchorId: 'assign-member',
       content: () => t`All workspace members already have this role`,
@@ -39,13 +37,12 @@ export const ROLE_TARGET_CONFIG = {
     getRoleMap: (maps: RoleMaps) => maps.agent,
     getName: (entity: Agent) => entity.label,
     getAssignedIds: (settingsDraftRole: RoleWithPartialMembers) =>
-      (settingsDraftRole.agents || []).map((agent: Agent) => agent.id),
+      (settingsDraftRole.agents ?? []).map((agent: Agent) => agent.id),
     getExcludedIds: (assignedIds: string[]) => assignedIds,
     canBeAssigned: (settingsDraftRole: RoleWithPartialMembers) =>
       settingsDraftRole.canBeAssignedToAgents,
     buttonTitle: () => t`Assign to agent`,
     dropdownComponent: SettingsRoleAssignmentEntityPickerDropdown,
-    // No tooltip for agent type
     tooltip: null,
   },
   apiKey: {
@@ -53,7 +50,7 @@ export const ROLE_TARGET_CONFIG = {
     getRoleMap: (maps: RoleMaps) => maps.apiKey,
     getName: (entity: ApiKeyForRole) => entity.name,
     getAssignedIds: (settingsDraftRole: RoleWithPartialMembers) =>
-      (settingsDraftRole.apiKeys || []).map(
+      (settingsDraftRole.apiKeys ?? []).map(
         (apiKey: ApiKeyForRole) => apiKey.id,
       ),
     getExcludedIds: (assignedIds: string[]) => assignedIds,
@@ -61,7 +58,6 @@ export const ROLE_TARGET_CONFIG = {
       settingsDraftRole.canBeAssignedToApiKeys,
     buttonTitle: () => t`Assign to API key`,
     dropdownComponent: SettingsRoleAssignmentEntityPickerDropdown,
-    // No tooltip for apiKey type
     tooltip: null,
   },
 } as const;

@@ -6,18 +6,19 @@ import {
   query,
   responseData,
   variables,
-} from '../__mocks__/useDeleteOneObjectMetadataItem';
+} from '@/object-metadata/hooks/__mocks__/useDeleteOneObjectMetadataItem';
 
 import { jestExpectSuccessfulMetadataRequestResult } from '@/object-metadata/hooks/__tests__/utils/jest-expect-metadata-request-status.util';
 import { GET_CURRENT_USER } from '@/users/graphql/queries/getCurrentUser';
-import { FIND_ALL_CORE_VIEWS } from '@/views/graphql/queries/findAllCoreViews';
+import { FIND_ALL_VIEWS } from '@/views/graphql/queries/findAllViews';
+import { FindManyCommandMenuItemsDocument } from '~/generated-metadata/graphql';
 import { getJestMetadataAndApolloMocksWrapper } from '~/testing/jest/getJestMetadataAndApolloMocksWrapper';
 import { mockedUserData } from '~/testing/mock-data/users';
-import { mockedCoreViewsData } from '~/testing/mock-data/views';
+import { mockedViews } from '~/testing/mock-data/generated/metadata/views/mock-views-data';
 import {
   query as findManyObjectMetadataItemsQuery,
   responseData as findManyObjectMetadataItemsResponseData,
-} from '../__mocks__/useFindManyObjectMetadataItems';
+} from '@/object-metadata/hooks/__mocks__/useFindManyObjectMetadataItems';
 
 const mocks = [
   {
@@ -44,12 +45,12 @@ const mocks = [
   },
   {
     request: {
-      query: FIND_ALL_CORE_VIEWS,
+      query: FIND_ALL_VIEWS,
       variables: {},
     },
     result: jest.fn(() => ({
       data: {
-        getCoreViews: mockedCoreViewsData,
+        getViews: mockedViews,
       },
     })),
   },
@@ -60,6 +61,17 @@ const mocks = [
     },
     result: jest.fn(() => ({
       data: findManyObjectMetadataItemsResponseData,
+    })),
+  },
+  {
+    request: {
+      query: FindManyCommandMenuItemsDocument,
+      variables: {},
+    },
+    result: jest.fn(() => ({
+      data: {
+        commandMenuItems: [],
+      },
     })),
   },
 ];

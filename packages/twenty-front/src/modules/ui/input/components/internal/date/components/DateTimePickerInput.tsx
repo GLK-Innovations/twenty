@@ -1,55 +1,85 @@
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
 import { useIMask } from 'react-imask';
 
 import { useDateTimeFormat } from '@/localization/hooks/useDateTimeFormat';
-import { DATE_TIME_BLOCKS } from '@/ui/input/components/internal/date/constants/DateTimeBlocks';
+import { DATE_BLOCKS } from '@/ui/input/components/internal/date/constants/DateBlocks';
 import { MAX_DATE } from '@/ui/input/components/internal/date/constants/MaxDate';
 import { MIN_DATE } from '@/ui/input/components/internal/date/constants/MinDate';
 import { getDateTimeMask } from '@/ui/input/components/internal/date/utils/getDateTimeMask';
+import { getTimeBlocks } from '@/ui/input/components/internal/date/utils/getTimeBlocks';
+import { type FormFieldInputVariant } from '@/ui/input/types/FormFieldInputVariant';
 
 import { TimeZoneAbbreviation } from '@/ui/input/components/internal/date/components/TimeZoneAbbreviation';
+import { useGetShiftedDateToCustomTimeZone } from '@/ui/input/components/internal/date/hooks/useGetShiftedDateToCustomTimeZone';
+import { useGetShiftedDateToSystemTimeZone } from '@/ui/input/components/internal/date/hooks/useGetShiftedDateToSystemTimeZone';
 import { useParseDateTimeInputStringToJSDate } from '@/ui/input/components/internal/date/hooks/useParseDateTimeInputStringToJSDate';
 import { useParseJSDateToIMaskDateTimeInputString } from '@/ui/input/components/internal/date/hooks/useParseJSDateToIMaskDateTimeInputString';
-import { useTurnReactDatePickerShiftedDateBackIntoPointInTime } from '@/ui/input/components/internal/date/hooks/useTurnReactDatePickerShiftedDateBackIntoPointInTime';
+import { useUserTimezone } from '@/ui/input/components/internal/date/hooks/useUserTimezone';
 import { useEffect, useState } from 'react';
+import { Temporal } from 'temporal-polyfill';
 import { isDefined } from 'twenty-shared/utils';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
+import { isDifferentZonedDateTime } from '~/utils/dates/isDifferentZonedDateTime';
 
-const StyledInputContainer = styled.div`
+const StyledInputContainer = styled.div<{
+  $variant: FormFieldInputVariant;
+}>`
   align-items: center;
-  border-bottom: 1px solid ${({ theme }) => theme.border.color.light};
-  border-top-left-radius: ${({ theme }) => theme.border.radius.md};
-  border-top-right-radius: ${({ theme }) => theme.border.radius.md};
+
+  border-top-left-radius: ${themeCssVariables.border.radius.md};
+  border-top-right-radius: ${themeCssVariables.border.radius.md};
   display: flex;
-  height: ${({ theme }) => theme.spacing(8)};
+  height: ${({ $variant }) =>
+    $variant === 'transparent'
+      ? themeCssVariables.spacing[6]
+      : themeCssVariables.spacing[8]};
   width: 100%;
 `;
 
-const StyledInput = styled.input<{ hasError?: boolean }>`
+const StyledInput = styled.input<{
+  hasError?: boolean;
+  $variant: FormFieldInputVariant;
+}>`
   background: transparent;
   border: none;
-  color: ${({ theme }) => theme.font.color.primary};
+  color: ${themeCssVariables.font.color.primary};
+  font-size: ${themeCssVariables.font.size.md};
+  font-weight: ${({ $variant }) =>
+    $variant === 'transparent' ? themeCssVariables.font.weight.regular : 500};
   outline: none;
-  padding-left: ${({ theme }) => theme.spacing(2)};
-  font-weight: 500;
-  font-size: ${({ theme }) => theme.font.size.md};
-  width: 105px;
+  padding-left: ${({ $variant }) =>
+    $variant === 'transparent' ? '0' : themeCssVariables.spacing[2]};
+  width: 140px;
 `;
 
 type DateTimePickerInputProps = {
-  onChange?: (date: Date | null) => void;
-  date: Date | null;
+  onChange?: (date: Temporal.ZonedDateTime | null) => void;
+  date: Temporal.ZonedDateTime | null;
+  onFocus?: () => void;
+  readonly?: boolean;
+  timeZone?: string;
+  variant?: FormFieldInputVariant;
 };
 
 export const DateTimePickerInput = ({
   date,
   onChange,
+  onFocus,
+  readonly,
+  timeZone,
+  variant = 'default',
 }: DateTimePickerInputProps) => {
-  const { turnReactDatePickerShiftedDateBackIntoPointInTime } =
-    useTurnReactDatePickerShiftedDateBackIntoPointInTime();
-
   const [internalDate, setInternalDate] = useState(date);
 
-  const { dateFormat } = useDateTimeFormat();
+  const { userTimezone } = useUserTimezone();
+
+  const { dateFormat, timeFormat } = useDateTimeFormat();
+
+  const { getShiftedDateToSystemTimeZone } =
+    useGetShiftedDateToSystemTimeZone();
+
+  const { getShiftedDateToCustomTimeZone } =
+    useGetShiftedDateToCustomTimeZone();
 
   const { parseDateTimeInputStringToJSDate } =
     useParseDateTimeInputStringToJSDate();
@@ -62,9 +92,20 @@ export const DateTimePickerInput = ({
     return date;
   };
 
-  const pattern = getDateTimeMask(dateFormat);
+  const pattern = getDateTimeMask({ dateFormat, timeFormat });
 
-  const blocks = DATE_TIME_BLOCKS;
+  const blocks = { ...DATE_BLOCKS, ...getTimeBlocks(timeFormat) };
+
+  const defaultValueForIMask = isDefined(internalDate)
+    ? new Date(internalDate?.toInstant().toString())
+    : null;
+
+  const shiftedIMaskDate = isDefined(defaultValueForIMask)
+    ? getShiftedDateToSystemTimeZone(
+        defaultValueForIMask,
+        timeZone ?? userTimezone,
+      )
+    : null;
 
   const { ref, setValue } = useIMask(
     {
@@ -79,9 +120,9 @@ export const DateTimePickerInput = ({
       autofix: false,
     },
     {
-      defaultValue: parseJSDateToDateTimeInputString(
-        internalDate ?? new Date(),
-      ),
+      defaultValue: isDefined(shiftedIMaskDate)
+        ? parseJSDateToDateTimeInputString(shiftedIMaskDate)
+        : undefined,
       onComplete: (value) => {
         const parsedDate = parseDateTimeInputStringToJSDate(value);
 
@@ -89,25 +130,69 @@ export const DateTimePickerInput = ({
           return;
         }
 
-        const pointInTime =
-          turnReactDatePickerShiftedDateBackIntoPointInTime(parsedDate);
+        const pointInTime = getShiftedDateToCustomTimeZone(
+          parsedDate,
+          timeZone ?? userTimezone,
+        );
 
-        onChange?.(pointInTime);
+        setInternalDate(date);
+
+        const zonedDateTime = Temporal.Instant.from(
+          pointInTime.toISOString(),
+        ).toZonedDateTimeISO(timeZone ?? userTimezone);
+
+        onChange?.(zonedDateTime);
       },
     },
   );
 
   useEffect(() => {
-    if (isDefined(date) && internalDate !== date) {
+    if (isDifferentZonedDateTime(internalDate, date)) {
       setInternalDate(date);
-      setValue(parseJSDateToDateTimeInputString(date));
+
+      if (!isDefined(date)) {
+        setValue('');
+        return;
+      }
+
+      const newDateAsDate = new Date(date.toInstant().toString());
+
+      const newShiftedDate = getShiftedDateToSystemTimeZone(
+        newDateAsDate,
+        timeZone ?? userTimezone,
+      );
+
+      setValue(parseJSDateToDateTimeInputString(newShiftedDate));
     }
-  }, [date, internalDate, parseJSDateToDateTimeInputString, setValue]);
+  }, [
+    date,
+    internalDate,
+    parseJSDateToDateTimeInputString,
+    setValue,
+    shiftedIMaskDate,
+    timeZone,
+    getShiftedDateToSystemTimeZone,
+    userTimezone,
+  ]);
+
+  const shouldDisplayReadOnly = readonly === true;
+
+  const internalDateForTimeZoneAbbreviation =
+    internalDate?.toInstant() ?? Temporal.Now.instant();
 
   return (
-    <StyledInputContainer>
-      <StyledInput type="text" ref={ref as any} />
-      <TimeZoneAbbreviation date={internalDate ?? new Date()} />
+    <StyledInputContainer $variant={variant}>
+      <StyledInput
+        $variant={variant}
+        disabled={shouldDisplayReadOnly}
+        type="text"
+        ref={ref as any}
+        onFocus={!shouldDisplayReadOnly ? onFocus : undefined}
+      />
+      <TimeZoneAbbreviation
+        instant={internalDateForTimeZoneAbbreviation}
+        timeZone={timeZone ?? userTimezone}
+      />
     </StyledInputContainer>
   );
 };

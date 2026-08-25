@@ -1,21 +1,42 @@
 import { verifyEmailRedirectPathState } from '@/app/states/verifyEmailRedirectPathState';
+import { ONBOARDING_PATHS } from '@/auth/constants/OnboardingPaths';
+import { ONGOING_USER_CREATION_PATHS } from '@/auth/constants/OngoingUserCreationPaths';
 import { useIsLogged } from '@/auth/hooks/useIsLogged';
-import { calendarBookingPageIdState } from '@/client-config/states/calendarBookingPageIdState';
+import { currentWorkspaceState } from '@/auth/states/currentWorkspaceState';
+import { returnToPathState } from '@/auth/states/returnToPathState';
+import { billingState } from '@/client-config/states/billingState';
 import { useIsCurrentLocationOnAWorkspace } from '@/domain-manager/hooks/useIsCurrentLocationOnAWorkspace';
+import { isMinimalMetadataReadyState } from '@/metadata-store/states/isMinimalMetadataReadyState';
 import { useDefaultHomePagePath } from '@/navigation/hooks/useDefaultHomePagePath';
-import { objectMetadataItemsState } from '@/object-metadata/states/objectMetadataItemsState';
+import { objectMetadataItemsSelector } from '@/object-metadata/states/objectMetadataItemsSelector';
 import { useOnboardingStatus } from '@/onboarding/hooks/useOnboardingStatus';
+import { isOnboardingCheckoutPendingState } from '@/onboarding/states/isOnboardingCheckoutPendingState';
+import { shouldOpenAiChatAfterOnboardingState } from '@/onboarding/states/shouldOpenAiChatAfterOnboardingState';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 import { useIsWorkspaceActivationStatusEqualsTo } from '@/workspace/hooks/useIsWorkspaceActivationStatusEqualsTo';
+import { isValidReturnToPath } from '@/auth/utils/isValidReturnToPath';
+import { useQuery } from '@apollo/client/react';
+import { isNonEmptyString } from '@sniptt/guards';
 import { useLocation, useParams } from 'react-router-dom';
-import { useRecoilValue } from 'recoil';
 import { AppPath, SettingsPath } from 'twenty-shared/types';
-import { isDefined } from 'twenty-shared/utils';
+import { isDefined, getAppPath } from 'twenty-shared/utils';
 import { WorkspaceActivationStatus } from 'twenty-shared/workspace';
-import { OnboardingStatus } from '~/generated/graphql';
+import {
+  FindOnePageLayoutTypeDocument,
+  OnboardingStatus,
+  PageLayoutType,
+} from '~/generated-metadata/graphql';
 import { isMatchingLocation } from '~/utils/isMatchingLocation';
 
+const readReturnToPathFromUrlSearchParams = (): string | null => {
+  const value = new URLSearchParams(window.location.search).get('returnToPath');
+
+  return value && isValidReturnToPath(value) ? value : null;
+};
+
 export const usePageChangeEffectNavigateLocation = () => {
-  const isLoggedIn = useIsLogged();
+  const isLogged = useIsLogged();
+  const currentWorkspace = useAtomStateValue(currentWorkspaceState);
   const { isOnAWorkspace } = useIsCurrentLocationOnAWorkspace();
   const onboardingStatus = useOnboardingStatus();
   const isWorkspaceSuspended = useIsWorkspaceActivationStatusEqualsTo(
@@ -23,38 +44,58 @@ export const usePageChangeEffectNavigateLocation = () => {
   );
   const { defaultHomePagePath } = useDefaultHomePagePath();
   const location = useLocation();
-  const calendarBookingPageId = useRecoilValue(calendarBookingPageIdState);
+  const billing = useAtomStateValue(billingState);
+  const isBillingEnabled = billing?.isBillingEnabled ?? false;
 
   const someMatchingLocationOf = (appPaths: AppPath[]): boolean =>
     appPaths.some((appPath) => isMatchingLocation(location, appPath));
-  const onGoingUserCreationPaths = [
-    AppPath.Invite,
-    AppPath.SignInUp,
-    AppPath.VerifyEmail,
-    AppPath.Verify,
-  ];
-  const onboardingPaths = [
-    AppPath.CreateWorkspace,
-    AppPath.CreateProfile,
-    AppPath.SyncEmails,
-    AppPath.InviteTeam,
-    AppPath.PlanRequired,
-    AppPath.PlanRequiredSuccess,
-    AppPath.BookCallDecision,
-    AppPath.BookCall,
-  ];
 
-  const objectNamePlural = useParams().objectNamePlural ?? '';
-  const objectMetadataItems = useRecoilValue(objectMetadataItemsState);
+  const params = useParams();
+
+  const objectNamePlural = params.objectNamePlural ?? '';
+  const objectMetadataItems = useAtomStateValue(objectMetadataItemsSelector);
   const objectMetadataItem = objectMetadataItems?.find(
     (objectMetadataItem) => objectMetadataItem.namePlural === objectNamePlural,
   );
-  const verifyEmailRedirectPath = useRecoilValue(verifyEmailRedirectPathState);
+  const isMinimalMetadataReady = useAtomStateValue(isMinimalMetadataReadyState);
+
+  const pageLayoutId = params.pageLayoutId;
+  const isOnPageLayoutPage = isMatchingLocation(
+    location,
+    AppPath.PageLayoutPage,
+  );
+
+  const { data: pageLayoutData, loading: isPageLayoutLoading } = useQuery(
+    FindOnePageLayoutTypeDocument,
+    {
+      variables: { id: pageLayoutId ?? '' },
+      skip: !isOnPageLayoutPage || !isDefined(pageLayoutId),
+    },
+  );
+  const verifyEmailRedirectPath = useAtomStateValue(
+    verifyEmailRedirectPathState,
+  );
+
+  const returnToPath = useAtomStateValue(returnToPathState);
+  const resolvedReturnToPath = isNonEmptyString(returnToPath)
+    ? returnToPath
+    : readReturnToPathFromUrlSearchParams();
+
+  const shouldOpenAiChatAfterOnboarding = useAtomStateValue(
+    shouldOpenAiChatAfterOnboardingState,
+  );
+  const onboardingCompletedPath = shouldOpenAiChatAfterOnboarding
+    ? getAppPath(AppPath.AiChat, { threadId: null })
+    : defaultHomePagePath;
+
+  const isOnboardingCheckoutPending = useAtomStateValue(
+    isOnboardingCheckoutPendingState,
+  );
 
   if (
-    (!isLoggedIn || (isLoggedIn && !isOnAWorkspace)) &&
+    (!isLogged || !isOnAWorkspace || !isDefined(currentWorkspace)) &&
     !someMatchingLocationOf([
-      ...onGoingUserCreationPaths,
+      ...ONGOING_USER_CREATION_PATHS,
       AppPath.ResetPassword,
     ])
   ) {
@@ -67,7 +108,6 @@ export const usePageChangeEffectNavigateLocation = () => {
       AppPath.PlanRequired,
       AppPath.PlanRequiredSuccess,
       AppPath.BookCall,
-      AppPath.BookCallDecision,
     ])
   ) {
     if (
@@ -91,13 +131,9 @@ export const usePageChangeEffectNavigateLocation = () => {
 
   if (
     onboardingStatus === OnboardingStatus.WORKSPACE_ACTIVATION &&
-    !someMatchingLocationOf([
-      AppPath.CreateWorkspace,
-      AppPath.BookCallDecision,
-      AppPath.BookCall,
-    ])
+    !isMatchingLocation(location, AppPath.WorkspaceActivation)
   ) {
-    return AppPath.CreateWorkspace;
+    return AppPath.WorkspaceActivation;
   }
 
   if (
@@ -115,6 +151,13 @@ export const usePageChangeEffectNavigateLocation = () => {
   }
 
   if (
+    onboardingStatus === OnboardingStatus.APPS_INSTALLATION &&
+    !isMatchingLocation(location, AppPath.InstallApps)
+  ) {
+    return AppPath.InstallApps;
+  }
+
+  if (
     onboardingStatus === OnboardingStatus.INVITE_TEAM &&
     !isMatchingLocation(location, AppPath.InviteTeam)
   ) {
@@ -122,31 +165,59 @@ export const usePageChangeEffectNavigateLocation = () => {
   }
 
   if (
-    onboardingStatus === OnboardingStatus.BOOK_ONBOARDING &&
-    !someMatchingLocationOf([AppPath.BookCallDecision, AppPath.BookCall])
+    onboardingStatus === OnboardingStatus.BOOK_CALL &&
+    !isMatchingLocation(location, AppPath.BookCall)
   ) {
-    if (!isDefined(calendarBookingPageId)) {
-      return defaultHomePagePath;
+    return AppPath.BookCall;
+  }
+
+  if (isBillingEnabled && onboardingStatus === OnboardingStatus.COMPLETED) {
+    if (isMatchingLocation(location, AppPath.InviteTeam)) {
+      return AppPath.PlanRequired;
     }
-    return AppPath.BookCallDecision;
+    if (isMatchingLocation(location, AppPath.PlanRequired)) {
+      return;
+    }
   }
 
   if (
     onboardingStatus === OnboardingStatus.COMPLETED &&
-    someMatchingLocationOf([...onboardingPaths, ...onGoingUserCreationPaths]) &&
+    someMatchingLocationOf([
+      ...ONBOARDING_PATHS,
+      ...ONGOING_USER_CREATION_PATHS,
+    ]) &&
     !isMatchingLocation(location, AppPath.ResetPassword) &&
-    isLoggedIn
+    isLogged &&
+    isOnAWorkspace
   ) {
-    return defaultHomePagePath;
+    if (
+      isMatchingLocation(location, AppPath.PlanRequiredSuccess) &&
+      isOnboardingCheckoutPending
+    ) {
+      return;
+    }
+
+    return resolvedReturnToPath ?? onboardingCompletedPath;
   }
 
-  if (isMatchingLocation(location, AppPath.Index) && isLoggedIn) {
-    return defaultHomePagePath;
+  if (isMatchingLocation(location, AppPath.Index) && isLogged) {
+    return resolvedReturnToPath ?? defaultHomePagePath;
   }
 
   if (
+    isMinimalMetadataReady &&
     isMatchingLocation(location, AppPath.RecordIndexPage) &&
     !isDefined(objectMetadataItem)
+  ) {
+    return AppPath.NotFound;
+  }
+
+  if (
+    isOnPageLayoutPage &&
+    isDefined(pageLayoutId) &&
+    !isPageLayoutLoading &&
+    (!isDefined(pageLayoutData?.getPageLayout) ||
+      pageLayoutData.getPageLayout.type !== PageLayoutType.STANDALONE_PAGE)
   ) {
     return AppPath.NotFound;
   }

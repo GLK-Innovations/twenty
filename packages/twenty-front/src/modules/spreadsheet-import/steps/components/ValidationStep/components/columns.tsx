@@ -1,5 +1,6 @@
-import styled from '@emotion/styled';
-// @ts-expect-error // Todo: remove usage of react-data-grid
+import { t } from '@lingui/core/macro';
+import { styled } from '@linaria/react';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
 import { type Column, useRowSelection } from 'react-data-grid';
 import { createPortal } from 'react-dom';
 
@@ -11,14 +12,14 @@ import { SettingsTextInput } from '@/ui/input/components/SettingsTextInput';
 
 import camelCase from 'lodash.camelcase';
 import { isDefined } from 'twenty-shared/utils';
-import { AppTooltip, TooltipDelay } from 'twenty-ui/display';
+import { AppTooltip, TooltipDelay } from 'twenty-ui/surfaces';
 import { Checkbox, CheckboxVariant, Toggle } from 'twenty-ui/input';
-import { type ImportedStructuredRowMetadata } from '../types';
+import { type ImportedStructuredRowMetadata } from '@/spreadsheet-import/steps/components/ValidationStep/types';
 
 const StyledHeaderContainer = styled.div`
   align-items: center;
   display: flex;
-  gap: ${({ theme }) => theme.spacing(1)};
+  gap: ${themeCssVariables.spacing[1]};
   position: relative;
 `;
 
@@ -51,18 +52,20 @@ const StyledInputContainer = styled.div`
   display: flex;
   min-height: 100%;
   min-width: 100%;
-  padding-right: ${({ theme }) => theme.spacing(2)};
+  padding-right: ${themeCssVariables.spacing[2]};
 `;
 
 const StyledDefaultContainer = styled.div`
+  align-content: center;
   min-height: 100%;
   min-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 `;
 
 const StyledSelectReadonlyValueContianer = styled.div`
-  padding-left: ${({ theme }) => theme.spacing(2)};
+  padding-left: ${themeCssVariables.spacing[2]};
 `;
 
 const SELECT_COLUMN_KEY = 'select-row';
@@ -83,14 +86,14 @@ export const generateColumns = (
     resizable: false,
     sortable: false,
     frozen: true,
-    formatter: (props: any) => {
-      // eslint-disable-next-line  react-hooks/rules-of-hooks
-      const [isRowSelected, onRowSelectionChange] = useRowSelection();
+    renderCell: (props: any) => {
+      // oxlint-disable-next-line  react-hooks/rules-of-hooks
+      const { isRowSelected, onRowSelectionChange } = useRowSelection();
 
       return (
         <StyledCheckboxContainer>
           <Checkbox
-            aria-label="Select"
+            aria-label={t`Select`}
             checked={isRowSelected}
             variant={CheckboxVariant.Tertiary}
             onChange={(event) => {
@@ -113,7 +116,7 @@ export const generateColumns = (
       name: column.label,
       minWidth: 150,
       resizable: true,
-      headerRenderer: () => (
+      renderHeaderCell: () => (
         <StyledHeaderContainer>
           <StyledHeaderLabel id={formatSafeId(column.key)}>
             {column.label}
@@ -133,7 +136,7 @@ export const generateColumns = (
       ),
       editable: column.fieldType.type !== 'checkbox',
       // Todo: remove usage of react-data-grid
-      editor: ({ row, onRowChange, onClose }: any) => {
+      renderEditCell: ({ row, onRowChange, onClose }: any) => {
         const columnKey = column.key as keyof (ImportedStructuredRow &
           ImportedStructuredRowMetadata);
         let component;
@@ -163,11 +166,8 @@ export const generateColumns = (
 
         return <StyledInputContainer>{component}</StyledInputContainer>;
       },
-      editorOptions: {
-        editOnClick: true,
-      },
       // Todo: remove usage of react-data-grid
-      formatter: ({ row, onRowChange }: { row: any; onRowChange: any }) => {
+      renderCell: ({ row, onRowChange }: { row: any; onRowChange: any }) => {
         const columnKey = column.key as keyof (ImportedStructuredRow &
           ImportedStructuredRowMetadata);
         let component;
@@ -182,6 +182,7 @@ export const generateColumns = (
                 }}
               >
                 <Toggle
+                  centered
                   value={row[columnKey] as boolean}
                   onChange={() => {
                     onRowChange({

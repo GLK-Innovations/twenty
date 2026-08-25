@@ -10,12 +10,10 @@ import {
   isDefined,
 } from 'twenty-shared/utils';
 import { FieldMetadataType } from '~/generated-metadata/graphql';
-import { getCompaniesMock } from '~/testing/mock-data/companies';
+import { mockedCompanyRecords } from '~/testing/mock-data/generated/data/companies/mock-companies-data';
 
 import { getMockFieldMetadataItemOrThrow } from '~/testing/utils/getMockFieldMetadataItemOrThrow';
 import { getMockObjectMetadataItemOrThrow } from '~/testing/utils/getMockObjectMetadataItemOrThrow';
-
-const companiesMock = getCompaniesMock();
 
 const companyMockObjectMetadataItem =
   getMockObjectMetadataItemOrThrow('company');
@@ -24,8 +22,15 @@ const petMockObjectMetadataItem = getMockObjectMetadataItemOrThrow('pet');
 
 const personMockObjectMetadataItem = getMockObjectMetadataItemOrThrow('person');
 
+const companyFields = companyMockObjectMetadataItem.fields;
+
+const personFields = personMockObjectMetadataItem.fields;
+
+const petFields = petMockObjectMetadataItem.fields;
+
 const mockFilterValueDependencies: RecordFilterValueDependencies = {
   currentWorkspaceMemberId: '32219445-f587-4c40-b2b1-6d3205ed96da',
+  timeZone: 'Europe/Paris',
 };
 
 jest.useFakeTimers().setSystemTime(new Date('2020-01-01'));
@@ -43,9 +48,9 @@ describe('computeViewRecordGqlOperationFilter', () => {
 
     const nameFilter: RecordFilter = {
       id: 'company-name-filter',
-      value: companiesMock[0].name,
+      value: mockedCompanyRecords[0].name,
       fieldMetadataId: companyMockNameFieldMetadataId.id,
-      displayValue: companiesMock[0].name,
+      displayValue: mockedCompanyRecords[0].name,
       operand: RecordFilterOperand.CONTAINS,
       type: 'TEXT',
       label: 'Name',
@@ -55,12 +60,12 @@ describe('computeViewRecordGqlOperationFilter', () => {
       filterValueDependencies: mockFilterValueDependencies,
       recordFilters: [nameFilter],
       recordFilterGroups: [],
-      fields: companyMockObjectMetadataItem.fields,
+      fieldMetadataItems: companyFields,
     });
 
     expect(result).toEqual({
       name: {
-        ilike: '%Linkedin%',
+        ilike: `%${mockedCompanyRecords[0].name}%`,
       },
     });
   });
@@ -86,9 +91,9 @@ describe('computeViewRecordGqlOperationFilter', () => {
 
     const nameFilter: RecordFilter = {
       id: 'company-name-filter',
-      value: companiesMock[0].name,
+      value: mockedCompanyRecords[0].name,
       fieldMetadataId: companyMockNameFieldMetadataId.id,
-      displayValue: companiesMock[0].name,
+      displayValue: mockedCompanyRecords[0].name,
       operand: ViewFilterOperand.CONTAINS,
       type: FieldMetadataType.TEXT,
       label: 'Name',
@@ -108,14 +113,14 @@ describe('computeViewRecordGqlOperationFilter', () => {
       filterValueDependencies: mockFilterValueDependencies,
       recordFilters: [nameFilter, employeesFilter],
       recordFilterGroups: [],
-      fields: companyMockObjectMetadataItem.fields,
+      fieldMetadataItems: companyFields,
     });
 
     expect(result).toEqual({
       and: [
         {
           name: {
-            ilike: '%Linkedin%',
+            ilike: `%${mockedCompanyRecords[0].name}%`,
           },
         },
         {
@@ -188,7 +193,7 @@ describe('should work as expected for the different field types', () => {
         addressFilterIsNotEmpty,
       ],
       recordFilterGroups: [],
-      fields: companyMockObjectMetadataItem.fields,
+      fieldMetadataItems: companyFields,
     });
 
     expect(result).toEqual({
@@ -652,7 +657,7 @@ describe('should work as expected for the different field types', () => {
         phonesFilterIsNotEmpty,
       ],
       recordFilterGroups: [],
-      fields: personMockObjectMetadataItem.fields,
+      fieldMetadataItems: personFields,
     });
 
     expect(result).toEqual({
@@ -794,6 +799,60 @@ describe('should work as expected for the different field types', () => {
     });
   });
 
+  it('phones field type with an international calling code prefix', () => {
+    const personMockPhonesFieldMetadataItem =
+      personMockObjectMetadataItem.fields.find(
+        (field) => field.name === 'phones',
+      );
+
+    if (!isDefined(personMockPhonesFieldMetadataItem)) {
+      throw new Error('Person mock phones field metadata ID is undefined');
+    }
+
+    const phonesFilterContains: RecordFilter = {
+      id: 'person-phones-filter-contains-calling-code',
+      value: '+33 6 12',
+      fieldMetadataId: personMockPhonesFieldMetadataItem.id,
+      displayValue: '+33 6 12',
+      operand: ViewFilterOperand.CONTAINS,
+      label: 'Phones',
+      type: FieldMetadataType.PHONES,
+    };
+
+    const result = computeRecordGqlOperationFilter({
+      filterValueDependencies: mockFilterValueDependencies,
+      recordFilters: [phonesFilterContains],
+      recordFilterGroups: [],
+      fieldMetadataItems: personFields,
+    });
+
+    expect(result).toEqual({
+      or: [
+        {
+          phones: {
+            primaryPhoneNumber: {
+              ilike: '%+33612%',
+            },
+          },
+        },
+        {
+          phones: {
+            primaryPhoneCallingCode: {
+              ilike: '%+33612%',
+            },
+          },
+        },
+        {
+          phones: {
+            additionalPhones: {
+              like: '%+33612%',
+            },
+          },
+        },
+      ],
+    });
+  });
+
   it('emails field type', () => {
     const personMockEmailFieldMetadataId = getMockFieldMetadataItemOrThrow({
       objectMetadataItem: personMockObjectMetadataItem,
@@ -849,7 +908,7 @@ describe('should work as expected for the different field types', () => {
         emailsFilterIsNotEmpty,
       ],
       recordFilterGroups: [],
-      fields: personMockObjectMetadataItem.fields,
+      fieldMetadataItems: personFields,
     });
 
     expect(result).toEqual({
@@ -1023,9 +1082,9 @@ describe('should work as expected for the different field types', () => {
 
     const dateFilterIs: RecordFilter = {
       id: 'company-date-filter-is',
-      value: '2024-09-17T20:46:58.922Z',
+      value: '2024-09-17',
       fieldMetadataId: companyMockDateFieldMetadataId?.id,
-      displayValue: '2024-09-17T20:46:58.922Z',
+      displayValue: '2024-09-17',
       operand: ViewFilterOperand.IS,
       label: 'Created At',
       type: FieldMetadataType.DATE_TIME,
@@ -1061,14 +1120,14 @@ describe('should work as expected for the different field types', () => {
         dateFilterIsNotEmpty,
       ],
       recordFilterGroups: [],
-      fields: companyMockObjectMetadataItem.fields,
+      fieldMetadataItems: companyFields,
     });
 
     expect(result).toEqual({
       and: [
         {
           createdAt: {
-            gt: '2024-09-17T20:46:58.922Z',
+            gte: '2024-09-17T20:46:58.922Z',
           },
         },
         {
@@ -1080,12 +1139,12 @@ describe('should work as expected for the different field types', () => {
           and: [
             {
               createdAt: {
-                lte: '2024-09-17T20:46:59.999Z',
+                gte: '2024-09-16T22:00:00Z',
               },
             },
             {
               createdAt: {
-                gte: '2024-09-17T20:46:00.000Z',
+                lt: '2024-09-17T22:00:00Z',
               },
             },
           ],
@@ -1163,7 +1222,7 @@ describe('should work as expected for the different field types', () => {
         employeesFilterIsNotEmpty,
       ],
       recordFilterGroups: [],
-      fields: companyMockObjectMetadataItem.fields,
+      fieldMetadataItems: companyFields,
     });
 
     expect(result).toEqual({
@@ -1265,7 +1324,7 @@ describe('should work as expected for the different field types', () => {
         ARRFilterIsNot,
       ],
       recordFilterGroups: [],
-      fields: companyMockObjectMetadataItem.fields,
+      fieldMetadataItems: companyFields,
     });
 
     expect(result).toEqual({
@@ -1342,7 +1401,7 @@ describe('should work as expected for the different field types', () => {
       filterValueDependencies: mockFilterValueDependencies,
       recordFilters: [ARRFilterIn, ARRFilterNotIn],
       recordFilterGroups: [],
-      fields: companyMockObjectMetadataItem.fields,
+      fieldMetadataItems: companyFields,
     });
 
     expect(result).toEqual({
@@ -1402,7 +1461,7 @@ describe('should work as expected for the different field types', () => {
       filterValueDependencies: mockFilterValueDependencies,
       recordFilters: [selectFilterIs, selectFilterIsNot],
       recordFilterGroups: [],
-      fields: petMockObjectMetadataItem.fields,
+      fieldMetadataItems: petFields,
     });
 
     expect(result).toEqual({
@@ -1475,7 +1534,7 @@ describe('should work as expected for the different field types', () => {
         multiSelectFilterDoesNotContain,
       ],
       recordFilterGroups: [],
-      fields: companyMockObjectMetadataItem.fields,
+      fieldMetadataItems: companyFields,
     });
 
     expect(result).toEqual({

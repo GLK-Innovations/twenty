@@ -1,20 +1,26 @@
-import { GraphType, WidgetType } from '~/generated-metadata/graphql';
+import { type PageLayoutTab } from '@/page-layout/types/PageLayoutTab';
+import { addWidgetToTab } from '@/page-layout/utils/addWidgetToTab';
 import {
   AggregateOperations,
+  PageLayoutTabLayoutMode,
+  WidgetConfigurationType,
+  WidgetType,
   type PageLayoutWidget,
-} from '~/generated/graphql';
-import { type PageLayoutTab } from '../../types/PageLayoutTab';
-import { addWidgetToTab } from '../addWidgetToTab';
+} from '~/generated-metadata/graphql';
 
 describe('addWidgetToTab', () => {
   const mockWidget: PageLayoutWidget = {
+    isSystemSideEffect: false,
+    universalIdentifier: 'universal-identifier-mock',
     __typename: 'PageLayoutWidget',
     id: 'widget-1',
+    applicationId: '',
+    isActive: true,
     pageLayoutTabId: 'tab-1',
     title: 'Test Widget',
     type: WidgetType.GRAPH,
     configuration: {
-      graphType: GraphType.AGGREGATE,
+      configurationType: WidgetConfigurationType.AGGREGATE_CHART,
       aggregateOperation: AggregateOperations.COUNT,
       aggregateFieldMetadataId: 'id',
       displayDataLabel: false,
@@ -28,7 +34,11 @@ describe('addWidgetToTab', () => {
 
   const mockTabs: PageLayoutTab[] = [
     {
+      isSystemSideEffect: false,
+      universalIdentifier: 'universal-identifier-mock',
       id: 'tab-1',
+      applicationId: '',
+      isActive: true,
       title: 'Tab 1',
       position: 0,
       pageLayoutId: 'layout-1',
@@ -38,7 +48,11 @@ describe('addWidgetToTab', () => {
       deletedAt: null,
     },
     {
+      isSystemSideEffect: false,
+      universalIdentifier: 'universal-identifier-mock',
       id: 'tab-2',
+      applicationId: '',
+      isActive: true,
       title: 'Tab 2',
       position: 1,
       pageLayoutId: 'layout-1',
@@ -67,7 +81,6 @@ describe('addWidgetToTab', () => {
   it('should handle non-existent tab ID gracefully', () => {
     const result = addWidgetToTab(mockTabs, 'non-existent-tab', mockWidget);
 
-    // All tabs should remain unchanged
     expect(result[0].widgets).toHaveLength(0);
     expect(result[1].widgets).toHaveLength(0);
   });
@@ -93,5 +106,75 @@ describe('addWidgetToTab', () => {
     expect(result).not.toBe(mockTabs);
     expect(mockTabs[0].widgets).toHaveLength(0);
     expect(result[0].widgets).toHaveLength(1);
+  });
+
+  it('should normalize an appended widget before a viewport-filling widget in a vertical-list tab', () => {
+    const timelineWidget = {
+      ...mockWidget,
+      id: 'timeline-widget',
+      type: WidgetType.TIMELINE,
+    };
+    const verticalListTab = {
+      ...mockTabs[0],
+      layoutMode: PageLayoutTabLayoutMode.VERTICAL_LIST,
+      widgets: [timelineWidget],
+    };
+
+    const result = addWidgetToTab([verticalListTab], 'tab-1', mockWidget);
+
+    expect(result[0].widgets.map(({ id }) => id)).toEqual([
+      'widget-1',
+      'timeline-widget',
+    ]);
+    expect(result[0].widgets.map(({ position }) => position)).toEqual([
+      {
+        __typename: 'PageLayoutWidgetVerticalListPosition',
+        layoutMode: PageLayoutTabLayoutMode.VERTICAL_LIST,
+        index: 0,
+      },
+      {
+        __typename: 'PageLayoutWidgetVerticalListPosition',
+        layoutMode: PageLayoutTabLayoutMode.VERTICAL_LIST,
+        index: 1,
+      },
+    ]);
+  });
+
+  it('should preserve saved vertical-list order when appending to an unsorted widget array', () => {
+    const widgetA = {
+      ...mockWidget,
+      id: 'widget-a',
+      position: {
+        __typename: 'PageLayoutWidgetVerticalListPosition' as const,
+        layoutMode: PageLayoutTabLayoutMode.VERTICAL_LIST,
+        index: 1,
+      },
+    };
+    const widgetB = {
+      ...mockWidget,
+      id: 'widget-b',
+      position: {
+        __typename: 'PageLayoutWidgetVerticalListPosition' as const,
+        layoutMode: PageLayoutTabLayoutMode.VERTICAL_LIST,
+        index: 0,
+      },
+    };
+    const verticalListTab = {
+      ...mockTabs[0],
+      layoutMode: PageLayoutTabLayoutMode.VERTICAL_LIST,
+      widgets: [widgetA, widgetB],
+    };
+    const newWidget = {
+      ...mockWidget,
+      id: 'widget-c',
+    };
+
+    const result = addWidgetToTab([verticalListTab], 'tab-1', newWidget);
+
+    expect(result[0].widgets.map(({ id }) => id)).toEqual([
+      'widget-b',
+      'widget-a',
+      'widget-c',
+    ]);
   });
 });

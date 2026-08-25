@@ -15,8 +15,8 @@ export type Company = {
       };
   address: {
     __typename?: 'Address';
-    addressLine1: string;
-    addressLine2: string;
+    addressStreet1: string;
+    addressStreet2: string;
     addressCity: string;
     addressState: string;
     addressPostcode: string;
@@ -31,16 +31,9 @@ export type Company = {
     primaryLinkUrl: string;
     primaryLinkLabel: string;
   };
-  xLink?: {
-    __typename?: 'Links';
-    primaryLinkUrl: string;
-    primaryLinkLabel: string;
-  };
-  annualRecurringRevenue: {
+  annualRevenue?: {
     __typename?: 'Currency';
     amountMicros: number | null;
     currencyCode: string;
-  };
-  employees: number | null;
-  idealCustomerProfile?: boolean;
+  } | null;
 };

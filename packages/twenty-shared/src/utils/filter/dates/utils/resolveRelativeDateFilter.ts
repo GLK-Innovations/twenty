@@ -1,53 +1,85 @@
-import { addUnitToDateTime } from '@/utils/filter/dates/utils/addUnitToDateTime';
-import { getEndUnitOfDateTime } from '@/utils/filter/dates/utils/getEndUnitOfDateTime';
-import { getPlainDateFromDate } from '@/utils/filter/dates/utils/getPlainDateFromDate';
-import { getStartUnitOfDateTime } from '@/utils/filter/dates/utils/getStartUnitOfDateTime';
+import { addUnitToZonedDateTime } from '@/utils/filter/dates/utils/addUnitToZonedDateTime';
+import { getNextPeriodStart } from '@/utils/filter/dates/utils/getNextPeriodStart';
+import { getPeriodStart } from '@/utils/filter/dates/utils/getPeriodStart';
 import { type RelativeDateFilter } from '@/utils/filter/dates/utils/relativeDateFilterSchema';
-import { subUnitFromDateTime } from '@/utils/filter/dates/utils/subUnitFromDateTime';
-import { isDefined } from '@/utils/validation';
-import { TZDate } from '@date-fns/tz';
+import { subUnitFromZonedDateTime } from '@/utils/filter/dates/utils/subUnitFromZonedDateTime';
+import { isDefined } from '@/utils/validation/isDefined';
+import { type Temporal } from 'temporal-polyfill';
 
 export const resolveRelativeDateFilter = (
   relativeDateFilter: RelativeDateFilter,
+  referenceTodayZonedDateTime: Temporal.ZonedDateTime,
 ) => {
   const { direction, amount, unit, firstDayOfTheWeek } = relativeDateFilter;
 
-  const referenceDate = new TZDate();
-
   switch (direction) {
-    case 'NEXT':
+    case 'NEXT': {
       if (!isDefined(amount)) {
         throw new Error('Amount is required');
       }
 
+      const startOfNextPeriod = getNextPeriodStart(
+        referenceTodayZonedDateTime,
+        unit,
+        firstDayOfTheWeek,
+      );
+
+      const endOfNextPeriod = addUnitToZonedDateTime(
+        startOfNextPeriod,
+        unit,
+        amount,
+      );
+
       return {
         ...relativeDateFilter,
-        start: getPlainDateFromDate(referenceDate),
-        end: getPlainDateFromDate(
-          addUnitToDateTime(referenceDate, amount, unit),
-        ),
+        start: startOfNextPeriod.toPlainDate().toString(),
+        end: endOfNextPeriod.toPlainDate().toString(),
       };
-    case 'PAST':
+    }
+    case 'PAST': {
       if (!isDefined(amount)) {
         throw new Error('Amount is required');
       }
 
+      const startOfCurrentPeriod = getPeriodStart(
+        referenceTodayZonedDateTime,
+        unit,
+        firstDayOfTheWeek,
+      );
+
+      const startOfPastPeriod = subUnitFromZonedDateTime(
+        startOfCurrentPeriod,
+        unit,
+        amount,
+      );
+
       return {
         ...relativeDateFilter,
-        start: getPlainDateFromDate(
-          subUnitFromDateTime(referenceDate, amount, unit),
-        ),
-        end: getPlainDateFromDate(referenceDate),
+        start: startOfPastPeriod.toPlainDate().toString(),
+        end: startOfCurrentPeriod.toPlainDate().toString(),
       };
-    case 'THIS':
+    }
+    case 'THIS': {
+      const startOfPeriod = getPeriodStart(
+        referenceTodayZonedDateTime,
+        unit,
+        firstDayOfTheWeek,
+      );
+
+      const endOfPeriod = getNextPeriodStart(
+        referenceTodayZonedDateTime,
+        unit,
+        firstDayOfTheWeek,
+      );
+
+      const start = startOfPeriod?.toPlainDate().toString();
+      const end = endOfPeriod?.toPlainDate().toString();
+
       return {
         ...relativeDateFilter,
-        start: getPlainDateFromDate(
-          getStartUnitOfDateTime(referenceDate, unit, firstDayOfTheWeek),
-        ),
-        end: getPlainDateFromDate(
-          getEndUnitOfDateTime(referenceDate, unit, firstDayOfTheWeek),
-        ),
+        start,
+        end,
       };
+    }
   }
 };

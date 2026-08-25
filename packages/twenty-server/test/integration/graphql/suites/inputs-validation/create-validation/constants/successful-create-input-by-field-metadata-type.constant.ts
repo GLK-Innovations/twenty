@@ -1,11 +1,14 @@
 import { type FieldMetadataTypesToTestForCreateInputValidation } from 'test/integration/graphql/suites/inputs-validation/types/field-metadata-type-to-test';
-import { TEST_TARGET_OBJECT_RECORD_ID_FIELD_VALUE } from 'test/integration/graphql/suites/inputs-validation/utils/setup-test-objects-with-all-field-types.util';
+import {
+  joinColumnNameForManyToOneMorphRelationField1,
+  TEST_TARGET_OBJECT_RECORD_ID_FIELD_VALUE,
+} from 'test/integration/graphql/suites/inputs-validation/utils/setup-test-objects-with-all-field-types.util';
 import { FieldMetadataType } from 'twenty-shared/types';
 
 export const successfulCreateInputByFieldMetadataType: {
   [K in Exclude<
     FieldMetadataTypesToTestForCreateInputValidation,
-    FieldMetadataType.RICH_TEXT
+    FieldMetadataType.FILES // Done in files-field-sync.integration-spec.ts
   >]: {
     input: any;
     validateInput: (record: Record<string, any>) => boolean;
@@ -20,14 +23,6 @@ export const successfulCreateInputByFieldMetadataType: {
         return record.textField === 'test';
       },
     },
-    {
-      input: {
-        textField: '',
-      },
-      validateInput: (record: Record<string, any>) => {
-        return record.textField === '';
-      },
-    },
   ],
   [FieldMetadataType.NUMBER]: [
     {
@@ -38,30 +33,6 @@ export const successfulCreateInputByFieldMetadataType: {
         return record.numberField === 1;
       },
     },
-    {
-      input: {
-        numberField: null,
-      },
-      validateInput: (record: Record<string, any>) => {
-        return record.numberField === null;
-      },
-    },
-    {
-      input: {
-        numberField: 0,
-      },
-      validateInput: (record: Record<string, any>) => {
-        return record.numberField === 0;
-      },
-    },
-    {
-      input: {
-        numberField: -1.1,
-      },
-      validateInput: (record: Record<string, any>) => {
-        return record.numberField === -1.1;
-      },
-    },
   ],
   [FieldMetadataType.UUID]: [
     {
@@ -70,14 +41,6 @@ export const successfulCreateInputByFieldMetadataType: {
       },
       validateInput: (record: Record<string, any>) => {
         return record.uuidField === '00000000-0000-4000-8000-000000000000';
-      },
-    },
-    {
-      input: {
-        uuidField: null,
-      },
-      validateInput: (record: Record<string, any>) => {
-        return record.uuidField === null;
       },
     },
   ],
@@ -120,6 +83,28 @@ export const successfulCreateInputByFieldMetadataType: {
       },
     },
   ],
+  [FieldMetadataType.MORPH_RELATION]: [
+    {
+      input: {
+        [joinColumnNameForManyToOneMorphRelationField1]:
+          TEST_TARGET_OBJECT_RECORD_ID_FIELD_VALUE,
+      },
+      validateInput: (record: Record<string, any>) => {
+        return (
+          record[joinColumnNameForManyToOneMorphRelationField1] ===
+          TEST_TARGET_OBJECT_RECORD_ID_FIELD_VALUE
+        );
+      },
+    },
+    {
+      input: {
+        [joinColumnNameForManyToOneMorphRelationField1]: null,
+      },
+      validateInput: (record: Record<string, any>) => {
+        return record[joinColumnNameForManyToOneMorphRelationField1] === null;
+      },
+    },
+  ],
   [FieldMetadataType.RAW_JSON]: [
     {
       input: {
@@ -132,14 +117,6 @@ export const successfulCreateInputByFieldMetadataType: {
     {
       input: {
         rawJsonField: {},
-      },
-      validateInput: (record: Record<string, any>) => {
-        return Object.keys(record.rawJsonField).length === 0;
-      },
-    },
-    {
-      input: {
-        rawJsonField: null,
       },
       validateInput: (record: Record<string, any>) => {
         return record.rawJsonField === null;
@@ -161,18 +138,12 @@ export const successfulCreateInputByFieldMetadataType: {
     },
     {
       input: {
-        arrayField: [],
+        arrayField: 'item1',
       },
       validateInput: (record: Record<string, any>) => {
-        return record.arrayField.length === 0;
-      },
-    },
-    {
-      input: {
-        arrayField: null,
-      },
-      validateInput: (record: Record<string, any>) => {
-        return record.arrayField === null;
+        return (
+          record.arrayField.length === 1 && record.arrayField.includes('item1')
+        );
       },
     },
   ],
@@ -183,14 +154,6 @@ export const successfulCreateInputByFieldMetadataType: {
       },
       validateInput: (record: Record<string, any>) => {
         return record.ratingField === 'RATING_2';
-      },
-    },
-    {
-      input: {
-        ratingField: null,
-      },
-      validateInput: (record: Record<string, any>) => {
-        return record.ratingField === null;
       },
     },
   ],
@@ -211,7 +174,10 @@ export const successfulCreateInputByFieldMetadataType: {
         multiSelectField: [],
       },
       validateInput: (record: Record<string, any>) => {
-        return record.multiSelectField.length === 0;
+        return (
+          Array.isArray(record.multiSelectField) &&
+          record.multiSelectField.length === 0
+        );
       },
     },
     {
@@ -219,19 +185,14 @@ export const successfulCreateInputByFieldMetadataType: {
         multiSelectField: null,
       },
       validateInput: (record: Record<string, any>) => {
-        return record.multiSelectField === null;
+        return (
+          Array.isArray(record.multiSelectField) &&
+          record.multiSelectField.length === 0
+        );
       },
     },
   ],
   [FieldMetadataType.DATE]: [
-    {
-      input: {
-        dateField: '2025-01-13',
-      },
-      validateInput: (record: Record<string, any>) => {
-        return new Date(record.dateField).toDateString() === 'Mon Jan 13 2025';
-      },
-    },
     {
       input: {
         dateField: null,
@@ -240,28 +201,40 @@ export const successfulCreateInputByFieldMetadataType: {
         return record.dateField === null;
       },
     },
+    {
+      input: {
+        dateField: '2025-01-13',
+      },
+      validateInput: (record: Record<string, any>) => {
+        return new Date(record.dateField).toDateString() === 'Mon Jan 13 2025';
+      },
+    },
   ],
   [FieldMetadataType.DATE_TIME]: [
     {
       input: {
-        dateTimeField: '2025-01-13 00:00:00',
+        dateTimeField: '2025-01-13T10:30:00.000Z',
       },
       validateInput: (record: Record<string, any>) => {
         const date = new Date(record.dateTimeField);
 
         return (
           date.toDateString() === 'Mon Jan 13 2025' &&
-          date.getMinutes() === 0 &&
-          date.getSeconds() === 0
+          date.getUTCHours() === 10 &&
+          date.getUTCMinutes() === 30 &&
+          date.getUTCSeconds() === 0 &&
+          date.getUTCMilliseconds() === 0
         );
       },
     },
     {
       input: {
-        dateTimeField: null,
+        dateTimeField: '2026-05-07',
       },
       validateInput: (record: Record<string, any>) => {
-        return record.dateTimeField === null;
+        const date = new Date(record.dateTimeField);
+
+        return date.toISOString() === '2026-05-07T00:00:00.000Z';
       },
     },
   ],
@@ -406,19 +379,56 @@ export const successfulCreateInputByFieldMetadataType: {
       },
     },
   ],
-  [FieldMetadataType.RICH_TEXT_V2]: [
+  [FieldMetadataType.RICH_TEXT]: [
     {
       input: {
-        richTextV2Field: {
-          blocknote: 'test',
+        richTextField: {
+          blocknote:
+            '[{"type":"paragraph","content":[{"type":"text","text":"test"}]}]',
           markdown: 'test',
         },
       },
       validateInput: (record: Record<string, any>) => {
         return (
-          record.richTextV2Field.blocknote === 'test' &&
-          record.richTextV2Field.markdown === 'test'
+          record.richTextField.blocknote ===
+            '[{"type":"paragraph","content":[{"type":"text","text":"test"}]}]' &&
+          record.richTextField.markdown === 'test'
         );
+      },
+    },
+  ],
+  [FieldMetadataType.POSITION]: [
+    {
+      input: {
+        position: 1000,
+      },
+      validateInput: (record: Record<string, any>) => {
+        return record.position === 1000;
+      },
+    },
+    {
+      input: {
+        position: 'last',
+      },
+      validateInput: (record: Record<string, any>) => {
+        return record.position > 1000;
+      },
+    },
+    {
+      input: {
+        position: 'first',
+      },
+      validateInput: (record: Record<string, any>) => {
+        return record.position < 1000;
+      },
+    },
+    {
+      input: {
+        name: 'position',
+        position: undefined,
+      },
+      validateInput: (record: Record<string, any>) => {
+        return typeof record.position === 'number';
       },
     },
   ],

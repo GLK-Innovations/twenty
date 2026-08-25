@@ -1,15 +1,42 @@
+import { WorkflowVisualizerComponentInstanceContext } from '@/workflow/workflow-diagram/states/contexts/WorkflowVisualizerComponentInstanceContext';
+import { createElement, type ReactNode } from 'react';
 import { type WorkflowTrigger } from '@/workflow/types/Workflow';
 import { useUpdateWorkflowVersionTrigger } from '@/workflow/workflow-trigger/hooks/useUpdateWorkflowVersionTrigger';
 import { act, renderHook } from '@testing-library/react';
+import { TRIGGER_STEP_ID } from 'twenty-shared/workflow';
 
-const mockUpdateOneRecord = jest.fn();
+const mockMutate = jest.fn();
 const mockGetUpdatableWorkflowVersion = jest.fn();
-const mockComputeStepOutputSchema = jest.fn();
+const mockGetRecordFromCache = jest.fn();
+const mockMarkStepForRecomputation = jest.fn();
+const mockEnqueueErrorSnackBar = jest.fn();
 
-jest.mock('@/object-record/hooks/useUpdateOneRecord', () => ({
-  useUpdateOneRecord: jest.fn(() => ({
-    updateOneRecord: mockUpdateOneRecord,
-  })),
+jest.mock('@/object-metadata/hooks/useApolloCoreClient', () => ({
+  useApolloCoreClient: () => ({ cache: {} }),
+}));
+
+jest.mock('@/object-metadata/hooks/useObjectMetadataItems', () => ({
+  useObjectMetadataItems: () => ({ objectMetadataItems: [] }),
+}));
+
+jest.mock('@/object-metadata/hooks/useObjectMetadataItem', () => ({
+  useObjectMetadataItem: () => ({ objectMetadataItem: {} }),
+}));
+
+jest.mock('@/object-record/hooks/useObjectPermissions', () => ({
+  useObjectPermissions: () => ({ objectPermissionsByObjectMetadataId: {} }),
+}));
+
+jest.mock('@/ui/feedback/snack-bar-manager/hooks/useSnackBar', () => ({
+  useSnackBar: () => ({ enqueueErrorSnackBar: mockEnqueueErrorSnackBar }),
+}));
+
+jest.mock('@/object-record/cache/hooks/useGetRecordFromCache', () => ({
+  useGetRecordFromCache: () => mockGetRecordFromCache,
+}));
+
+jest.mock('@/object-record/cache/utils/updateRecordFromCache', () => ({
+  updateRecordFromCache: jest.fn(),
 }));
 
 jest.mock('@/workflow/hooks/useGetUpdatableWorkflowVersionOrThrow', () => ({
@@ -18,11 +45,22 @@ jest.mock('@/workflow/hooks/useGetUpdatableWorkflowVersionOrThrow', () => ({
   })),
 }));
 
-jest.mock('@/workflow/hooks/useComputeStepOutputSchema', () => ({
-  useComputeStepOutputSchema: jest.fn(() => ({
-    computeStepOutputSchema: mockComputeStepOutputSchema,
+jest.mock('@/workflow/workflow-variables/hooks/useStepsOutputSchema', () => ({
+  useStepsOutputSchema: jest.fn(() => ({
+    markStepForRecomputation: mockMarkStepForRecomputation,
   })),
 }));
+
+jest.mock('@apollo/client/react', () => ({
+  useMutation: () => [mockMutate],
+}));
+
+const Wrapper = ({ children }: { children: ReactNode }) =>
+  createElement(
+    WorkflowVisualizerComponentInstanceContext.Provider,
+    { value: { instanceId: 'workflow-visualizer-test' } },
+    children,
+  );
 
 describe('useUpdateWorkflowVersionTrigger', () => {
   const trigger: WorkflowTrigger = {
@@ -37,53 +75,68 @@ describe('useUpdateWorkflowVersionTrigger', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockMutate.mockResolvedValue({
+      data: { updateWorkflowVersionTrigger: { trigger } },
+    });
+    mockGetRecordFromCache.mockReturnValue(undefined);
   });
 
-  it('updates the trigger with computed output schema', async () => {
+  it('updates the trigger via the dedicated mutation and marks it for recomputation', async () => {
     mockGetUpdatableWorkflowVersion.mockResolvedValue('version-id');
-    mockComputeStepOutputSchema.mockResolvedValue({
-      data: { computeStepOutputSchema: { field1: 'string' } },
-    });
 
-    const { result } = renderHook(() => useUpdateWorkflowVersionTrigger());
+    const { result } = renderHook(() => useUpdateWorkflowVersionTrigger(), {
+      wrapper: Wrapper,
+    });
 
     await act(async () => {
       await result.current.updateTrigger(trigger);
     });
 
     expect(mockGetUpdatableWorkflowVersion).toHaveBeenCalled();
-    expect(mockComputeStepOutputSchema).toHaveBeenCalledWith({
-      step: trigger,
-      workflowVersionId: 'version-id',
-    });
-    expect(mockUpdateOneRecord).toHaveBeenCalledWith({
-      idToUpdate: 'version-id',
-      updateOneRecordInput: {
-        trigger: {
-          ...trigger,
-          settings: { ...trigger.settings, outputSchema: { field1: 'string' } },
+    expect(mockMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        variables: {
+          input: {
+            workflowVersionId: 'version-id',
+            trigger,
+          },
         },
-      },
+      }),
+    );
+    expect(mockMarkStepForRecomputation).toHaveBeenCalledWith({
+      stepId: TRIGGER_STEP_ID,
+      workflowVersionId: 'version-id',
     });
   });
 
-  it('skips output schema computation when disabled', async () => {
-    mockGetUpdatableWorkflowVersion.mockResolvedValue('version-id');
+  it('marks for recomputation for all trigger types', async () => {
+    const triggerTypes = ['DATABASE_EVENT', 'MANUAL', 'CRON', 'WEBHOOK'];
 
-    const { result } = renderHook(() => useUpdateWorkflowVersionTrigger());
+    for (const triggerType of triggerTypes) {
+      mockMarkStepForRecomputation.mockClear();
+      mockGetUpdatableWorkflowVersion.mockResolvedValue('version-id');
 
-    await act(async () => {
-      await result.current.updateTrigger(trigger, {
-        computeOutputSchema: false,
+      const testTrigger = {
+        name: `${triggerType} Trigger`,
+        type: triggerType,
+        settings: {
+          outputSchema: {},
+        },
+        nextStepIds: [],
+      } as unknown as WorkflowTrigger;
+
+      const { result } = renderHook(() => useUpdateWorkflowVersionTrigger(), {
+        wrapper: Wrapper,
       });
-    });
 
-    expect(mockComputeStepOutputSchema).not.toHaveBeenCalled();
-    expect(mockUpdateOneRecord).toHaveBeenCalledWith({
-      idToUpdate: 'version-id',
-      updateOneRecordInput: {
-        trigger,
-      },
-    });
+      await act(async () => {
+        await result.current.updateTrigger(testTrigger);
+      });
+
+      expect(mockMarkStepForRecomputation).toHaveBeenCalledWith({
+        stepId: TRIGGER_STEP_ID,
+        workflowVersionId: 'version-id',
+      });
+    }
   });
 });

@@ -1,94 +1,141 @@
+import { SettingsDiscoveryHeroCard } from '@/settings/components/SettingsDiscoveryHeroCard';
 import { SettingsPageContainer } from '@/settings/components/SettingsPageContainer';
-import { SubMenuTopBarContainer } from '@/ui/layout/page/components/SubMenuTopBarContainer';
-import { TabList } from '@/ui/layout/tab-list/components/TabList';
-import { activeTabIdComponentState } from '@/ui/layout/tab-list/states/activeTabIdComponentState';
-import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
+import { SettingsPageLayout } from '@/settings/components/layout/SettingsPageLayout';
+import { SettingsTabBar } from '@/settings/components/layout/SettingsTabBar';
+import { useSettingsActiveTabId } from '@/settings/components/layout/useSettingsActiveTabId';
 import { SettingsPath } from 'twenty-shared/types';
 import { getSettingsPath } from 'twenty-shared/utils';
-import {
-  IconPlus,
-  IconRobot,
-  IconServer,
-  IconSettings,
-} from 'twenty-ui/display';
-import { Button } from 'twenty-ui/input';
-import { UndecoratedLink } from 'twenty-ui/navigation';
 
 import { t } from '@lingui/core/macro';
-import { SettingsAIAgentsTable } from './components/SettingsAIAgentsTable';
-import { SettingsAIMCP } from './components/SettingsAIMCP';
-import { SettingsAIRouterSettings } from './components/SettingsAIRouterSettings';
+import {
+  IconChartBar,
+  IconCpu,
+  IconLayoutDashboard,
+  IconPlus,
+  IconSparkle2,
+  IconSparkles,
+  IconTool,
+} from 'twenty-ui/icon';
+import { Button } from 'twenty-ui/input';
+import { Section } from 'twenty-ui/layout';
+import { UndecoratedLink } from 'twenty-ui/navigation';
+import { SettingsAgentSkillsTab } from '~/pages/settings/ai/components/SettingsAgentSkillsTab';
+import { SettingsAgentToolsTab } from '~/pages/settings/ai/components/SettingsAgentToolsTab';
+import { SettingsAiModelsTab } from '~/pages/settings/ai/components/SettingsAiModelsTab';
+import { SettingsAiOverviewTab } from '~/pages/settings/ai/components/SettingsAiOverviewTab';
+import { SettingsAiUsageTab } from '~/pages/settings/ai/components/SettingsAiUsageTab';
+import { SETTINGS_AI_TABS } from '~/pages/settings/ai/constants/SettingsAiTabs';
+import { useCreateTool } from '~/pages/settings/ai/hooks/useCreateTool';
 
-const SETTINGS_AI_TABS_ID = 'settings-ai-tabs-id';
+const AI_HERO_LIGHT = '/images/ai/ai-tools-cover-light.png';
+const AI_HERO_DARK = '/images/ai/ai-tools-cover-dark.png';
 
-const SETTINGS_AI_TABS = {
-  AGENTS: 'agents',
-  SETTINGS: 'settings',
-  MCP: 'mcp',
-};
+const SETTINGS_AI_HERO_INSTANCE_ID_PREFIX = 'settings-ai-hero';
 
 export const SettingsAI = () => {
-  const activeTabId = useRecoilComponentValue(
-    activeTabIdComponentState,
-    SETTINGS_AI_TABS_ID,
-  );
+  const { handleCreateTool, isCreatingTool } = useCreateTool();
 
   const tabs = [
     {
-      id: SETTINGS_AI_TABS.AGENTS,
-      title: t`Agents`,
-      Icon: IconRobot,
+      id: SETTINGS_AI_TABS.TABS_IDS.OVERVIEW,
+      title: t`Overview`,
+      Icon: IconLayoutDashboard,
     },
     {
-      id: SETTINGS_AI_TABS.MCP,
-      title: t`MCP`,
-      Icon: IconServer,
+      id: SETTINGS_AI_TABS.TABS_IDS.MODELS,
+      title: t`Models`,
+      Icon: IconCpu,
     },
     {
-      id: SETTINGS_AI_TABS.SETTINGS,
-      title: t`Settings`,
-      Icon: IconSettings,
+      id: SETTINGS_AI_TABS.TABS_IDS.SKILLS,
+      title: t`Skills`,
+      Icon: IconSparkles,
+    },
+    {
+      id: SETTINGS_AI_TABS.TABS_IDS.TOOLS,
+      title: t`Tools`,
+      Icon: IconTool,
+    },
+    {
+      id: SETTINGS_AI_TABS.TABS_IDS.USAGE,
+      title: t`Usage`,
+      Icon: IconChartBar,
     },
   ];
 
-  const renderActiveTabContent = () => {
-    switch (activeTabId) {
-      case SETTINGS_AI_TABS.AGENTS:
-        return <SettingsAIAgentsTable />;
-      case SETTINGS_AI_TABS.SETTINGS:
-        return <SettingsAIRouterSettings />;
-      case SETTINGS_AI_TABS.MCP:
-        return <SettingsAIMCP />;
-    }
-  };
+  const resolvedTabId =
+    useSettingsActiveTabId(
+      SETTINGS_AI_TABS.COMPONENT_INSTANCE_ID,
+      tabs.map((tab) => tab.id),
+    ) ?? SETTINGS_AI_TABS.TABS_IDS.OVERVIEW;
+  const isOverviewTab = resolvedTabId === SETTINGS_AI_TABS.TABS_IDS.OVERVIEW;
+  const isModelsTab = resolvedTabId === SETTINGS_AI_TABS.TABS_IDS.MODELS;
+  const isSkillsTab = resolvedTabId === SETTINGS_AI_TABS.TABS_IDS.SKILLS;
+  const isToolsTab = resolvedTabId === SETTINGS_AI_TABS.TABS_IDS.TOOLS;
+  const isUsageTab = resolvedTabId === SETTINGS_AI_TABS.TABS_IDS.USAGE;
 
   return (
-    <SubMenuTopBarContainer
+    <SettingsPageLayout
       title={t`AI`}
+      secondaryBar={
+        <SettingsTabBar
+          tabs={tabs}
+          componentInstanceId={SETTINGS_AI_TABS.COMPONENT_INSTANCE_ID}
+        />
+      }
       actionButton={
-        activeTabId === SETTINGS_AI_TABS.AGENTS ? (
-          <UndecoratedLink to={getSettingsPath(SettingsPath.AINewAgent)}>
+        isSkillsTab ? (
+          <UndecoratedLink to={getSettingsPath(SettingsPath.AiNewSkill)}>
             <Button
               Icon={IconPlus}
-              title={t`New Agent`}
+              title={t`New Skill`}
               accent="blue"
               size="small"
             />
           </UndecoratedLink>
+        ) : isToolsTab ? (
+          <Button
+            Icon={IconPlus}
+            title={t`New Tool`}
+            accent="blue"
+            size="small"
+            onClick={handleCreateTool}
+            disabled={isCreatingTool}
+          />
         ) : undefined
       }
       links={[
         {
           children: t`Workspace`,
-          href: getSettingsPath(SettingsPath.Workspace),
+          href: getSettingsPath(SettingsPath.General),
         },
         { children: t`AI` },
       ]}
     >
       <SettingsPageContainer>
-        <TabList tabs={tabs} componentInstanceId={SETTINGS_AI_TABS_ID} />
-        {renderActiveTabContent()}
+        <Section>
+          <SettingsDiscoveryHeroCard
+            lightSrc={AI_HERO_LIGHT}
+            darkSrc={AI_HERO_DARK}
+            instanceIdPrefix={SETTINGS_AI_HERO_INSTANCE_ID_PREFIX}
+            tabs={[
+              {
+                id: 'ai_walkthrough',
+                title: t`Walkthrough`,
+                Icon: IconSparkle2,
+                vimeoId: '1217964358',
+                hasSound: true,
+              },
+            ]}
+            playButtonAriaLabel={t`Watch AI demo`}
+          />
+        </Section>
+        {isOverviewTab && <SettingsAiOverviewTab />}
+        {isModelsTab && <SettingsAiModelsTab />}
+        {isSkillsTab && <SettingsAgentSkillsTab />}
+        {isToolsTab && <SettingsAgentToolsTab />}
+        {isUsageTab && <SettingsAiUsageTab />}
       </SettingsPageContainer>
-    </SubMenuTopBarContainer>
+    </SettingsPageLayout>
   );
 };

@@ -1,61 +1,71 @@
 import { Section } from 'twenty-ui/layout';
-import { H2Title, IconReload, IconTrash } from 'twenty-ui/display';
+import { IconReload, IconTrash } from 'twenty-ui/icon';
+import { H2Title } from 'twenty-ui/typography';
 import { Trans, useLingui } from '@lingui/react/macro';
 import { getSettingsPath, isDefined } from 'twenty-shared/utils';
 import { SettingsPath } from 'twenty-shared/types';
-import { SubMenuTopBarContainer } from '@/ui/layout/page/components/SubMenuTopBarContainer';
+import { SettingsPageLayout } from '@/settings/components/layout/SettingsPageLayout';
 import { SettingsPageContainer } from '@/settings/components/SettingsPageContainer';
 import { TextInput } from '@/ui/input/components/TextInput';
 import { useNavigateSettings } from '~/hooks/useNavigateSettings';
 import { Button, ButtonGroup } from 'twenty-ui/input';
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
 import { SettingsDomainRecords } from '@/settings/domains/components/SettingsDomainRecords';
 import { useCheckPublicDomainValidRecords } from '@/settings/domains/hooks/useCheckPublicDomainValidRecords';
+import { useMutation, useQuery } from '@apollo/client/react';
 import {
-  useCreatePublicDomainMutation,
-  useDeletePublicDomainMutation,
-  useFindManyPublicDomainsQuery,
+  CreatePublicDomainDocument,
+  DeletePublicDomainDocument,
+  FindManyPublicDomainsDocument,
 } from '~/generated-metadata/graphql';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 import { CheckPublicDomainValidRecordsEffect } from '@/settings/domains/components/CheckPublicDomainValidRecordsEffect';
+import { selectedApplicationIdForPublicDomainState } from '@/settings/domains/states/selectedApplicationIdForPublicDomainState';
 import { selectedPublicDomainState } from '@/settings/domains/states/selectedPublicDomainState';
-import { useRecoilState } from 'recoil';
+import { useAtomState } from '@/ui/utilities/state/jotai/hooks/useAtomState';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 import { useState } from 'react';
 import { SaveAndCancelButtons } from '@/settings/components/SaveAndCancelButtons/SaveAndCancelButtons';
-import { getDomainValidationSchema } from '@/settings/domains/utils/get-domain-validation-schema';
+import { getDomainValidationSchema } from '@/settings/domains/utils/getDomainValidationSchema';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
 
-const StyledButtonGroup = styled(ButtonGroup)`
-  & > :not(:first-of-type) > button {
+const StyledButtonGroupContainer = styled.div`
+  > * > :not(:first-of-type) > button {
     border-left: none;
   }
 `;
 
-const StyledButton = styled(Button)`
+const StyledButtonContainer = styled.div`
   align-self: flex-start;
 `;
 
 const StyledDomainFormWrapper = styled.div`
   display: flex;
-  gap: ${({ theme }) => theme.spacing(2)};
+  gap: ${themeCssVariables.spacing[2]};
 `;
 
 const StyledRecordsWrapper = styled.div`
-  margin-top: ${({ theme }) => theme.spacing(2)};
+  margin-top: ${themeCssVariables.spacing[2]};
 
   & > :not(:first-of-type) {
-    margin-top: ${({ theme }) => theme.spacing(4)};
+    margin-top: ${themeCssVariables.spacing[4]};
   }
 `;
 
 export const SettingPublicDomain = () => {
-  const [selectedPublicDomain, setSelectedPublicDomain] = useRecoilState(
+  const [selectedPublicDomain, setSelectedPublicDomain] = useAtomState(
     selectedPublicDomainState,
+  );
+  const selectedApplicationIdForPublicDomain = useAtomStateValue(
+    selectedApplicationIdForPublicDomainState,
   );
   const { t } = useLingui();
   const navigate = useNavigateSettings();
   const { enqueueSuccessSnackBar, enqueueErrorSnackBar } = useSnackBar();
 
-  const [createPublicDomain, { loading }] = useCreatePublicDomainMutation();
+  const [createPublicDomain, { loading }] = useMutation(
+    CreatePublicDomainDocument,
+  );
 
   const [newPublicDomain, setNewPublicDomain] = useState<string | undefined>(
     selectedPublicDomain?.domain ?? '',
@@ -65,9 +75,11 @@ export const SettingPublicDomain = () => {
     string | undefined
   >(undefined);
 
-  const { refetch: refetchPublicDomains } = useFindManyPublicDomainsQuery();
+  const { refetch: refetchPublicDomains } = useQuery(
+    FindManyPublicDomainsDocument,
+  );
 
-  const [deletePublicDomain] = useDeletePublicDomainMutation();
+  const [deletePublicDomain] = useMutation(DeletePublicDomainDocument);
 
   const { isLoading, publicDomainRecords, checkPublicDomainRecords } =
     useCheckPublicDomainValidRecords();
@@ -81,9 +93,9 @@ export const SettingPublicDomain = () => {
       variables: { domain: selectedPublicDomain.domain },
       onCompleted: () => {
         enqueueSuccessSnackBar({
-          message: t`Public domain successfully deleted`,
+          message: t`Custom domain successfully deleted`,
         });
-        navigate(SettingsPath.Domains);
+        navigate(SettingsPath.Applications);
         refetchPublicDomains();
       },
       onError: (error) =>
@@ -93,10 +105,13 @@ export const SettingPublicDomain = () => {
     });
   };
 
-  const validationSchema = getDomainValidationSchema(t);
+  const validationSchema = getDomainValidationSchema();
 
   const onCreate = async () => {
-    if (!isDefined(newPublicDomain)) {
+    if (
+      !isDefined(newPublicDomain) ||
+      !isDefined(selectedApplicationIdForPublicDomain)
+    ) {
       return;
     }
 
@@ -110,11 +125,14 @@ export const SettingPublicDomain = () => {
     setNewPublicDomainError(undefined);
 
     await createPublicDomain({
-      variables: { domain: newPublicDomain },
+      variables: {
+        domain: newPublicDomain,
+        applicationId: selectedApplicationIdForPublicDomain,
+      },
       onCompleted: (data) => {
         setSelectedPublicDomain(data.createPublicDomain);
         enqueueSuccessSnackBar({
-          message: t`Public domain created successfully`,
+          message: t`Custom domain successfully created`,
         });
       },
       onError: (error) => {
@@ -127,22 +145,22 @@ export const SettingPublicDomain = () => {
   };
 
   return (
-    <SubMenuTopBarContainer
-      title={t`Public domain`}
+    <SettingsPageLayout
+      title={t`Custom Domain`}
       links={[
         {
           children: <Trans>Workspace</Trans>,
-          href: getSettingsPath(SettingsPath.Workspace),
+          href: getSettingsPath(SettingsPath.General),
         },
         {
-          children: <Trans>Domains</Trans>,
-          href: getSettingsPath(SettingsPath.Domains),
+          children: <Trans>Apps</Trans>,
+          href: getSettingsPath(SettingsPath.Applications),
         },
-        { children: <Trans>Public Domain</Trans> },
+        { children: <Trans>Custom Domain</Trans> },
       ]}
       actionButton={
         <SaveAndCancelButtons
-          onCancel={() => navigate(SettingsPath.Domains)}
+          onCancel={() => navigate(SettingsPath.Applications)}
           isSaveDisabled={loading || isDefined(selectedPublicDomain)}
           onSave={onCreate}
         />
@@ -151,8 +169,8 @@ export const SettingPublicDomain = () => {
       <SettingsPageContainer>
         <Section>
           <H2Title
-            title={t`Public domain`}
-            description={t`Set the name of your public domain and configure your DNS records.`}
+            title={t`Custom Domain`}
+            description={t`Set the name of your custom domain and configure your DNS records.`}
           />
           {isDefined(selectedPublicDomain) && (
             <CheckPublicDomainValidRecordsEffect
@@ -166,38 +184,44 @@ export const SettingPublicDomain = () => {
               error={newPublicDomainError}
               type="text"
               disabled={isDefined(selectedPublicDomain)}
-              placeholder="crm.yourPublicDomain.com"
+              placeholder="app.yourdomain.com"
               fullWidth
             />
             {isDefined(selectedPublicDomain) && (
-              <StyledButtonGroup>
-                <StyledButton
-                  isLoading={isLoading}
-                  Icon={IconReload}
-                  title={t`Reload`}
-                  variant="primary"
-                  onClick={() =>
-                    checkPublicDomainRecords(selectedPublicDomain.domain)
-                  }
-                  type="button"
-                />
-                <StyledButton
-                  Icon={IconTrash}
-                  variant="primary"
-                  onClick={onDelete}
-                />
-              </StyledButtonGroup>
+              <StyledButtonGroupContainer>
+                <ButtonGroup>
+                  <StyledButtonContainer>
+                    <Button
+                      isLoading={isLoading}
+                      Icon={IconReload}
+                      title={t`Reload`}
+                      variant="primary"
+                      onClick={() =>
+                        checkPublicDomainRecords(selectedPublicDomain.domain)
+                      }
+                      type="button"
+                    />
+                  </StyledButtonContainer>
+                  <StyledButtonContainer>
+                    <Button
+                      Icon={IconTrash}
+                      variant="primary"
+                      onClick={onDelete}
+                    />
+                  </StyledButtonContainer>
+                </ButtonGroup>
+              </StyledButtonGroupContainer>
             )}
           </StyledDomainFormWrapper>
           {isDefined(selectedPublicDomain) && publicDomainRecords?.domain && (
             <StyledRecordsWrapper>
-              {publicDomainRecords.records && (
+              {isDefined(publicDomainRecords.records) && (
                 <SettingsDomainRecords records={publicDomainRecords.records} />
               )}
             </StyledRecordsWrapper>
           )}
         </Section>
       </SettingsPageContainer>
-    </SubMenuTopBarContainer>
+    </SettingsPageLayout>
   );
 };

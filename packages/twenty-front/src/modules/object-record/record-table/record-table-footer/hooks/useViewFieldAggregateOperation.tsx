@@ -1,37 +1,83 @@
-import { useRecordIndexContextOrThrow } from '@/object-record/record-index/contexts/RecordIndexContext';
 import { RecordTableColumnAggregateFooterDropdownContext } from '@/object-record/record-table/record-table-footer/components/RecordTableColumnAggregateFooterDropdownContext';
 import { viewFieldAggregateOperationState } from '@/object-record/record-table/record-table-footer/states/viewFieldAggregateOperationState';
 import { type ExtendedAggregateOperations } from '@/object-record/record-table/types/ExtendedAggregateOperations';
 import { convertExtendedAggregateOperationToAggregateOperation } from '@/object-record/utils/convertExtendedAggregateOperationToAggregateOperation';
-import { usePersistViewField } from '@/views/hooks/internal/usePersistViewField';
+import { RecordTableWidgetContext } from '@/object-record/record-table-widget/contexts/RecordTableWidgetContext';
+import { recordTableWidgetViewDraftComponentState } from '@/page-layout/states/recordTableWidgetViewDraftComponentState';
+import { useRecordTableWidgetFieldUpdate } from '@/page-layout/widgets/record-table/hooks/useRecordTableWidgetFieldUpdate';
+import { constructViewFromRecordTableWidgetViewSnapshot } from '@/page-layout/widgets/record-table/utils/constructViewFromRecordTableWidgetViewSnapshot';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import { useAtomFamilyStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomFamilyStateValue';
+import { usePerformViewFieldAPIPersist } from '@/views/hooks/internal/usePerformViewFieldAPIPersist';
 import { useGetCurrentViewOnly } from '@/views/hooks/useGetCurrentViewOnly';
-import { useRefreshCoreViewsByObjectMetadataId } from '@/views/hooks/useRefreshCoreViewsByObjectMetadataId';
 import { useContext } from 'react';
-import { useRecoilValue } from 'recoil';
 import { isDefined } from 'twenty-shared/utils';
+
+const MISSING_RECORD_TABLE_WIDGET_PAGE_LAYOUT_ID =
+  '__missing_record_table_widget_page_layout__';
 
 export const useViewFieldAggregateOperation = () => {
   const { fieldMetadataId } = useContext(
     RecordTableColumnAggregateFooterDropdownContext,
   );
   const { currentView } = useGetCurrentViewOnly();
+  const recordTableWidgetContext = useContext(RecordTableWidgetContext);
 
-  const currentViewField = currentView?.viewFields?.find(
+  const recordTableWidgetViewDraft = useAtomComponentStateValue(
+    recordTableWidgetViewDraftComponentState,
+    recordTableWidgetContext?.pageLayoutId ??
+      MISSING_RECORD_TABLE_WIDGET_PAGE_LAYOUT_ID,
+  );
+
+  const draftSnapshot = !isDefined(recordTableWidgetContext)
+    ? undefined
+    : recordTableWidgetViewDraft[recordTableWidgetContext.widgetId];
+
+  const shouldUseRecordTableWidgetDraft =
+    isDefined(recordTableWidgetContext) &&
+    recordTableWidgetContext.isPageLayoutInEditMode &&
+    isDefined(draftSnapshot);
+
+  const currentViewForAggregateOperation = shouldUseRecordTableWidgetDraft
+    ? constructViewFromRecordTableWidgetViewSnapshot(draftSnapshot)
+    : currentView;
+
+  const currentViewField = currentViewForAggregateOperation?.viewFields?.find(
     (viewField) => viewField.fieldMetadataId === fieldMetadataId,
   );
 
-  const { refreshCoreViewsByObjectMetadataId } =
-    useRefreshCoreViewsByObjectMetadataId();
+  const { performViewFieldAPIUpdate } = usePerformViewFieldAPIPersist();
 
-  const { objectMetadataItem } = useRecordIndexContextOrThrow();
-  const { updateViewFields } = usePersistViewField();
+  const { handleFieldUpdated: handleRecordTableWidgetFieldUpdated } =
+    useRecordTableWidgetFieldUpdate({
+      pageLayoutId:
+        recordTableWidgetContext?.pageLayoutId ??
+        MISSING_RECORD_TABLE_WIDGET_PAGE_LAYOUT_ID,
+      widgetId: recordTableWidgetContext?.widgetId ?? '',
+    });
+
   const updateViewFieldAggregateOperation = async (
     aggregateOperation: ExtendedAggregateOperations | null,
   ) => {
     if (!currentViewField) {
       throw new Error('ViewField not found');
     }
-    await updateViewFields([
+
+    const aggregateOperationForPersistence =
+      aggregateOperation === null
+        ? null
+        : convertExtendedAggregateOperationToAggregateOperation(
+            aggregateOperation,
+          );
+
+    if (shouldUseRecordTableWidgetDraft) {
+      handleRecordTableWidgetFieldUpdated(currentViewField.id, {
+        aggregateOperation: aggregateOperationForPersistence,
+      });
+      return;
+    }
+
+    await performViewFieldAPIUpdate([
       {
         input: {
           id: currentViewField.id,
@@ -39,27 +85,20 @@ export const useViewFieldAggregateOperation = () => {
             isVisible: currentViewField.isVisible,
             position: currentViewField.position,
             size: currentViewField.size,
-            aggregateOperation: isDefined(aggregateOperation)
-              ? convertExtendedAggregateOperationToAggregateOperation(
-                  aggregateOperation,
-                )
-              : null,
+            aggregateOperation: aggregateOperationForPersistence,
           },
         },
       },
     ]);
-
-    refreshCoreViewsByObjectMetadataId(objectMetadataItem.id);
   };
 
-  const currentViewFieldAggregateOperation = useRecoilValue(
-    viewFieldAggregateOperationState({
-      viewFieldId: currentViewField?.id ?? '',
-    }),
+  const viewFieldAggregateOperation = useAtomFamilyStateValue(
+    viewFieldAggregateOperationState,
+    { viewFieldId: currentViewField?.id ?? '' },
   );
 
   return {
     updateViewFieldAggregateOperation,
-    currentViewFieldAggregateOperation,
+    currentViewFieldAggregateOperation: viewFieldAggregateOperation,
   };
 };

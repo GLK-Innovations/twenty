@@ -1,7 +1,6 @@
-import { Field, ObjectType } from '@nestjs/graphql';
-
 import { TwoFactorAuthenticationStrategy } from 'twenty-shared/types';
 import {
+  Check,
   Column,
   CreateDateColumn,
   Entity,
@@ -13,22 +12,33 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
+import { type EncryptedString } from 'src/engine/core-modules/secret-encryption/branded-strings/encrypted-string.type';
+
 import { OTPStatus } from 'src/engine/core-modules/two-factor-authentication/strategies/otp/otp.constants';
 import { UserWorkspaceEntity } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
+import type { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
 
 @Index(['userWorkspaceId', 'strategy'], { unique: true })
 @Entity({ name: 'twoFactorAuthenticationMethod', schema: 'core' })
-@ObjectType('TwoFactorAuthenticationMethod')
+@Check(
+  'CHK_twoFactorAuthenticationMethod_secret_encrypted',
+  `"secret" LIKE 'enc:v2:%'`,
+)
 export class TwoFactorAuthenticationMethodEntity {
-  @Field()
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Field({ nullable: false })
+  @Column({ nullable: false, type: 'uuid' })
+  @Index()
+  workspaceId: string;
+
+  @ManyToOne('WorkspaceEntity', { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'workspaceId' })
+  workspace: Relation<WorkspaceEntity>;
+
   @Column({ nullable: false, type: 'uuid' })
   userWorkspaceId: string;
 
-  @Field(() => UserWorkspaceEntity)
   @ManyToOne(
     () => UserWorkspaceEntity,
     (userWorkspace) => userWorkspace.twoFactorAuthenticationMethods,
@@ -40,7 +50,7 @@ export class TwoFactorAuthenticationMethodEntity {
   userWorkspace: Relation<UserWorkspaceEntity>;
 
   @Column({ nullable: false, type: 'text' })
-  secret: string;
+  secret: EncryptedString;
 
   @Column({
     type: 'enum',
@@ -49,22 +59,18 @@ export class TwoFactorAuthenticationMethodEntity {
   })
   status: OTPStatus;
 
-  @Field(() => TwoFactorAuthenticationStrategy)
   @Column({
     type: 'enum',
     enum: TwoFactorAuthenticationStrategy,
   })
   strategy: TwoFactorAuthenticationStrategy;
 
-  @Field()
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 
-  @Field()
   @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
 
-  @Field({ nullable: true })
   @Column({ nullable: true, type: 'timestamptz' })
   deletedAt: Date;
 }

@@ -1,16 +1,41 @@
-import styled from '@emotion/styled';
-import { Card } from 'twenty-ui/layout';
+import { styled } from '@linaria/react';
+import { Card } from 'twenty-ui/surfaces';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
 
-const StyledList = styled(Card)`
-  & > :not(:last-child) {
-    border-bottom: 1px solid ${({ theme }) => theme.border.color.light};
+const StyledListContainer = styled.div`
+  width: 100%;
+
+  &[data-scrollable] {
+    flex: 1;
+    height: 100%;
+    min-height: 0;
+
+    > * {
+      box-sizing: border-box;
+      height: 100%;
+      overflow-y: auto;
+    }
   }
 
-  width: calc(100% - 2px);
-
-  overflow: auto;
+  > * {
+    & > :not(:last-child) {
+      border-bottom: 1px solid ${themeCssVariables.border.color.light};
+    }
+    width: calc(100% - 2px);
+  }
 `;
 
-export const ActivityList = ({ children }: React.PropsWithChildren) => {
-  return <StyledList>{children}</StyledList>;
+type ActivityListProps = React.PropsWithChildren<{
+  isScrollable?: boolean;
+}>;
+
+export const ActivityList = ({
+  children,
+  isScrollable = false,
+}: ActivityListProps) => {
+  return (
+    <StyledListContainer data-scrollable={isScrollable || undefined}>
+      <Card>{children}</Card>
+    </StyledListContainer>
+  );
 };

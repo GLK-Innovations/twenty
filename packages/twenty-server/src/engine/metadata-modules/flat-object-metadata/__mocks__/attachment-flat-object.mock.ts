@@ -1,17 +1,19 @@
+import { TWENTY_STANDARD_APPLICATION_UNIVERSAL_IDENTIFIER } from 'twenty-shared/application';
+
 import { getFlatObjectMetadataMock } from 'src/engine/metadata-modules/flat-object-metadata/__mocks__/get-flat-object-metadata.mock';
 
 export const ATTACHMENT_FLAT_OBJECT_MOCK = getFlatObjectMetadataMock({
   id: '819ed5ff-312f-4423-8e95-02a691cf5c27',
-  standardId: '20202020-bd3d-4c60-8dca-571c71d4447a',
   nameSingular: 'attachment',
+  applicationUniversalIdentifier:
+    TWENTY_STANDARD_APPLICATION_UNIVERSAL_IDENTIFIER,
   namePlural: 'attachments',
   labelSingular: 'Attachment',
   labelPlural: 'Attachments',
   description: 'An attachment',
   icon: 'IconFileImport',
-  standardOverrides: null,
+  overrides: null,
   targetTableName: 'DEPRECATED',
-  isCustom: false,
   isRemote: false,
   isActive: true,
   isSystem: true,

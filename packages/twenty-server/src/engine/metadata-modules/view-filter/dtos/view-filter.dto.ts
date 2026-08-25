@@ -1,6 +1,4 @@
 import { Field, ObjectType, registerEnumType } from '@nestjs/graphql';
-
-import { IDField } from '@ptc-org/nestjs-query-graphql';
 import GraphQLJSON from 'graphql-type-json';
 import { ViewFilterOperand } from 'twenty-shared/types';
 
@@ -11,9 +9,9 @@ registerEnumType(ViewFilterOperand, {
   name: 'ViewFilterOperand',
 });
 
-@ObjectType('CoreViewFilter')
+@ObjectType('ViewFilter')
 export class ViewFilterDTO {
-  @IDField(() => UUIDScalarType)
+  @Field(() => UUIDScalarType)
   id: string;
 
   @Field(() => UUIDScalarType, { nullable: false })
@@ -33,6 +31,9 @@ export class ViewFilterDTO {
 
   @Field(() => String, { nullable: true })
   subFieldName?: string | null;
+
+  @Field(() => UUIDScalarType, { nullable: true })
+  relationTargetFieldMetadataId?: string | null;
 
   @Field(() => UUIDScalarType, { nullable: false })
   viewId: string;

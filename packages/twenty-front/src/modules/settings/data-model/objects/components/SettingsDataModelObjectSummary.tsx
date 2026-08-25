@@ -1,19 +1,26 @@
-import { useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
+import { t } from '@lingui/core/macro';
+import { useContext } from 'react';
 
-import { type ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
-import {
-  IconBox,
-  OverflowingTextWithTooltip,
-  useIcons,
-} from 'twenty-ui/display';
+import { ObjectMetadataIcon } from '@/object-metadata/components/ObjectMetadataIcon';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
 import { SettingsItemTypeTag } from '@/settings/components/SettingsItemTypeTag';
+import { IconBox } from 'twenty-ui/icon';
+import { OverflowingTextWithTooltip } from 'twenty-ui/surfaces';
+import { ThemeContext, themeCssVariables } from 'twenty-ui/theme-constants';
 
 export type SettingsDataModelObjectPreviewProps = {
   className?: string;
   objectMetadataItems: Pick<
-    ObjectMetadataItem,
-    'icon' | 'labelSingular' | 'labelPlural' | 'isCustom' | 'isRemote'
+    EnrichedObjectMetadataItem,
+    | 'icon'
+    | 'labelSingular'
+    | 'labelPlural'
+    | 'applicationId'
+    | 'isRemote'
+    | 'nameSingular'
+    | 'color'
+    | 'isSystem'
   >[];
   pluralizeLabel?: boolean;
 };
@@ -26,17 +33,17 @@ const StyledObjectPreview = styled.div`
 
 const StyledObjectName = styled.div`
   display: flex;
-  gap: ${({ theme }) => theme.spacing(2)};
+  gap: ${themeCssVariables.spacing[2]};
   max-width: 60%;
 `;
 
 const StyledOverflowingTextWithTooltip = styled.div`
-  color: ${({ theme }) => theme.font.color.tertiary};
+  color: ${themeCssVariables.font.color.tertiary};
 `;
 
 const StyledNumber = styled.div`
-  color: ${({ theme }) => theme.font.color.tertiary};
-  padding-right: ${({ theme }) => theme.spacing(2)};
+  color: ${themeCssVariables.font.color.tertiary};
+  padding-right: ${themeCssVariables.spacing[2]};
 `;
 
 const StyledIconContainer = styled.div`
@@ -45,16 +52,23 @@ const StyledIconContainer = styled.div`
 
 const StyledSeparator = styled.div`
   align-self: stretch;
-  background: ${({ theme }) => theme.background.quaternary};
+  background: ${themeCssVariables.background.quaternary};
   height: 1px;
-  margin-bottom: ${({ theme }) => theme.spacing(2)};
-  margin-top: ${({ theme }) => theme.spacing(2)};
+  margin-bottom: ${themeCssVariables.spacing[2]};
+  margin-top: ${themeCssVariables.spacing[2]};
 `;
 
 type SettingsDataModelObjectPreviewItemProps = {
   objectMetadataItem: Pick<
-    ObjectMetadataItem,
-    'icon' | 'labelSingular' | 'labelPlural' | 'isCustom' | 'isRemote'
+    EnrichedObjectMetadataItem,
+    | 'icon'
+    | 'labelSingular'
+    | 'labelPlural'
+    | 'applicationId'
+    | 'isRemote'
+    | 'nameSingular'
+    | 'color'
+    | 'isSystem'
   >;
   pluralizeLabel: boolean;
   index: number;
@@ -65,9 +79,7 @@ const SettingsDataModelObjectPreviewItem = ({
   pluralizeLabel = true,
   index,
 }: SettingsDataModelObjectPreviewItemProps) => {
-  const theme = useTheme();
-  const { getIcon } = useIcons();
-  const ObjectIcon = getIcon(objectMetadataItem.icon);
+  const { theme } = useContext(ThemeContext);
 
   return (
     <>
@@ -75,7 +87,8 @@ const SettingsDataModelObjectPreviewItem = ({
       <StyledObjectPreview key={`${objectMetadataItem.labelSingular}-${index}`}>
         <StyledObjectName>
           <StyledIconContainer>
-            <ObjectIcon
+            <ObjectMetadataIcon
+              objectMetadataItem={objectMetadataItem}
               size={theme.icon.size.sm}
               stroke={theme.icon.stroke.md}
             />
@@ -99,7 +112,8 @@ const SettingsDataModelObjectPreviewOtherObjects = ({
 }: {
   selected: number;
 }) => {
-  const theme = useTheme();
+  const { theme } = useContext(ThemeContext);
+
   return (
     <>
       <StyledSeparator />
@@ -113,7 +127,7 @@ const SettingsDataModelObjectPreviewOtherObjects = ({
             />
           </StyledIconContainer>
           <StyledOverflowingTextWithTooltip>
-            <OverflowingTextWithTooltip text={`Other objects`} />
+            <OverflowingTextWithTooltip text={t`Other objects`} />
           </StyledOverflowingTextWithTooltip>
         </StyledObjectName>
         <StyledNumber>

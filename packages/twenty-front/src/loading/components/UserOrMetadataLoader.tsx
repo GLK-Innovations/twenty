@@ -1,37 +1,36 @@
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
 
-import { useShowAuthModal } from '@/ui/layout/hooks/useShowAuthModal';
-import { Modal } from '@/ui/layout/modal/components/Modal';
-import { NAV_DRAWER_WIDTHS } from '@/ui/navigation/navigation-drawer/constants/NavDrawerWidths';
-import { MOBILE_VIEWPORT } from 'twenty-ui/theme';
+import { NAVIGATION_DRAWER_CONSTRAINTS } from '@/ui/layout/resizable-panel/constants/NavigationDrawerConstraints';
+import { MOBILE_VIEWPORT, themeCssVariables } from 'twenty-ui/theme-constants';
 import { LeftPanelSkeletonLoader } from '~/loading/components/LeftPanelSkeletonLoader';
-import { RightPanelSkeletonLoader } from '~/loading/components/RightPanelSkeletonLoader';
+import { PageContentSkeletonLoader } from '~/loading/components/PageContentSkeletonLoader';
 
 const StyledContainer = styled.div`
-  background: ${({ theme }) => theme.background.noisy};
+  background: ${themeCssVariables.background.tertiary};
   box-sizing: border-box;
   display: flex;
   flex-direction: row;
-  gap: 12px;
-  height: 100dvh;
-  min-width: ${NAV_DRAWER_WIDTHS.menu.desktop.expanded}px;
-  width: 100%;
-  padding: 12px 8px 12px 8px;
+  height: calc(100dvh / var(--t-zoom, 1));
+  min-width: ${NAVIGATION_DRAWER_CONSTRAINTS.default}px;
   overflow: hidden;
+  width: 100%;
 
   @media (max-width: ${MOBILE_VIEWPORT}px) {
     width: 100%;
   }
 `;
 
-export const UserOrMetadataLoader = () => {
-  const showAuthModal = useShowAuthModal();
+const StyledLeftPanelWrapper = styled.div`
+  flex-shrink: 0;
+`;
 
+export const UserOrMetadataLoader = () => {
   return (
     <StyledContainer>
-      {showAuthModal && <Modal.Backdrop modalVariant="primary" />}
-      <LeftPanelSkeletonLoader />
-      <RightPanelSkeletonLoader />
+      <StyledLeftPanelWrapper>
+        <LeftPanelSkeletonLoader />
+      </StyledLeftPanelWrapper>
+      <PageContentSkeletonLoader />
     </StyledContainer>
   );
 };

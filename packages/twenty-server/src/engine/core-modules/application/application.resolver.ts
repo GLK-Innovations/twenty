@@ -1,75 +1,86 @@
-import { UseFilters, UseGuards } from '@nestjs/common';
-import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
+import { UseGuards } from '@nestjs/common';
+import { Args, Parent, Query, ResolveField } from '@nestjs/graphql';
 
+import { ApiPath } from 'twenty-shared/types';
+import { isAbsoluteUrl, isDefined } from 'twenty-shared/utils';
+
+import { MetadataResolver } from 'src/engine/api/graphql/graphql-config/decorators/metadata-resolver.decorator';
 import { UUIDScalarType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/scalars';
-import { ApplicationExceptionFilter } from 'src/engine/core-modules/application/application-exception-filter';
-import { ApplicationSyncService } from 'src/engine/core-modules/application/application-sync.service';
-import { ApplicationService } from 'src/engine/core-modules/application/application.service';
+import { ApplicationStopService } from 'src/engine/core-modules/application/application-stop/application-stop.service';
 import { ApplicationDTO } from 'src/engine/core-modules/application/dtos/application.dto';
-import { ApplicationInput } from 'src/engine/core-modules/application/dtos/application.input';
-import { DeleteApplicationInput } from 'src/engine/core-modules/application/dtos/deleteApplication.input';
-import { FeatureFlagKey } from 'src/engine/core-modules/feature-flag/enums/feature-flag-key.enum';
+import { SdkClientChecksumsDTO } from 'src/engine/core-modules/sdk-client/dtos/sdk-client-checksums.dto';
+import { getInstalledSdkMetadataModule } from 'src/engine/core-modules/sdk-client/utils/get-installed-sdk-metadata-module.util';
+import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
 import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
 import { AuthWorkspace } from 'src/engine/decorators/auth/auth-workspace.decorator';
-import { RequireFeatureFlag } from 'src/engine/guards/feature-flag.guard';
-import { SettingsPermissionGuard } from 'src/engine/guards/settings-permission.guard';
+import { NoPermissionGuard } from 'src/engine/guards/no-permission.guard';
 import { WorkspaceAuthGuard } from 'src/engine/guards/workspace-auth.guard';
-import { PermissionFlagType } from 'src/engine/metadata-modules/permissions/constants/permission-flag-type.constants';
+import { WorkspaceCacheService } from 'src/engine/workspace-cache/services/workspace-cache.service';
 
-@UseGuards(
-  WorkspaceAuthGuard,
-  SettingsPermissionGuard(PermissionFlagType.APPLICATIONS),
-)
-@Resolver()
-@UseFilters(ApplicationExceptionFilter)
+@UseGuards(WorkspaceAuthGuard, NoPermissionGuard)
+@MetadataResolver(() => ApplicationDTO)
 export class ApplicationResolver {
   constructor(
-    private readonly applicationSyncService: ApplicationSyncService,
-    private readonly applicationService: ApplicationService,
+    private readonly twentyConfigService: TwentyConfigService,
+    private readonly workspaceCacheService: WorkspaceCacheService,
+    private readonly applicationStopService: ApplicationStopService,
   ) {}
 
-  @Query(() => [ApplicationDTO])
-  @RequireFeatureFlag(FeatureFlagKey.IS_APPLICATION_ENABLED)
-  async findManyApplications(
-    @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,
-  ) {
-    return this.applicationService.findManyApplications(workspaceId);
+  @Query(() => SdkClientChecksumsDTO, { nullable: true })
+  async applicationSdkClientChecksums(
+    @Args('applicationId', { type: () => UUIDScalarType })
+    applicationId: string,
+    @AuthWorkspace() workspace: WorkspaceEntity,
+  ): Promise<SdkClientChecksumsDTO | null> {
+    const { flatApplicationMaps } =
+      await this.workspaceCacheService.getOrRecompute(workspace.id, [
+        'flatApplicationMaps',
+      ]);
+
+    const application = flatApplicationMaps.byId[applicationId];
+
+    if (!isDefined(application)) {
+      return null;
+    }
+
+    return {
+      core: application.sdkClientCoreChecksum,
+      metadata: (await getInstalledSdkMetadataModule()).checksum,
+    };
   }
 
-  @Query(() => ApplicationDTO)
-  @RequireFeatureFlag(FeatureFlagKey.IS_APPLICATION_ENABLED)
-  async findOneApplication(
-    @Args('id', { type: () => UUIDScalarType }) id: string,
-    @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,
-  ) {
-    return await this.applicationService.findOneApplication(id, workspaceId);
+  // Surfaces the kill switch so clients can warn users that the app is
+  // temporarily stopped and behaving in a degraded way. Kept as a dedicated
+  // query so listing applications does not trigger one Redis read per app.
+  @Query(() => Boolean)
+  async isApplicationStopped(
+    @Args('applicationUniversalIdentifier')
+    applicationUniversalIdentifier: string,
+  ): Promise<boolean> {
+    return this.applicationStopService.isApplicationStopped(
+      applicationUniversalIdentifier,
+    );
   }
 
-  @Mutation(() => Boolean)
-  async syncApplication(
-    @Args() { manifest, packageJson, yarnLock }: ApplicationInput,
-    @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,
-  ) {
-    await this.applicationSyncService.synchronizeFromManifest({
-      workspaceId,
-      manifest,
-      yarnLock,
-      packageJson,
-    });
+  // Resolves the display url of the logo bundled in the installed
+  // application's public assets, so clients never build file urls themselves.
+  @ResolveField(() => String, { nullable: true })
+  logoUrl(
+    @Parent() application: Pick<ApplicationDTO, 'id' | 'logo'>,
+    @AuthWorkspace() workspace: WorkspaceEntity,
+  ): string | null {
+    const logo = application.logo;
 
-    return true;
-  }
+    if (!isDefined(logo) || logo.length === 0) {
+      return null;
+    }
 
-  @Mutation(() => Boolean)
-  async deleteApplication(
-    @Args() { universalIdentifier }: DeleteApplicationInput,
-    @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,
-  ) {
-    await this.applicationSyncService.deleteApplication({
-      applicationUniversalIdentifier: universalIdentifier,
-      workspaceId,
-    });
+    if (isAbsoluteUrl(logo)) {
+      return logo;
+    }
 
-    return true;
+    const serverUrl = this.twentyConfigService.get('SERVER_URL');
+
+    return `${serverUrl}/${ApiPath.PublicAssets}/${workspace.id}/${application.id}/${logo}`;
   }
 }

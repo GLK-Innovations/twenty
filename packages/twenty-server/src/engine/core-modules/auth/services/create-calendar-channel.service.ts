@@ -1,29 +1,29 @@
 import { Injectable } from '@nestjs/common';
 
 import { v4 } from 'uuid';
+import { EntityManager } from 'typeorm';
 
-import { type WorkspaceEntityManager } from 'src/engine/twenty-orm/entity-manager/workspace-entity-manager';
-import { TwentyORMGlobalManager } from 'src/engine/twenty-orm/twenty-orm-global.manager';
 import {
   CalendarChannelSyncStage,
   CalendarChannelSyncStatus,
   CalendarChannelVisibility,
-  type CalendarChannelWorkspaceEntity,
-} from 'src/modules/calendar/common/standard-objects/calendar-channel.workspace-entity';
+} from 'twenty-shared/types';
+import { CalendarChannelEntity } from 'src/engine/metadata-modules/calendar-channel/entities/calendar-channel.entity';
+import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
+import { buildSystemAuthContext } from 'src/engine/twenty-orm/utils/build-system-auth-context.util';
 
 export type CreateCalendarChannelInput = {
   workspaceId: string;
   connectedAccountId: string;
   handle: string;
   calendarVisibility?: CalendarChannelVisibility;
-  manager: WorkspaceEntityManager;
+  skipMessageChannelConfiguration?: boolean;
+  transactionManager: EntityManager;
 };
 
 @Injectable()
 export class CreateCalendarChannelService {
-  constructor(
-    private readonly twentyORMGlobalManager: TwentyORMGlobalManager,
-  ) {}
+  constructor(private readonly workspaceOrmManager: WorkspaceOrmManager) {}
 
   async createCalendarChannel(
     input: CreateCalendarChannelInput,
@@ -33,29 +33,30 @@ export class CreateCalendarChannelService {
       connectedAccountId,
       handle,
       calendarVisibility,
-      manager,
+      skipMessageChannelConfiguration,
+      transactionManager,
     } = input;
 
-    const calendarChannelRepository =
-      await this.twentyORMGlobalManager.getRepositoryForWorkspace<CalendarChannelWorkspaceEntity>(
-        workspaceId,
-        'calendarChannel',
-      );
+    const authContext = buildSystemAuthContext(workspaceId);
 
-    const newCalendarChannel = await calendarChannelRepository.save(
-      {
-        id: v4(),
+    return this.workspaceOrmManager.executeInWorkspaceContext(async () => {
+      const newCalendarChannelId = v4();
+
+      await transactionManager.getRepository(CalendarChannelEntity).save({
+        id: newCalendarChannelId,
         connectedAccountId,
         handle,
-        visibility:
-          calendarVisibility || CalendarChannelVisibility.SHARE_EVERYTHING,
-        syncStatus: CalendarChannelSyncStatus.NOT_SYNCED,
-        syncStage: CalendarChannelSyncStage.PENDING_CONFIGURATION,
-      },
-      {},
-      manager,
-    );
+        visibility: calendarVisibility || CalendarChannelVisibility.METADATA,
+        syncStatus: skipMessageChannelConfiguration
+          ? CalendarChannelSyncStatus.ONGOING
+          : CalendarChannelSyncStatus.NOT_SYNCED,
+        syncStage: skipMessageChannelConfiguration
+          ? CalendarChannelSyncStage.CALENDAR_EVENT_LIST_FETCH_PENDING
+          : CalendarChannelSyncStage.PENDING_CONFIGURATION,
+        workspaceId,
+      } as CalendarChannelEntity);
 
-    return newCalendarChannel.id;
+      return newCalendarChannelId;
+    }, authContext);
   }
 }

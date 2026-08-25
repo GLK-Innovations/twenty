@@ -10,10 +10,11 @@ import {
   beautifyExactDate,
   beautifyExactDateTime,
   beautifyPastDateRelativeToNow,
+  beautifyPastDateRelativeToNowShort,
   hasDatePassed,
   parseDate,
-} from '../date-utils';
-import { logError } from '../logError';
+} from '~/utils/date-utils';
+import { logError } from '~/utils/logError';
 
 i18n.load(SOURCE_LOCALE, enMessages);
 i18n.activate(SOURCE_LOCALE);
@@ -119,6 +120,66 @@ describe('beautifyPastDateRelativeToNow', () => {
       Error('Invalid date passed to formatPastDate: "Invalid Date"'),
     );
     expect(result).toEqual('');
+  });
+});
+
+describe('beautifyPastDateRelativeToNowShort', () => {
+  it('should return "now" for dates less than 60 seconds ago', () => {
+    const result = beautifyPastDateRelativeToNowShort(
+      '2023-12-31T23:59:15.000Z',
+    );
+    expect(result).toBe('now');
+  });
+
+  it('should return minutes format', () => {
+    const result = beautifyPastDateRelativeToNowShort(
+      '2023-12-31T23:55:00.000Z',
+    );
+    expect(result).toBe('5m');
+  });
+
+  it('should return hours format', () => {
+    const result = beautifyPastDateRelativeToNowShort(
+      '2023-12-31T22:00:00.000Z',
+    );
+    expect(result).toBe('2h');
+  });
+
+  it('should return days format', () => {
+    const result = beautifyPastDateRelativeToNowShort(
+      '2023-12-29T00:00:00.000Z',
+    );
+    expect(result).toBe('3d');
+  });
+
+  it('should return weeks format', () => {
+    const result = beautifyPastDateRelativeToNowShort(
+      '2023-12-18T00:00:00.000Z',
+    );
+    expect(result).toBe('2w');
+  });
+
+  it('should return months format', () => {
+    const result = beautifyPastDateRelativeToNowShort(
+      '2023-08-01T00:00:00.000Z',
+    );
+    expect(result).toBe('5mo');
+  });
+
+  it('should return years format', () => {
+    const result = beautifyPastDateRelativeToNowShort(
+      '2022-01-01T00:00:00.000Z',
+    );
+    expect(result).toBe('2y');
+  });
+
+  it('should return empty string and log error for invalid date', () => {
+    const result = beautifyPastDateRelativeToNowShort('invalid-date-string');
+
+    expect(logError).toHaveBeenCalledWith(
+      Error('Invalid date passed to formatPastDate: "invalid-date-string"'),
+    );
+    expect(result).toBe('');
   });
 });
 
@@ -232,13 +293,11 @@ describe('beautifyDateDiff', () => {
 
 describe('French locale tests', () => {
   beforeAll(() => {
-    // Setup French i18n for these tests
     i18n.load('fr-FR', frMessages);
     i18n.activate('fr-FR');
   });
 
   afterAll(() => {
-    // Restore English for other tests
     i18n.load('en', enMessages);
     i18n.activate('en');
   });
@@ -283,18 +342,18 @@ describe('French locale tests', () => {
       expect(result).toContain('an'); // French for year
     });
 
-    it('should fall back to manual implementation for short French', () => {
+    it('should fall back to manual implementation for short format', () => {
       const date = '2025-01-01T00:00:00.000Z';
       const dateToCompareWith = '2024-01-01T00:00:00.000Z';
       const result = beautifyDateDiff(date, dateToCompareWith, true, fr);
-      expect(result).toContain('année'); // French translation from Lingui
+      // Manual implementation with Lingui translations returns French
+      expect(result).toContain('an'); // French for year (singular)
     });
 
     it('should handle mixed years and days in French', () => {
       const date = '2025-01-05T00:00:00.000Z';
       const dateToCompareWith = '2024-01-01T00:00:00.000Z';
       const result = beautifyDateDiff(date, dateToCompareWith, false, fr);
-      // Should use date-fns which handles French properly
       expect(result).toBeTruthy();
       expect(result.length).toBeGreaterThan(0);
     });

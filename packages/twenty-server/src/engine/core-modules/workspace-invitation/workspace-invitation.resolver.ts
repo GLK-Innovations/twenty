@@ -1,11 +1,13 @@
 import { UseFilters, UseGuards, UsePipes } from '@nestjs/common';
-import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
+import { Args, Mutation, Query } from '@nestjs/graphql';
 
-import { FileService } from 'src/engine/core-modules/file/services/file.service';
+import { PermissionFlagType } from 'twenty-shared/constants';
+
+import { MetadataResolver } from 'src/engine/api/graphql/graphql-config/decorators/metadata-resolver.decorator';
 import { PreventNestToAutoLogGraphqlErrorsFilter } from 'src/engine/core-modules/graphql/filters/prevent-nest-to-auto-log-graphql-errors.filter';
 import { ResolverValidationPipe } from 'src/engine/core-modules/graphql/pipes/resolver-validation.pipe';
-import { UserEntity } from 'src/engine/core-modules/user/user.entity';
-import { SendInvitationsOutput } from 'src/engine/core-modules/workspace-invitation/dtos/send-invitations.output';
+import { type AuthContextUser } from 'src/engine/core-modules/auth/types/auth-context.type';
+import { SendInvitationsDTO } from 'src/engine/core-modules/workspace-invitation/dtos/send-invitations.dto';
 import { WorkspaceInvitation } from 'src/engine/core-modules/workspace-invitation/dtos/workspace-invitation.dto';
 import { WorkspaceInvitationService } from 'src/engine/core-modules/workspace-invitation/services/workspace-invitation.service';
 import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
@@ -14,9 +16,9 @@ import { AuthWorkspace } from 'src/engine/decorators/auth/auth-workspace.decorat
 import { SettingsPermissionGuard } from 'src/engine/guards/settings-permission.guard';
 import { UserAuthGuard } from 'src/engine/guards/user-auth.guard';
 import { WorkspaceAuthGuard } from 'src/engine/guards/workspace-auth.guard';
-import { PermissionFlagType } from 'src/engine/metadata-modules/permissions/constants/permission-flag-type.constants';
 import { PermissionsGraphqlApiExceptionFilter } from 'src/engine/metadata-modules/permissions/utils/permissions-graphql-api-exception.filter';
-import { TwentyORMGlobalManager } from 'src/engine/twenty-orm/twenty-orm-global.manager';
+import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
+import { buildSystemAuthContext } from 'src/engine/twenty-orm/utils/build-system-auth-context.util';
 import { WorkspaceMemberWorkspaceEntity } from 'src/modules/workspace-member/standard-objects/workspace-member.workspace-entity';
 
 import { SendInvitationsInput } from './dtos/send-invitations.input';
@@ -30,12 +32,11 @@ import { SendInvitationsInput } from './dtos/send-invitations.input';
   PermissionsGraphqlApiExceptionFilter,
   PreventNestToAutoLogGraphqlErrorsFilter,
 )
-@Resolver()
+@MetadataResolver()
 export class WorkspaceInvitationResolver {
   constructor(
-    private readonly twentyORMGlobalManager: TwentyORMGlobalManager,
+    private readonly workspaceOrmManager: WorkspaceOrmManager,
     private readonly workspaceInvitationService: WorkspaceInvitationService,
-    private readonly fileService: FileService,
   ) {}
 
   @Mutation(() => String)
@@ -49,25 +50,29 @@ export class WorkspaceInvitationResolver {
     );
   }
 
-  @Mutation(() => SendInvitationsOutput)
+  @Mutation(() => SendInvitationsDTO)
   @UseGuards(UserAuthGuard)
   async resendWorkspaceInvitation(
     @Args('appTokenId') appTokenId: string,
     @AuthWorkspace() workspace: WorkspaceEntity,
-    @AuthUser() user: UserEntity,
+    @AuthUser() user: AuthContextUser,
   ) {
-    const workspaceMemberRepository =
-      await this.twentyORMGlobalManager.getRepositoryForWorkspace<WorkspaceMemberWorkspaceEntity>(
-        workspace.id,
-        'workspaceMember',
-        { shouldBypassPermissionChecks: true },
-      );
+    const authContext = buildSystemAuthContext(workspace.id);
 
-    const workspaceMember = await workspaceMemberRepository.findOneOrFail({
-      where: {
-        userId: user.id,
-      },
-    });
+    const workspaceMember =
+      await this.workspaceOrmManager.executeInWorkspaceContext(async () => {
+        const workspaceMemberRepository =
+          this.workspaceOrmManager.getRepository<WorkspaceMemberWorkspaceEntity>(
+            'workspaceMember',
+            { shouldBypassPermissionChecks: true },
+          );
+
+        return workspaceMemberRepository.findOneOrFail({
+          where: {
+            userId: user.id,
+          },
+        });
+      }, authContext);
 
     return this.workspaceInvitationService.resendWorkspaceInvitation(
       appTokenId,
@@ -81,30 +86,35 @@ export class WorkspaceInvitationResolver {
     return this.workspaceInvitationService.loadWorkspaceInvitations(workspace);
   }
 
-  @Mutation(() => SendInvitationsOutput)
+  @Mutation(() => SendInvitationsDTO)
   @UseGuards(UserAuthGuard)
   async sendInvitations(
     @Args() sendInviteLinkInput: SendInvitationsInput,
-    @AuthUser() user: UserEntity,
+    @AuthUser() user: AuthContextUser,
     @AuthWorkspace() workspace: WorkspaceEntity,
-  ): Promise<SendInvitationsOutput> {
-    const workspaceMemberRepository =
-      await this.twentyORMGlobalManager.getRepositoryForWorkspace<WorkspaceMemberWorkspaceEntity>(
-        workspace.id,
-        'workspaceMember',
-        { shouldBypassPermissionChecks: true },
-      );
+  ): Promise<SendInvitationsDTO> {
+    const authContext = buildSystemAuthContext(workspace.id);
 
-    const workspaceMember = await workspaceMemberRepository.findOneOrFail({
-      where: {
-        userId: user.id,
-      },
-    });
+    const workspaceMember =
+      await this.workspaceOrmManager.executeInWorkspaceContext(async () => {
+        const workspaceMemberRepository =
+          this.workspaceOrmManager.getRepository<WorkspaceMemberWorkspaceEntity>(
+            'workspaceMember',
+            { shouldBypassPermissionChecks: true },
+          );
 
-    return await this.workspaceInvitationService.sendInvitations(
-      sendInviteLinkInput.emails,
+        return workspaceMemberRepository.findOneOrFail({
+          where: {
+            userId: user.id,
+          },
+        });
+      }, authContext);
+
+    return await this.workspaceInvitationService.sendInvitations({
+      emails: sendInviteLinkInput.emails,
       workspace,
-      workspaceMember,
-    );
+      sender: workspaceMember,
+      roleId: sendInviteLinkInput.roleId ?? undefined,
+    });
   }
 }

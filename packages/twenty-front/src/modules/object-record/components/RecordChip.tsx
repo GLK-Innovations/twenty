@@ -1,21 +1,20 @@
-import { useOpenRecordInCommandMenu } from '@/command-menu/hooks/useOpenRecordInCommandMenu';
-import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
+import { useOpenRecordInSidePanel } from '@/side-panel/hooks/useOpenRecordInSidePanel';
 import { getLinkToShowPage } from '@/object-metadata/utils/getLinkToShowPage';
 import { useRecordChipData } from '@/object-record/hooks/useRecordChipData';
-import { recordIndexOpenRecordInState } from '@/object-record/record-index/states/recordIndexOpenRecordInState';
+import { useResolveOpenRecordIn } from '@/object-record/record-index/hooks/useResolveOpenRecordIn';
 import { type ObjectRecord } from '@/object-record/types/ObjectRecord';
-import { canOpenObjectInSidePanel } from '@/object-record/utils/canOpenObjectInSidePanel';
-import { ViewOpenRecordInType } from '@/views/types/ViewOpenRecordInType';
+import { CoreObjectNameSingular, OpenRecordIn } from 'twenty-shared/types';
+import { getAbsoluteImageUrl } from '~/utils/image/getAbsoluteImageUrl';
+import { t } from '@lingui/core/macro';
 import { type MouseEvent } from 'react';
-import { useRecoilValue } from 'recoil';
 import { isDefined } from 'twenty-shared/utils';
 import {
-  AvatarChip,
+  AvatarOrIcon,
   Chip,
   type ChipSize,
   ChipVariant,
   LinkChip,
-} from 'twenty-ui/components';
+} from 'twenty-ui/data-display';
 import { type TriggerEventType } from 'twenty-ui/utilities';
 
 export type RecordChipProps = {
@@ -24,6 +23,7 @@ export type RecordChipProps = {
   className?: string;
   variant?: ChipVariant.Highlighted | ChipVariant.Transparent;
   forceDisableClick?: boolean;
+  isBold?: boolean;
   maxWidth?: number;
   to?: string | undefined;
   size?: ChipSize;
@@ -38,6 +38,7 @@ export const RecordChip = ({
   record,
   className,
   variant,
+  isBold = false,
   maxWidth,
   to,
   size,
@@ -52,20 +53,15 @@ export const RecordChip = ({
     record,
   });
 
-  const { openRecordInCommandMenu } = useOpenRecordInCommandMenu();
+  const { openRecordInSidePanel } = useOpenRecordInSidePanel();
 
-  const recordIndexOpenRecordIn = useRecoilValue(recordIndexOpenRecordInState);
-  const canOpenInSidePanel = canOpenObjectInSidePanel(objectNameSingular);
-
-  const isSidePanelViewOpenRecordInType =
-    recordIndexOpenRecordIn === ViewOpenRecordInType.SIDE_PANEL &&
-    canOpenInSidePanel;
+  const openRecordIn = useResolveOpenRecordIn(objectNameSingular);
 
   const handleCustomClick = isDefined(onClick)
     ? onClick
-    : isSidePanelViewOpenRecordInType
+    : openRecordIn === OpenRecordIn.SIDE_PANEL
       ? (_event: MouseEvent<HTMLElement>) => {
-          openRecordInCommandMenu({
+          openRecordInSidePanel({
             recordId: record.id,
             objectNameSingular,
           });
@@ -81,17 +77,19 @@ export const RecordChip = ({
     return (
       <Chip
         label={recordChipData.name}
+        emptyLabel={t`Untitled`}
+        isBold={isBold}
         size={size}
         maxWidth={maxWidth}
         className={className}
         variant={ChipVariant.Transparent}
         leftComponent={
           isIconHidden ? null : (
-            <AvatarChip
+            <AvatarOrIcon
               placeholder={recordChipData.name}
               placeholderColorSeed={record.id}
               avatarType={recordChipData.avatarType}
-              avatarUrl={recordChipData.avatarUrl ?? ''}
+              avatarUrl={getAbsoluteImageUrl(recordChipData.avatarUrl ?? '')}
             />
           )
         }
@@ -104,14 +102,16 @@ export const RecordChip = ({
       size={size}
       maxWidth={maxWidth}
       label={recordChipData.name}
+      emptyLabel={t`Untitled`}
+      isBold={isBold}
       isLabelHidden={isLabelHidden}
       leftComponent={
         isIconHidden ? null : (
-          <AvatarChip
+          <AvatarOrIcon
             placeholder={recordChipData.name}
             placeholderColorSeed={record.id}
             avatarType={recordChipData.avatarType}
-            avatarUrl={recordChipData.avatarUrl ?? ''}
+            avatarUrl={getAbsoluteImageUrl(recordChipData.avatarUrl ?? '')}
           />
         )
       }

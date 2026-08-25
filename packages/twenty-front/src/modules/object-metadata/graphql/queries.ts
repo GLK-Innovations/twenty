@@ -19,3 +19,18 @@ export const FIND_MANY_OBJECT_METADATA_ITEMS = gql`
     }
   }
 `;
+
+export const OBJECT_RECORD_COUNTS = gql`
+  query ObjectRecordCounts {
+    objectRecordCounts {
+      objectNamePlural
+      totalCount
+    }
+  }
+`;
+
+export const MOSTLY_EMPTY_FIELD_METADATA_IDS = gql`
+  query MostlyEmptyFieldMetadataIds($objectMetadataId: UUID!) {
+    mostlyEmptyFieldMetadataIds(objectMetadataId: $objectMetadataId)
+  }
+`;

@@ -1,6 +1,12 @@
 import { ArgsType, Field } from '@nestjs/graphql';
 
-import { IsEmail, IsNotEmpty, IsUUID } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from 'class-validator';
 
 import { UUIDScalarType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/scalars';
 
@@ -11,8 +17,13 @@ export class EmailPasswordResetLinkInput {
   @IsEmail()
   email: string;
 
-  @Field(() => UUIDScalarType)
-  @IsNotEmpty()
+  @Field(() => UUIDScalarType, { nullable: true })
+  @IsOptional()
   @IsUUID()
-  workspaceId: string;
+  workspaceId?: string;
+
+  @Field(() => String, { nullable: true })
+  @IsString()
+  @IsOptional()
+  captchaToken?: string;
 }

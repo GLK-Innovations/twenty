@@ -4,73 +4,76 @@ import { SettingsPath } from 'twenty-shared/types';
 
 import { SettingsCard } from '@/settings/components/SettingsCard';
 import { SettingsListCard } from '@/settings/components/SettingsListCard';
+import { useGetAddedRelativeDateDescription } from '@/settings/hooks/useGetAddedRelativeDateDescription';
 import { SettingsSecurityApprovedAccessDomainRowDropdownMenu } from '@/settings/security/components/approvedAccessDomains/SettingsSecurityApprovedAccessDomainRowDropdownMenu';
 import { SettingsSecurityApprovedAccessDomainValidationEffect } from '@/settings/security/components/approvedAccessDomains/SettingsSecurityApprovedAccessDomainValidationEffect';
 import { approvedAccessDomainsState } from '@/settings/security/states/ApprovedAccessDomainsState';
-import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
-import { ApolloError } from '@apollo/client';
-import styled from '@emotion/styled';
+import { useSnackBarOnQueryError } from '@/apollo/hooks/useSnackBarOnQueryError';
+import { styled } from '@linaria/react';
+import { useEffect } from 'react';
 import { useLingui } from '@lingui/react/macro';
-import { useRecoilState, useRecoilValue } from 'recoil';
+import { useAtomState } from '@/ui/utilities/state/jotai/hooks/useAtomState';
 import { getSettingsPath } from 'twenty-shared/utils';
-import { IconAt, IconMailCog, Status } from 'twenty-ui/display';
-import { useGetApprovedAccessDomainsQuery } from '~/generated-metadata/graphql';
-import { dateLocaleState } from '~/localization/states/dateLocaleState';
-import { beautifyPastDateRelativeToNow } from '~/utils/date-utils';
+import { Status } from 'twenty-ui/data-display';
+import { IconAt, IconMailCog } from 'twenty-ui/icon';
+import { useQuery } from '@apollo/client/react';
+import { GetApprovedAccessDomainsDocument } from '~/generated-metadata/graphql';
 
-const StyledLink = styled(Link)`
-  text-decoration: none;
+const StyledLinkContainer = styled.div`
+  > a {
+    text-decoration: none;
+  }
 `;
 
 export const SettingsApprovedAccessDomainsListCard = () => {
-  const { enqueueErrorSnackBar } = useSnackBar();
   const navigate = useNavigate();
   const { t } = useLingui();
-  const { localeCatalog } = useRecoilValue(dateLocaleState);
+  const { getAddedRelativeDateDescription } =
+    useGetAddedRelativeDateDescription();
 
-  const [approvedAccessDomains, setApprovedAccessDomains] = useRecoilState(
+  const [approvedAccessDomains, setApprovedAccessDomains] = useAtomState(
     approvedAccessDomainsState,
   );
 
-  const { loading } = useGetApprovedAccessDomainsQuery({
+  const {
+    loading,
+    data: domainsData,
+    error: domainsError,
+  } = useQuery(GetApprovedAccessDomainsDocument, {
     fetchPolicy: 'network-only',
-    onCompleted: (data) => {
-      setApprovedAccessDomains(data?.getApprovedAccessDomains ?? []);
-    },
-    onError: (error: Error) => {
-      enqueueErrorSnackBar({
-        apolloError: error instanceof ApolloError ? error : undefined,
-      });
-    },
   });
 
-  const getItemDescription = (createdAt: string) => {
-    const beautifyPastDateRelative = beautifyPastDateRelativeToNow(
-      createdAt,
-      localeCatalog,
-    );
-    return t`Added ${beautifyPastDateRelative}`;
-  };
+  useEffect(() => {
+    if (domainsData) {
+      setApprovedAccessDomains(domainsData?.getApprovedAccessDomains ?? []);
+    }
+  }, [domainsData, setApprovedAccessDomains]);
+
+  useSnackBarOnQueryError(domainsError);
 
   return loading || !approvedAccessDomains.length ? (
-    <StyledLink to={getSettingsPath(SettingsPath.NewApprovedAccessDomain)}>
-      <SettingsCard
-        title={t`Add Approved Access Domain`}
-        Icon={<IconMailCog />}
-      />
-    </StyledLink>
+    <StyledLinkContainer>
+      <Link to={getSettingsPath(SettingsPath.NewApprovedAccessDomain)}>
+        <SettingsCard
+          title={t`Add Approved Access Domain`}
+          Icon={<IconMailCog />}
+        />
+      </Link>
+    </StyledLinkContainer>
   ) : (
     <>
       <SettingsSecurityApprovedAccessDomainValidationEffect />
       <SettingsListCard
         items={approvedAccessDomains}
         getItemLabel={({ domain }) => domain}
-        getItemDescription={({ createdAt }) => getItemDescription(createdAt)}
+        getItemDescription={({ createdAt }) =>
+          getAddedRelativeDateDescription(createdAt)
+        }
         RowIcon={IconAt}
         RowRightComponent={({ item: approvedAccessDomain }) => (
           <>
             {!approvedAccessDomain.isValidated && (
-              <Status color="orange" text="Pending" />
+              <Status color="orange" text={t`Pending`} />
             )}
             <SettingsSecurityApprovedAccessDomainRowDropdownMenu
               approvedAccessDomain={approvedAccessDomain}
@@ -78,7 +81,7 @@ export const SettingsApprovedAccessDomainsListCard = () => {
           </>
         )}
         hasFooter
-        footerButtonLabel="Add Approved Access Domain"
+        footerButtonLabel={t`Add Approved Access Domain`}
         onFooterButtonClick={() =>
           navigate(getSettingsPath(SettingsPath.NewApprovedAccessDomain))
         }

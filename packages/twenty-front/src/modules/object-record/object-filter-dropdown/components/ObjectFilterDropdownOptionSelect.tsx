@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Key } from 'ts-key-enum';
 
+import { fieldMetadataItemByIdSelector } from '@/object-metadata/states/fieldMetadataItemByIdSelector';
 import { type FieldMetadataItemOption } from '@/object-metadata/types/FieldMetadataItem';
 import { useOptionsForSelect } from '@/object-record/object-filter-dropdown/hooks/useOptionsForSelect';
 import { DropdownMenuItemsContainer } from '@/ui/layout/dropdown/components/DropdownMenuItemsContainer';
@@ -17,12 +18,15 @@ import { useCloseDropdown } from '@/ui/layout/dropdown/hooks/useCloseDropdown';
 import { selectedItemIdComponentState } from '@/ui/layout/selectable-list/states/selectedItemIdComponentState';
 import { useHotkeysOnFocusedElement } from '@/ui/utilities/hotkey/hooks/useHotkeysOnFocusedElement';
 import { useAvailableComponentInstanceIdOrThrow } from '@/ui/utilities/state/component-state/hooks/useAvailableComponentInstanceIdOrThrow';
-import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
+import { useAtomComponentSelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentSelectorValue';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import { useAtomFamilySelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomFamilySelectorValue';
 import { t } from '@lingui/core/macro';
 import { isNonEmptyString } from '@sniptt/guards';
 import { MAX_OPTIONS_TO_DISPLAY } from 'twenty-shared/constants';
-import { isDefined } from 'twenty-shared/utils';
+import { isDefined, parseJson } from 'twenty-shared/utils';
 import { MenuItem, MenuItemMultiSelect } from 'twenty-ui/navigation';
+import { z } from 'zod';
 
 export const EMPTY_FILTER_VALUE = '';
 
@@ -35,11 +39,11 @@ export const ObjectFilterDropdownOptionSelect = ({
 }: {
   focusId: string;
 }) => {
-  const fieldMetadataItemUsedInDropdown = useRecoilComponentValue(
+  const fieldMetadataItemUsedInDropdown = useAtomComponentSelectorValue(
     fieldMetadataItemUsedInDropdownComponentSelector,
   );
 
-  const objectFilterDropdownSearchInput = useRecoilComponentValue(
+  const objectFilterDropdownSearchInput = useAtomComponentStateValue(
     objectFilterDropdownSearchInputComponentState,
   );
 
@@ -47,7 +51,7 @@ export const ObjectFilterDropdownOptionSelect = ({
     ObjectFilterDropdownComponentInstanceContext,
   );
 
-  const objectFilterDropdownCurrentRecordFilter = useRecoilComponentValue(
+  const objectFilterDropdownCurrentRecordFilter = useAtomComponentStateValue(
     objectFilterDropdownCurrentRecordFilterComponentState,
   );
 
@@ -57,9 +61,10 @@ export const ObjectFilterDropdownOptionSelect = ({
   const selectedOptions = useMemo(
     () =>
       isNonEmptyString(objectFilterDropdownCurrentRecordFilter?.value)
-        ? (JSON.parse(
-            objectFilterDropdownCurrentRecordFilter.value,
-          ) as string[]) // TODO: replace by a safe parse
+        ? (z
+            .array(z.string())
+            .safeParse(parseJson(objectFilterDropdownCurrentRecordFilter.value))
+            .data ?? [])
         : [],
     [objectFilterDropdownCurrentRecordFilter?.value],
   );
@@ -68,14 +73,26 @@ export const ObjectFilterDropdownOptionSelect = ({
 
   const { resetSelectedItem } = useSelectableList(componentInstanceId);
 
-  const selectedItemId = useRecoilComponentValue(
+  const selectedItemId = useAtomComponentStateValue(
     selectedItemIdComponentState,
     componentInstanceId,
   );
 
+  const { foundFieldMetadataItem: relationTargetFieldMetadataItem } =
+    useAtomFamilySelectorValue(fieldMetadataItemByIdSelector, {
+      fieldMetadataItemId:
+        objectFilterDropdownCurrentRecordFilter?.relationTargetFieldMetadataId ??
+        '',
+    });
+
   const fieldMetaDataId = fieldMetadataItemUsedInDropdown?.id ?? '';
 
-  const { selectOptions } = useOptionsForSelect(fieldMetaDataId);
+  const { selectOptions: sourceFieldSelectOptions } =
+    useOptionsForSelect(fieldMetaDataId);
+
+  const selectOptions = isDefined(relationTargetFieldMetadataItem)
+    ? relationTargetFieldMetadataItem.options
+    : sourceFieldSelectOptions;
 
   const [selectableOptions, setSelectableOptions] = useState<
     SelectOptionForFilter[]

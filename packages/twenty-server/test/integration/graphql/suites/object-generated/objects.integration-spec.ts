@@ -17,7 +17,6 @@ describe('objectsResolver (e2e)', () => {
                 labelPlural
                 description
                 icon
-                isCustom
                 isRemote
                 isActive
                 isSystem
@@ -33,7 +32,7 @@ describe('objectsResolver (e2e)', () => {
     };
 
     return client
-      .post('/graphql')
+      .post('/metadata')
       .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
       .send(queryData)
       .expect(200)
@@ -53,14 +52,12 @@ describe('objectsResolver (e2e)', () => {
           const objects = edges[0].node;
 
           expect(objects).toHaveProperty('id');
-          expect(objects).toHaveProperty('dataSourceId');
           expect(objects).toHaveProperty('nameSingular');
           expect(objects).toHaveProperty('namePlural');
           expect(objects).toHaveProperty('labelSingular');
           expect(objects).toHaveProperty('labelPlural');
           expect(objects).toHaveProperty('description');
           expect(objects).toHaveProperty('icon');
-          expect(objects).toHaveProperty('isCustom');
           expect(objects).toHaveProperty('isRemote');
           expect(objects).toHaveProperty('isActive');
           expect(objects).toHaveProperty('isSystem');

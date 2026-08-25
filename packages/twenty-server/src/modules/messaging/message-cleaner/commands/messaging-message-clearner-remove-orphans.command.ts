@@ -1,28 +1,20 @@
-import { InjectRepository } from '@nestjs/typeorm';
-
 import { Command } from 'nest-commander';
-import { Repository } from 'typeorm';
 
-import {
-  ActiveOrSuspendedWorkspacesMigrationCommandRunner,
-  type RunOnWorkspaceArgs,
-} from 'src/database/commands/command-runners/active-or-suspended-workspaces-migration.command-runner';
-import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
-import { TwentyORMGlobalManager } from 'src/engine/twenty-orm/twenty-orm-global.manager';
+import { ProvisionedWorkspaceCommandRunner } from 'src/database/commands/command-runners/provisioned-workspace.command-runner';
+import { WorkspaceIteratorService } from 'src/database/commands/command-runners/workspace-iterator.service';
+import { type RunOnWorkspaceArgs } from 'src/database/commands/command-runners/workspace.command-runner';
 import { MessagingMessageCleanerService } from 'src/modules/messaging/message-cleaner/services/messaging-message-cleaner.service';
 
 @Command({
   name: 'messaging:message-cleaner-remove-orphans',
   description: 'Remove orphan message and threads from messaging',
 })
-export class MessagingMessageCleanerRemoveOrphansCommand extends ActiveOrSuspendedWorkspacesMigrationCommandRunner {
+export class MessagingMessageCleanerRemoveOrphansCommand extends ProvisionedWorkspaceCommandRunner {
   constructor(
-    @InjectRepository(WorkspaceEntity)
-    protected readonly workspaceRepository: Repository<WorkspaceEntity>,
-    protected readonly twentyORMGlobalManager: TwentyORMGlobalManager,
+    protected readonly workspaceIteratorService: WorkspaceIteratorService,
     private readonly messagingMessageCleanerService: MessagingMessageCleanerService,
   ) {
-    super(workspaceRepository, twentyORMGlobalManager);
+    super(workspaceIteratorService);
   }
 
   override async runOnWorkspace({

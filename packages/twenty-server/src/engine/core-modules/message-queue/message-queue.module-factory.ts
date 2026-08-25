@@ -3,17 +3,14 @@ import {
   MessageQueueDriverType,
   type MessageQueueModuleOptions,
 } from 'src/engine/core-modules/message-queue/interfaces';
+import { type MetricsService } from 'src/engine/core-modules/metrics/metrics.service';
 import { type RedisClientService } from 'src/engine/core-modules/redis-client/redis-client.service';
 import { type TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
 
-/**
- * MessageQueue Module factory
- * @returns MessageQueueModuleOptions
- * @param twentyConfigService
- */
 export const messageQueueModuleFactory = async (
-  _twentyConfigService: TwentyConfigService,
+  twentyConfigService: TwentyConfigService,
   redisClientService: RedisClientService,
+  metricsService: MetricsService,
 ): Promise<MessageQueueModuleOptions> => {
   const driverType = MessageQueueDriverType.BullMQ;
 
@@ -24,6 +21,8 @@ export const messageQueueModuleFactory = async (
         options: {
           connection: redisClientService.getQueueClient(),
         },
+        metricsService,
+        twentyConfigService,
       } satisfies BullMQDriverFactoryOptions;
     }
     default:

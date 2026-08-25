@@ -1,18 +1,22 @@
 import { originalDragSelectionComponentState } from '@/object-record/record-drag/states/originalDragSelectionComponentState';
-import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
-import styled from '@emotion/styled';
-import { NotificationCounter } from 'twenty-ui/navigation';
+import { useRecordIndexContextOrThrow } from '@/object-record/record-index/contexts/RecordIndexContext';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import { styled } from '@linaria/react';
+import { NotificationCounter } from 'twenty-ui/data-display';
 
-const StyledNotificationCounter = styled(NotificationCounter)`
+const StyledNotificationCounterContainer = styled.div`
+  left: -7px;
   position: absolute;
   top: -7px;
-  left: -7px;
   z-index: 1000;
 `;
 
 export const RecordTableRowMultiDragCounterChip = () => {
-  const originalDragSelection = useRecoilComponentValue(
+  const { recordIndexId } = useRecordIndexContextOrThrow();
+
+  const originalDragSelection = useAtomComponentStateValue(
     originalDragSelectionComponentState,
+    recordIndexId,
   );
 
   const selectedCount = originalDragSelection.length ?? 0;
@@ -23,5 +27,9 @@ export const RecordTableRowMultiDragCounterChip = () => {
     return null;
   }
 
-  return <StyledNotificationCounter count={selectedCount} />;
+  return (
+    <StyledNotificationCounterContainer>
+      <NotificationCounter count={selectedCount} />
+    </StyledNotificationCounterContainer>
+  );
 };

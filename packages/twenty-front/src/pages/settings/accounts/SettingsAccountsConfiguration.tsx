@@ -4,12 +4,14 @@ import { useNavigate, useParams } from 'react-router-dom';
 
 import { type CalendarChannel } from '@/accounts/types/CalendarChannel';
 import { type MessageChannel } from '@/accounts/types/MessageChannel';
-import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
-import { useFindManyRecords } from '@/object-record/hooks/useFindManyRecords';
-import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 import { SettingsPath } from 'twenty-shared/types';
+import { GET_MY_CALENDAR_CHANNELS } from '@/settings/accounts/graphql/queries/getMyCalendarChannels';
+import { GET_MY_MESSAGE_CHANNELS } from '@/settings/accounts/graphql/queries/getMyMessageChannels';
+import { useMutation, useQuery } from '@apollo/client/react';
+import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 import { getSettingsPath, isDefined } from 'twenty-shared/utils';
-import { useStartChannelSyncMutation } from '~/generated-metadata/graphql';
+import { StartChannelSyncDocument } from '~/generated-metadata/graphql';
+import { SettingsAccountsConfigurationSelectedMessageChannelEffect } from '~/pages/settings/accounts/SettingsAccountsConfigurationSelectedMessageChannelEffect';
 import { SettingsAccountsConfigurationStepCalendar } from '~/pages/settings/accounts/SettingsAccountsConfigurationStepCalendar';
 import { SettingsAccountsConfigurationStepEmail } from '~/pages/settings/accounts/SettingsAccountsConfigurationStepEmail';
 
@@ -25,33 +27,33 @@ export const SettingsAccountsConfiguration = () => {
   }>();
   const navigate = useNavigate();
   const { enqueueSuccessSnackBar, enqueueErrorSnackBar } = useSnackBar();
-  const [startChannelSyncMutation, { loading: isSubmitting }] =
-    useStartChannelSyncMutation();
+  const [startChannelSyncMutation, { loading: isSubmitting }] = useMutation(
+    StartChannelSyncDocument,
+  );
 
   const [currentStep, setCurrentStep] =
     useState<SettingsAccountsConfigurationStep>(
       SettingsAccountsConfigurationStep.Email,
     );
 
-  const { records: messageChannels } = useFindManyRecords<MessageChannel>({
-    objectNameSingular: CoreObjectNameSingular.MessageChannel,
-    filter: {
-      connectedAccountId: {
-        eq: connectedAccountId,
-      },
-    },
+  const { data: metadataMessageChannelData } = useQuery<{
+    myMessageChannels: MessageChannel[];
+  }>(GET_MY_MESSAGE_CHANNELS, {
+    variables: { connectedAccountId },
     skip: !connectedAccountId,
   });
 
-  const { records: calendarChannels } = useFindManyRecords<CalendarChannel>({
-    objectNameSingular: CoreObjectNameSingular.CalendarChannel,
-    filter: {
-      connectedAccountId: {
-        eq: connectedAccountId,
-      },
-    },
+  const { data: metadataCalendarChannelData } = useQuery<{
+    myCalendarChannels: CalendarChannel[];
+  }>(GET_MY_CALENDAR_CHANNELS, {
+    variables: { connectedAccountId },
     skip: !connectedAccountId,
   });
+
+  const messageChannels = metadataMessageChannelData?.myMessageChannels ?? [];
+
+  const calendarChannels =
+    metadataCalendarChannelData?.myCalendarChannels ?? [];
 
   const messageChannel = messageChannels[0];
   const calendarChannel = calendarChannels[0];
@@ -81,12 +83,16 @@ export const SettingsAccountsConfiguration = () => {
     });
   };
 
-  switch (currentStep) {
-    case SettingsAccountsConfigurationStep.Email:
-      if (!isDefined(messageChannel)) {
-        return null;
-      }
-      return (
+  const showEmailStep =
+    currentStep === SettingsAccountsConfigurationStep.Email &&
+    isDefined(messageChannel);
+
+  if (showEmailStep) {
+    return (
+      <>
+        <SettingsAccountsConfigurationSelectedMessageChannelEffect
+          messageChannel={messageChannel}
+        />
         <SettingsAccountsConfigurationStepEmail
           messageChannel={messageChannel}
           hasNextStep={isDefined(calendarChannel)}
@@ -94,18 +100,20 @@ export const SettingsAccountsConfiguration = () => {
           onNext={handleNext}
           onAddAccount={handleAddAccount}
         />
-      );
-    case SettingsAccountsConfigurationStep.Calendar:
-      if (!isDefined(calendarChannel)) {
-        return null;
-      }
-      return (
-        <SettingsAccountsConfigurationStepCalendar
-          calendarChannel={calendarChannel}
-          messageChannel={messageChannel}
-          isSubmitting={isSubmitting}
-          onAddAccount={handleAddAccount}
-        />
-      );
+      </>
+    );
   }
+
+  if (!isDefined(calendarChannel)) {
+    return null;
+  }
+
+  return (
+    <SettingsAccountsConfigurationStepCalendar
+      calendarChannel={calendarChannel}
+      messageChannel={messageChannel}
+      isSubmitting={isSubmitting}
+      onAddAccount={handleAddAccount}
+    />
+  );
 };

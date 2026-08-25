@@ -12,31 +12,43 @@
         "command": "mintlify dev"
       }
     },
-    "build": {
+    "validate": {
       "executor": "nx:run-commands",
-      "outputs": ["{projectRoot}/.mintlify"],
       "options": {
         "cwd": "{projectRoot}",
-        "command": "mintlify build"
+        "command": "mintlify validate"
       }
     },
     "lint": {
+      "executor": "nx:run-commands",
+      "cache": true,
       "options": {
-        "lintFilePatterns": [
-          "{projectRoot}/**/*.{mdx,json}",
-          "{projectRoot}/package.json"
-        ]
-      },
-      "configurations": {
-        "fix": {}
+        "cwd": "{projectRoot}",
+        "commands": [
+          "npx oxlint -c .oxlintrc.json .",
+          "npx tsx scripts/lint-mdx.ts"
+        ],
+        "parallel": false
       }
     },
     "fmt": {
+      "executor": "nx:run-commands",
+      "cache": true,
       "options": {
-        "files": "."
+        "cwd": "{projectRoot}",
+        "command": "prettier . --check --cache --cache-location ../../.cache/prettier/{projectRoot} --cache-strategy metadata"
       },
       "configurations": {
-        "fix": {}
+        "ci": {},
+        "fix": {
+          "command": "prettier . --write --cache --cache-location ../../.cache/prettier/{projectRoot} --cache-strategy metadata"
+        }
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx vitest run --config {projectRoot}/vitest.config.mts"
       }
     }
   }

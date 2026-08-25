@@ -1,5 +1,5 @@
-import { type Meta, type StoryObj } from '@storybook/react';
-import { userEvent, within } from '@storybook/test';
+import { type Meta, type StoryObj } from '@storybook/react-vite';
+import { userEvent, within } from 'storybook/test';
 
 import {
   PageDecorator,
@@ -7,13 +7,12 @@ import {
 } from '~/testing/decorators/PageDecorator';
 import { graphqlMocks } from '~/testing/graphqlMocks';
 
-import { I18nFrontDecorator } from '~/testing/decorators/I18nFrontDecorator';
-import { SettingsNewObject } from '../SettingsNewObject';
+import { SettingsNewObject } from '~/pages/settings/data-model/SettingsNewObject';
 
 const meta: Meta<PageDecoratorArgs> = {
   title: 'Pages/Settings/DataModel/SettingsNewObject',
   component: SettingsNewObject,
-  decorators: [PageDecorator, I18nFrontDecorator],
+  decorators: [PageDecorator],
   args: {
     routePath: '/settings/objects/new',
   },
@@ -27,14 +26,10 @@ export default meta;
 export type Story = StoryObj<typeof SettingsNewObject>;
 
 export const WithStandardSelected: Story = {
-  play: async () => {
-    const canvas = within(document.body);
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
 
-    await canvas.findByRole(
-      'heading',
-      { name: 'New Object', level: 3 },
-      { timeout: 5000 },
-    );
+    await canvas.findByText('New Object');
 
     const listingInput = await canvas.findByPlaceholderText('Listing');
     const pluralInput = await canvas.findByPlaceholderText('Listings');

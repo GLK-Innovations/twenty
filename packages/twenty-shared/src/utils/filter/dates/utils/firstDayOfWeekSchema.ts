@@ -1,5 +1,10 @@
+import { FirstDayOfTheWeek } from '@/types';
 import z from 'zod';
 
-export const firstDayOfWeekSchema = z.enum(['MONDAY', 'SATURDAY', 'SUNDAY']);
+export const firstDayOfWeekSchema = z.enum([
+  FirstDayOfTheWeek.MONDAY,
+  FirstDayOfTheWeek.SATURDAY,
+  FirstDayOfTheWeek.SUNDAY,
+]);
 
-export type FirstDayOfTheWeek = z.infer<typeof firstDayOfWeekSchema>;
+export type FirstDayOfTheWeekSchema = z.infer<typeof firstDayOfWeekSchema>;

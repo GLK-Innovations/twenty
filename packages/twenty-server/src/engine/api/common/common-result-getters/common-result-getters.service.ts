@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 
 import {
   FieldMetadataType,
@@ -10,83 +10,143 @@ import { isDefined } from 'twenty-shared/utils';
 import { type QueryResultFieldValue } from 'src/engine/api/graphql/workspace-query-runner/factories/query-result-getters/interfaces/query-result-field-value';
 import { type QueryResultGetterHandlerInterface } from 'src/engine/api/graphql/workspace-query-runner/factories/query-result-getters/interfaces/query-result-getter-handler.interface';
 
-import { ActivityQueryResultGetterHandler } from 'src/engine/api/graphql/workspace-query-runner/factories/query-result-getters/handlers/activity-query-result-getter.handler';
-import { AttachmentQueryResultGetterHandler } from 'src/engine/api/graphql/workspace-query-runner/factories/query-result-getters/handlers/attachment-query-result-getter.handler';
-import { PersonQueryResultGetterHandler } from 'src/engine/api/graphql/workspace-query-runner/factories/query-result-getters/handlers/person-query-result-getter.handler';
+import { FilesFieldQueryResultGetterHandler } from 'src/engine/api/common/common-result-getters/handlers/field-handlers/files-field-query-result-getter.handler';
+import { RichTextFieldQueryResultGetterHandler } from 'src/engine/api/common/common-result-getters/handlers/field-handlers/rich-text-field-query-result-getter.handler';
 import { WorkspaceMemberQueryResultGetterHandler } from 'src/engine/api/graphql/workspace-query-runner/factories/query-result-getters/handlers/workspace-member-query-result-getter.handler';
-import { FileService } from 'src/engine/core-modules/file/services/file.service';
-import { type ObjectMetadataMaps } from 'src/engine/metadata-modules/types/object-metadata-maps';
-import { isFieldMetadataEntityOfType } from 'src/engine/utils/is-field-metadata-of-type.util';
+import { getFlatFieldsFromFlatObjectMetadata } from 'src/engine/api/graphql/workspace-schema-builder/utils/get-flat-fields-for-flat-object-metadata.util';
+import { FileUrlService } from 'src/engine/core-modules/file/file-url/file-url.service';
+import { type FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/flat-entity-maps.type';
+import { findFlatEntityByIdInFlatEntityMapsOrThrow } from 'src/engine/metadata-modules/flat-entity/utils/find-flat-entity-by-id-in-flat-entity-maps-or-throw.util';
+import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
+import { isFlatFieldMetadataOfType } from 'src/engine/metadata-modules/flat-field-metadata/utils/is-flat-field-metadata-of-type.util';
+import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
+
+type ResultProcessingContext = {
+  flatObjectMetadataMaps: FlatEntityMaps<FlatObjectMetadata>;
+  flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
+  workspaceId: string;
+  fieldMetadataByNameByObjectMetadataId: Map<
+    string,
+    ReadonlyMap<string, FlatFieldMetadata>
+  >;
+};
 
 // TODO: find a way to prevent conflict between handlers executing logic on object relations
 // And this factory that is also executing logic on object relations
 // Right now the factory will override any change made on relations by the handlers
 @Injectable()
 export class CommonResultGettersService {
-  private readonly logger = new Logger(CommonResultGettersService.name);
-  private handlers: Map<string, QueryResultGetterHandlerInterface>;
+  private objectHandlers: Map<string, QueryResultGetterHandlerInterface>;
+  private fieldHandlers: Map<
+    FieldMetadataType,
+    QueryResultGetterHandlerInterface
+  >;
 
-  constructor(private readonly fileService: FileService) {
-    this.initializeHandlers();
+  constructor(private readonly fileUrlService: FileUrlService) {
+    this.initializeObjectHandlers();
+    this.initializeFieldHandlers();
   }
 
-  private initializeHandlers() {
-    this.handlers = new Map<string, QueryResultGetterHandlerInterface>([
-      ['attachment', new AttachmentQueryResultGetterHandler(this.fileService)],
-      ['person', new PersonQueryResultGetterHandler(this.fileService)],
+  private initializeObjectHandlers() {
+    this.objectHandlers = new Map<string, QueryResultGetterHandlerInterface>([
       [
         'workspaceMember',
-        new WorkspaceMemberQueryResultGetterHandler(this.fileService),
+        new WorkspaceMemberQueryResultGetterHandler(this.fileUrlService),
       ],
-      ['note', new ActivityQueryResultGetterHandler(this.fileService)],
-      ['task', new ActivityQueryResultGetterHandler(this.fileService)],
     ]);
   }
 
-  public async processRecordArray(
+  private initializeFieldHandlers() {
+    this.fieldHandlers = new Map<
+      FieldMetadataType,
+      QueryResultGetterHandlerInterface
+    >([
+      [
+        FieldMetadataType.FILES,
+        new FilesFieldQueryResultGetterHandler(this.fileUrlService),
+      ],
+      [
+        FieldMetadataType.RICH_TEXT,
+        new RichTextFieldQueryResultGetterHandler(this.fileUrlService),
+      ],
+    ]);
+  }
+
+  public processRecordArray(
     recordArray: ObjectRecord[],
-    objectMetadataItemId: string,
-    objectMetadataMaps: ObjectMetadataMaps,
+    flatObjectMetadata: FlatObjectMetadata,
+    flatObjectMetadataMaps: FlatEntityMaps<FlatObjectMetadata>,
+    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>,
     workspaceId: string,
-  ) {
-    return await Promise.all(
-      recordArray.map(
-        async (record: ObjectRecord) =>
-          await this.processRecord(
-            record,
-            objectMetadataItemId,
-            objectMetadataMaps,
-            workspaceId,
-          ),
+  ): Promise<ObjectRecord[]> {
+    return this.processRecordArrayWithContext(recordArray, flatObjectMetadata, {
+      flatObjectMetadataMaps,
+      flatFieldMetadataMaps,
+      workspaceId,
+      fieldMetadataByNameByObjectMetadataId: new Map(),
+    });
+  }
+
+  public processRecord(
+    record: ObjectRecord,
+    flatObjectMetadata: FlatObjectMetadata,
+    flatObjectMetadataMaps: FlatEntityMaps<FlatObjectMetadata>,
+    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>,
+    workspaceId: string,
+  ): Promise<ObjectRecord> {
+    return this.processRecordWithContext(record, flatObjectMetadata, {
+      flatObjectMetadataMaps,
+      flatFieldMetadataMaps,
+      workspaceId,
+      fieldMetadataByNameByObjectMetadataId: new Map(),
+    });
+  }
+
+  private processRecordArrayWithContext(
+    recordArray: ObjectRecord[],
+    flatObjectMetadata: FlatObjectMetadata,
+    context: ResultProcessingContext,
+  ): Promise<ObjectRecord[]> {
+    return Promise.all(
+      recordArray.map((record) =>
+        this.processRecordWithContext(record, flatObjectMetadata, context),
       ),
     );
   }
 
-  public async processRecord(
+  private async processRecordWithContext(
     record: ObjectRecord,
-    objectMetadataItemId: string,
-    objectMetadataMaps: ObjectMetadataMaps,
-    workspaceId: string,
+    flatObjectMetadata: FlatObjectMetadata,
+    context: ResultProcessingContext,
   ): Promise<ObjectRecord> {
-    const objectMetadataMapItem = objectMetadataMaps.byId[objectMetadataItemId];
+    const fieldMetadataByName = this.getOrBuildFieldMetadataByName(
+      flatObjectMetadata,
+      context,
+    );
+    const recordFieldMetadataList = Object.keys(record)
+      .map((recordFieldName) => fieldMetadataByName.get(recordFieldName))
+      .filter(isDefined);
 
-    if (!isDefined(objectMetadataMapItem)) {
-      throw new Error('Object metadata map item is not defined');
-    }
+    const fieldHandlers = new Set(
+      recordFieldMetadataList
+        .map((recordFieldMetadata) =>
+          this.fieldHandlers.get(recordFieldMetadata.type),
+        )
+        .filter(isDefined),
+    );
 
-    const handler = this.getHandler(objectMetadataMapItem.nameSingular);
+    const handlers = [
+      this.getObjectHandler(flatObjectMetadata.nameSingular),
+      ...fieldHandlers,
+    ];
 
-    const relationFields = Object.keys(record)
-      .map(
-        (recordFieldName) =>
-          objectMetadataMapItem.fieldsById[
-            objectMetadataMapItem.fieldIdByName[recordFieldName]
-          ],
-      )
-      .filter(isDefined)
-      .filter((fieldMetadata) =>
-        isFieldMetadataEntityOfType(fieldMetadata, FieldMetadataType.RELATION),
-      );
+    const relationFields = recordFieldMetadataList.filter(
+      (recordFieldMetadata) =>
+        isFlatFieldMetadataOfType(
+          recordFieldMetadata,
+          FieldMetadataType.RELATION,
+        ),
+    );
 
     const relationFieldsProcessedMap = {} as Record<
       string,
@@ -104,38 +164,90 @@ export class CommonResultGettersService {
         continue;
       }
 
+      const targetFlatObjectMetadata =
+        findFlatEntityByIdInFlatEntityMapsOrThrow({
+          flatEntityId: relationField.relationTargetObjectMetadataId,
+          flatEntityMaps: context.flatObjectMetadataMaps,
+        });
+
       relationFieldsProcessedMap[relationField.name] =
         relationField.settings?.relationType === RelationType.ONE_TO_MANY
-          ? await this.processRecordArray(
+          ? await this.processRecordArrayWithContext(
               record[relationField.name],
-              relationField.relationTargetObjectMetadataId,
-              objectMetadataMaps,
-              workspaceId,
+              targetFlatObjectMetadata,
+              context,
             )
-          : await this.processRecord(
+          : await this.processRecordWithContext(
               record[relationField.name],
-              relationField.relationTargetObjectMetadataId,
-              objectMetadataMaps,
-              workspaceId,
+              targetFlatObjectMetadata,
+              context,
             );
     }
 
-    const objectRecordProcessedWithoutRelationFields = await handler.handle(
-      record,
-      workspaceId,
-    );
+    const objectRecordProcessedWithoutRelationFields =
+      await this.processObjectRecordWithoutRelationFields(
+        record,
+        context.workspaceId,
+        handlers,
+        recordFieldMetadataList,
+      );
 
-    const processedRecord = {
+    return {
       ...objectRecordProcessedWithoutRelationFields,
       ...relationFieldsProcessedMap,
     };
+  }
+
+  private getOrBuildFieldMetadataByName(
+    flatObjectMetadata: FlatObjectMetadata,
+    context: ResultProcessingContext,
+  ): ReadonlyMap<string, FlatFieldMetadata> {
+    const cachedFieldMetadataByName =
+      context.fieldMetadataByNameByObjectMetadataId.get(flatObjectMetadata.id);
+
+    if (isDefined(cachedFieldMetadataByName)) {
+      return cachedFieldMetadataByName;
+    }
+
+    const fieldMetadataByName = new Map(
+      getFlatFieldsFromFlatObjectMetadata(
+        flatObjectMetadata,
+        context.flatFieldMetadataMaps,
+      ).map((fieldMetadata) => [fieldMetadata.name, fieldMetadata]),
+    );
+
+    context.fieldMetadataByNameByObjectMetadataId.set(
+      flatObjectMetadata.id,
+      fieldMetadataByName,
+    );
+
+    return fieldMetadataByName;
+  }
+
+  private async processObjectRecordWithoutRelationFields(
+    record: ObjectRecord,
+    workspaceId: string,
+    handlers: QueryResultGetterHandlerInterface[],
+    fieldMetadata: FlatFieldMetadata[],
+  ): Promise<ObjectRecord> {
+    let processedRecord = record;
+
+    for (const handler of handlers) {
+      processedRecord = await handler.handle(
+        processedRecord,
+        workspaceId,
+        fieldMetadata,
+      );
+    }
 
     return processedRecord;
   }
 
-  private getHandler(objectType: string): QueryResultGetterHandlerInterface {
+  private getObjectHandler(
+    objectType: string,
+  ): QueryResultGetterHandlerInterface {
     return (
-      this.handlers.get(objectType) || {
+      this.objectHandlers.get(objectType) ?? {
         handle: (result: ObjectRecord): Promise<ObjectRecord> =>
           Promise.resolve(result),
       }

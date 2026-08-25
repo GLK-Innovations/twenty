@@ -1,14 +1,14 @@
-import { type ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
 import { type FieldDefinition } from '@/object-record/record-field/ui/types/FieldDefinition';
 import { type FieldMetadata } from '@/object-record/record-field/ui/types/FieldMetadata';
 
 import { getFieldButtonIcon } from '@/object-record/record-field/ui/utils/getFieldButtonIcon';
 import { FieldMetadataType } from 'twenty-shared/types';
-import { type FieldMetadataItem } from '../types/FieldMetadataItem';
+import { type FieldMetadataItem } from '@/object-metadata/types/FieldMetadataItem';
 
 export type FieldMetadataItemAsFieldDefinitionProps = {
   field: FieldMetadataItem;
-  objectMetadataItem: ObjectMetadataItem;
+  objectMetadataItem: EnrichedObjectMetadataItem;
   showLabel?: boolean;
   labelWidth?: number;
 };
@@ -48,8 +48,8 @@ export const formatFieldMetadataItemAsFieldDefinition = ({
     options: field.options,
     settings: field.settings,
     isNullable: field.isNullable,
-    isCustom: field.isCustom ?? false,
-    isUIReadOnly: field.isUIReadOnly ?? false,
+    applicationId: field.applicationId,
+    isUIEditable: field.isUIEditable ?? true,
   };
 
   return {

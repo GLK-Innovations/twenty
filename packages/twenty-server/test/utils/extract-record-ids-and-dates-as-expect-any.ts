@@ -4,7 +4,7 @@ export const extractRecordIdsAndDatesAsExpectAny = (
   record: Record<string, unknown> | Array<Record<string, unknown>>,
 ): any => {
   if (Array.isArray(record)) {
-    return record.map(extractRecordIdsAndDatesAsExpectAny);
+    return record.map((item) => extractRecordIdsAndDatesAsExpectAny(item));
   }
 
   if (typeof record !== 'object') {
@@ -25,6 +25,7 @@ export const extractRecordIdsAndDatesAsExpectAny = (
 
     if (
       key.endsWith('Id') ||
+      key.endsWith('UniversalIdentifier') ||
       key === 'universalIdentifier' ||
       key === 'id' ||
       key === 'updatedAt' ||
@@ -33,7 +34,8 @@ export const extractRecordIdsAndDatesAsExpectAny = (
     ) {
       return {
         ...acc,
-        [key]: expect.any(String),
+        [key]:
+          typeof value === 'object' ? expect.any(Object) : expect.any(String),
       };
     }
 

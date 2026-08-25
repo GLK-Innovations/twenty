@@ -22,10 +22,16 @@ export const findManyObjectMetadataWithIndexes = async ({
     gqlFields: `
         id
         nameSingular
+        universalIdentifier
         fieldsList {
           id
           type
           name
+          applicationId
+          description
+          icon
+          label
+          universalIdentifier
           relation {
             type
             sourceObjectMetadata {

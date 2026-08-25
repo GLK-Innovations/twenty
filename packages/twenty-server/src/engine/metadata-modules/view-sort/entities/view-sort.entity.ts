@@ -7,22 +7,19 @@ import {
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
-  Relation,
+  type Relation,
   UpdateDateColumn,
 } from 'typeorm';
 
-import { SyncableEntity } from 'src/engine/workspace-manager/workspace-sync/interfaces/syncable-entity.interface';
-
-import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
 import { FieldMetadataEntity } from 'src/engine/metadata-modules/field-metadata/field-metadata.entity';
-import { ViewSortDirection } from 'src/engine/metadata-modules/view-sort/enums/view-sort-direction';
+import { ViewSortDirection } from 'twenty-shared/types';
 import { ViewEntity } from 'src/engine/metadata-modules/view/entities/view.entity';
+import { SyncableEntity } from 'src/engine/workspace-manager/types/syncable-entity.interface';
 
 @Entity({ name: 'viewSort', schema: 'core' })
 @Index('IDX_VIEW_SORT_WORKSPACE_ID_VIEW_ID', ['workspaceId', 'viewId'])
-@Index('IDX_VIEW_SORT_VIEW_ID', ['viewId'], {
-  where: '"deletedAt" IS NULL',
-})
+@Index('IDX_VIEW_SORT_VIEW_ID', ['viewId'])
+@Index('IDX_VIEW_SORT_FIELD_METADATA_ID', ['fieldMetadataId'])
 @Index(
   'IDX_VIEW_SORT_FIELD_METADATA_ID_VIEW_ID_UNIQUE',
   ['fieldMetadataId', 'viewId'],
@@ -52,11 +49,11 @@ export class ViewSortEntity extends SyncableEntity {
   })
   direction: ViewSortDirection;
 
-  @Column({ nullable: false, type: 'uuid' })
-  viewId: string;
+  @Column({ nullable: true, type: 'varchar' })
+  subFieldName?: string | null;
 
   @Column({ nullable: false, type: 'uuid' })
-  workspaceId: string;
+  viewId: string;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
@@ -66,10 +63,6 @@ export class ViewSortEntity extends SyncableEntity {
 
   @DeleteDateColumn({ type: 'timestamptz' })
   deletedAt?: Date | null;
-
-  @ManyToOne(() => WorkspaceEntity, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'workspaceId' })
-  workspace: Relation<WorkspaceEntity>;
 
   @ManyToOne(() => ViewEntity, (view) => view.viewSorts, {
     onDelete: 'CASCADE',

@@ -1,31 +1,49 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
 
 import { ImapFlow } from 'imapflow';
 import { ConnectedAccountProvider } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
+import { Repository } from 'typeorm';
 
-import { type ImapSmtpCaldavParams } from 'src/engine/core-modules/imap-smtp-caldav-connection/types/imap-smtp-caldav-connection.type';
-import { type ConnectedAccountWorkspaceEntity } from 'src/modules/connected-account/standard-objects/connected-account.workspace-entity';
-
-type ConnectedAccountIdentifier = Pick<
-  ConnectedAccountWorkspaceEntity,
-  'id' | 'provider' | 'connectionParameters' | 'handle'
->;
+import { buildImapTlsOptions } from 'src/engine/core-modules/imap-smtp-caldav-connection/utils/build-imap-tls-options.util';
+import { SecureHttpClientService } from 'src/engine/core-modules/secure-http-client/secure-http-client.service';
+import { ConnectedAccountEntity } from 'src/engine/metadata-modules/connected-account/entities/connected-account.entity';
+import { ConnectedAccountTokenEncryptionService } from 'src/engine/metadata-modules/connected-account/services/connected-account-token-encryption.service';
+import {
+  MessageImportDriverException,
+  MessageImportDriverExceptionCode,
+} from 'src/modules/messaging/message-import-manager/drivers/exceptions/message-import-driver.exception';
+import { parseImapAuthenticationError } from 'src/modules/messaging/message-import-manager/drivers/imap/utils/parse-imap-authentication-error.util';
 
 @Injectable()
 export class ImapClientProvider {
   private readonly logger = new Logger(ImapClientProvider.name);
 
-  private static readonly RETRY_ATTEMPTS = 3;
-  private static readonly RETRY_DELAY_MS = 1000;
   private static readonly CONNECTION_TIMEOUT_MS = 30000;
+  private static readonly GREETING_TIMEOUT_MS = 16000;
 
-  constructor() {}
+  constructor(
+    private readonly secureHttpClientService: SecureHttpClientService,
+    private readonly connectedAccountTokenEncryptionService: ConnectedAccountTokenEncryptionService,
+    @InjectRepository(ConnectedAccountEntity)
+    private readonly connectedAccountRepository: Repository<ConnectedAccountEntity>,
+  ) {}
 
-  async getClient(
-    connectedAccount: ConnectedAccountIdentifier,
-  ): Promise<ImapFlow> {
-    return this.createConnectionWithRetry(connectedAccount);
+  async getClient(connectedAccountId: string): Promise<ImapFlow> {
+    const connectedAccount =
+      await this.loadConnectedAccount(connectedAccountId);
+
+    try {
+      return await this.createConnection(connectedAccount);
+    } catch (error) {
+      this.logger.error(
+        `Failed to establish IMAP connection for ${connectedAccount.handle}: ${error.message}`,
+        error.stack,
+      );
+
+      throw parseImapAuthenticationError(error);
+    }
   }
 
   async closeClient(client: ImapFlow): Promise<void> {
@@ -37,116 +55,85 @@ export class ImapClientProvider {
     }
   }
 
-  private async createConnectionWithRetry(
-    connectedAccount: ConnectedAccountIdentifier,
-    attempt = 1,
-  ): Promise<ImapFlow> {
-    try {
-      return await this.createConnection(connectedAccount);
-    } catch (error) {
-      if (attempt < ImapClientProvider.RETRY_ATTEMPTS) {
-        const delay = ImapClientProvider.RETRY_DELAY_MS * attempt;
+  private async loadConnectedAccount(
+    connectedAccountId: string,
+  ): Promise<ConnectedAccountEntity> {
+    const connectedAccount = await this.connectedAccountRepository.findOne({
+      where: { id: connectedAccountId },
+    });
 
-        this.logger.warn(
-          `IMAP connection attempt ${attempt} failed for ${connectedAccount.handle}, retrying in ${delay}ms: ${error.message}`,
-        );
-
-        await this.delay(delay);
-
-        return this.createConnectionWithRetry(connectedAccount, attempt + 1);
-      }
-
-      this.logger.error(
-        `Failed to establish IMAP connection for ${connectedAccount.handle} after ${ImapClientProvider.RETRY_ATTEMPTS} attempts: ${error.message}`,
-        error.stack,
-      );
-
-      throw error;
-    }
-  }
-
-  private async createConnection(
-    connectedAccount: ConnectedAccountIdentifier,
-  ): Promise<ImapFlow> {
     if (
+      !isDefined(connectedAccount) ||
       connectedAccount.provider !== ConnectedAccountProvider.IMAP_SMTP_CALDAV ||
       !isDefined(connectedAccount.connectionParameters?.IMAP)
     ) {
+      throw new MessageImportDriverException(
+        `Missing IMAP credentials for connected account ${connectedAccountId}`,
+        MessageImportDriverExceptionCode.INSUFFICIENT_PERMISSIONS,
+      );
+    }
+
+    return connectedAccount;
+  }
+
+  private async createConnection(
+    connectedAccount: ConnectedAccountEntity,
+  ): Promise<ImapFlow> {
+    if (!isDefined(connectedAccount.connectionParameters?.IMAP)) {
       throw new Error('Connected account is not an IMAP provider');
     }
 
-    const connectionParameters: ImapSmtpCaldavParams =
-      (connectedAccount.connectionParameters as unknown as ImapSmtpCaldavParams) ||
-      {};
+    const imapParams =
+      this.connectedAccountTokenEncryptionService.decryptProtocolPassword({
+        protocolParams: connectedAccount.connectionParameters.IMAP,
+        workspaceId: connectedAccount.workspaceId,
+      });
 
-    let client: ImapFlow | null = null;
-    let timeoutId: NodeJS.Timeout | null = null;
+    const validatedImapHost =
+      await this.secureHttpClientService.getValidatedHost(imapParams.host);
+
+    const client = new ImapFlow({
+      host: validatedImapHost,
+      port: imapParams.port || 993,
+      ...buildImapTlsOptions(imapParams.connectionSecurity),
+      auth: {
+        user: isDefined(imapParams.username)
+          ? imapParams.username
+          : connectedAccount.handle,
+        pass: imapParams.password,
+      },
+      logger: false,
+      tls: {
+        rejectUnauthorized: false,
+      },
+      connectionTimeout: ImapClientProvider.CONNECTION_TIMEOUT_MS,
+      greetingTimeout: ImapClientProvider.GREETING_TIMEOUT_MS,
+    });
+
+    // ImapFlow is long-lived EventEmitter — missing 'error' listener crashes process on socket timeout.
+    client.on('error', (error) => {
+      this.logger.error(
+        `IMAP client error for ${connectedAccount.handle}: ${error.message}`,
+        error.stack,
+      );
+    });
 
     try {
-      client = new ImapFlow({
-        host: connectionParameters.IMAP?.host || '',
-        port: connectionParameters.IMAP?.port || 993,
-        secure: connectionParameters.IMAP?.secure,
-        auth: {
-          user: connectedAccount.handle,
-          pass: connectionParameters.IMAP?.password || '',
-        },
-        logger: false,
-        tls: {
-          rejectUnauthorized: false,
-        },
-      });
-
-      const connectionPromise = client.connect();
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(
-          () => reject(new Error('Connection timeout')),
-          ImapClientProvider.CONNECTION_TIMEOUT_MS,
-        );
-      });
-
-      await Promise.race([connectionPromise, timeoutPromise]);
-
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-        timeoutId = null;
-      }
+      await client.connect();
 
       this.logger.log(
         `Connected to IMAP server for ${connectedAccount.handle}`,
       );
 
-      try {
-        const mailboxes = await client.list();
-
-        this.logger.log(
-          `Available mailboxes for ${connectedAccount.handle}: ${mailboxes.map((m) => m.path).join(', ')}`,
-        );
-      } catch (error) {
-        this.logger.warn(`Failed to list mailboxes: ${error.message}`);
-      }
-
       return client;
     } catch (error) {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-
-      if (client) {
-        try {
-          await client.logout();
-        } catch (cleanupError) {
-          this.logger.warn(
-            `Failed to cleanup client after connection error: ${cleanupError.message}`,
-          );
-        }
+      try {
+        await client.logout();
+      } catch {
+        // Ignore cleanup errors
       }
 
       throw error;
     }
-  }
-
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

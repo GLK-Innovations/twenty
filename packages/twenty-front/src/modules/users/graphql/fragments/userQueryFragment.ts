@@ -23,6 +23,8 @@ export const USER_QUERY_FRAGMENT = gql`
     canImpersonate
     supportUserHash
     onboardingStatus
+    previousOnboardingStatus
+    isWorkspaceCreator
     workspaceMember {
       ...WorkspaceMemberQueryFragment
     }
@@ -35,6 +37,7 @@ export const USER_QUERY_FRAGMENT = gql`
     currentUserWorkspace {
       id
       permissionFlags
+      isImpersonating
       objectsPermissions {
         ...ObjectPermissionFragment
       }
@@ -52,6 +55,7 @@ export const USER_QUERY_FRAGMENT = gql`
       allowImpersonation
       activationStatus
       isPublicInviteLinkEnabled
+      workspaceDiscoverability
       isGoogleAuthEnabled
       isMicrosoftAuthEnabled
       isPasswordAuthEnabled
@@ -59,8 +63,18 @@ export const USER_QUERY_FRAGMENT = gql`
       isMicrosoftAuthBypassEnabled
       isPasswordAuthBypassEnabled
       subdomain
-      hasValidEnterpriseKey
       customDomain
+      hasValidSignedEnterpriseKey
+      hasValidEnterpriseValidityToken
+      workspaceCustomApplication {
+        id
+      }
+      installedApplications {
+        id
+        name
+        universalIdentifier
+        logoUrl
+      }
       isCustomDomainEnabled
       workspaceUrls {
         ...WorkspaceUrlsFragment
@@ -69,21 +83,34 @@ export const USER_QUERY_FRAGMENT = gql`
         key
         value
       }
-      metadataVersion
       currentBillingSubscription {
         ...CurrentBillingSubscriptionFragment
       }
+      billingCustomer {
+        id
+        hasPaymentMethod
+      }
       billingSubscriptions {
         ...BillingSubscriptionFragment
+      }
+      billingEntitlements {
+        key
+        value
       }
       workspaceMembersCount
       defaultRole {
         ...RoleFragment
       }
-      routerModel
+      fastModel
+      smartModel
+      aiAdditionalInstructions
+      enabledAiModelIds
+      useRecommendedModels
       isTwoFactorAuthenticationEnforced
       trashRetentionDays
+      eventLogRetentionDays
       editableProfileFields
+      isInternalMessagesImportEnabled
     }
     availableWorkspaces {
       ...AvailableWorkspacesFragment

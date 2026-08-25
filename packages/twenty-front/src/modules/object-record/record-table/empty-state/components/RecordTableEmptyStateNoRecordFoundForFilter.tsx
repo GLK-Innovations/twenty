@@ -2,7 +2,8 @@ import { useObjectLabel } from '@/object-metadata/hooks/useObjectLabel';
 import { useRecordTableContextOrThrow } from '@/object-record/record-table/contexts/RecordTableContext';
 import { RecordTableEmptyStateDisplay } from '@/object-record/record-table/empty-state/components/RecordTableEmptyStateDisplay';
 import { useCreateNewIndexRecord } from '@/object-record/record-table/hooks/useCreateNewIndexRecord';
-import { IconPlus } from 'twenty-ui/display';
+import { t } from '@lingui/core/macro';
+import { IconPlus } from 'twenty-ui/icon';
 
 export const RecordTableEmptyStateNoRecordFoundForFilter = () => {
   const { objectMetadataItem } = useRecordTableContextOrThrow();
@@ -17,11 +18,11 @@ export const RecordTableEmptyStateNoRecordFoundForFilter = () => {
 
   const objectLabelSingular = useObjectLabel(objectMetadataItem);
 
-  const buttonTitle = `Add a ${objectLabelSingular}`;
+  const buttonTitle = t`Add a ${objectLabelSingular}`;
 
-  const title = `No ${objectLabelSingular} found`;
+  const title = t`No ${objectLabelSingular} found`;
 
-  const subTitle = 'No records matching the filter criteria were found.';
+  const subTitle = t`No records matching the filter criteria were found.`;
 
   return (
     <RecordTableEmptyStateDisplay

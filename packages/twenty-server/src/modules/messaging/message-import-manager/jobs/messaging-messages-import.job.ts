@@ -1,16 +1,18 @@
 import { Scope } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
 
+import { Repository } from 'typeorm';
+
+import { MessageChannelSyncStage } from 'twenty-shared/types';
 import { Process } from 'src/engine/core-modules/message-queue/decorators/process.decorator';
 import { Processor } from 'src/engine/core-modules/message-queue/decorators/processor.decorator';
 import { MessageQueue } from 'src/engine/core-modules/message-queue/message-queue.constants';
-import { TwentyORMManager } from 'src/engine/twenty-orm/twenty-orm.manager';
-import { isThrottled } from 'src/modules/connected-account/utils/is-throttled';
-import {
-  MessageChannelSyncStage,
-  type MessageChannelWorkspaceEntity,
-} from 'src/modules/messaging/common/standard-objects/message-channel.workspace-entity';
+import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
+import { buildSystemAuthContext } from 'src/engine/twenty-orm/utils/build-system-auth-context.util';
 import { MessagingMessagesImportService } from 'src/modules/messaging/message-import-manager/services/messaging-messages-import.service';
 import { MessagingMonitoringService } from 'src/modules/messaging/monitoring/services/messaging-monitoring.service';
+import { MessageChannelEntity } from 'src/engine/metadata-modules/message-channel/entities/message-channel.entity';
+
 export type MessagingMessagesImportJobData = {
   messageChannelId: string;
   workspaceId: string;
@@ -24,7 +26,9 @@ export class MessagingMessagesImportJob {
   constructor(
     private readonly messagingMessagesImportService: MessagingMessagesImportService,
     private readonly messagingMonitoringService: MessagingMonitoringService,
-    private readonly twentyORMManager: TwentyORMManager,
+    private readonly workspaceOrmManager: WorkspaceOrmManager,
+    @InjectRepository(MessageChannelEntity)
+    private readonly messageChannelRepository: Repository<MessageChannelEntity>,
   ) {}
 
   @Process(MessagingMessagesImportJob.name)
@@ -37,52 +41,47 @@ export class MessagingMessagesImportJob {
       messageChannelId,
     });
 
-    const messageChannelRepository =
-      await this.twentyORMManager.getRepository<MessageChannelWorkspaceEntity>(
-        'messageChannel',
-      );
+    const authContext = buildSystemAuthContext(workspaceId);
 
-    const messageChannel = await messageChannelRepository.findOne({
-      where: {
-        id: messageChannelId,
+    await this.workspaceOrmManager.executeInWorkspaceContext(
+      async () => {
+        const messageChannel = await this.messageChannelRepository.findOne({
+          where: {
+            id: messageChannelId,
+            workspaceId,
+          },
+          relations: { connectedAccount: true, messageFolders: true },
+        });
+
+        if (!messageChannel) {
+          await this.messagingMonitoringService.track({
+            eventName: 'messages_import.error.message_channel_not_found',
+            messageChannelId,
+            workspaceId,
+          });
+
+          return;
+        }
+
+        if (!messageChannel?.isSyncEnabled) {
+          return;
+        }
+
+        if (
+          messageChannel.syncStage !==
+          MessageChannelSyncStage.MESSAGES_IMPORT_SCHEDULED
+        ) {
+          return;
+        }
+
+        await this.messagingMessagesImportService.processMessageBatchImport(
+          messageChannel,
+          messageChannel.connectedAccount,
+          workspaceId,
+        );
       },
-      relations: ['connectedAccount'],
-    });
-
-    if (!messageChannel) {
-      await this.messagingMonitoringService.track({
-        eventName: 'messages_import.error.message_channel_not_found',
-        messageChannelId,
-        workspaceId,
-      });
-
-      return;
-    }
-
-    if (!messageChannel?.isSyncEnabled) {
-      return;
-    }
-
-    if (
-      isThrottled(
-        messageChannel.syncStageStartedAt,
-        messageChannel.throttleFailureCount,
-      )
-    ) {
-      return;
-    }
-
-    if (
-      messageChannel.syncStage !==
-      MessageChannelSyncStage.MESSAGES_IMPORT_PENDING
-    ) {
-      return;
-    }
-
-    await this.messagingMessagesImportService.processMessageBatchImport(
-      messageChannel,
-      messageChannel.connectedAccount,
-      workspaceId,
+      authContext,
+      { lite: true },
     );
   }
 }

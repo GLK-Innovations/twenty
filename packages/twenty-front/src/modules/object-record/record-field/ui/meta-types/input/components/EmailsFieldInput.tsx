@@ -1,14 +1,15 @@
 import { FieldInputEventContext } from '@/object-record/record-field/ui/contexts/FieldInputEventContext';
 import { useEmailsField } from '@/object-record/record-field/ui/meta-types/hooks/useEmailsField';
 import { EmailsFieldMenuItem } from '@/object-record/record-field/ui/meta-types/input/components/EmailsFieldMenuItem';
+import { MULTI_ITEM_FIELD_INPUT_DROPDOWN_ID_PREFIX } from '@/object-record/record-field/ui/meta-types/input/constants/MultiItemFieldInputDropdownClickOutsideId';
 import { recordFieldInputIsFieldInErrorComponentState } from '@/object-record/record-field/ui/states/recordFieldInputIsFieldInErrorComponentState';
-import { emailsSchema } from '@/object-record/record-field/ui/types/guards/isFieldEmailsValue';
-import { emailSchema } from '@/object-record/record-field/ui/validation-schemas/emailSchema';
-import { useSetRecoilComponentState } from '@/ui/utilities/state/component-state/hooks/useSetRecoilComponentState';
+import { type FieldEmailsValue } from '@/object-record/record-field/ui/types/FieldMetadata';
+import { emailsFieldValueSchema } from '@/object-record/record-field/ui/validation-schemas/emailsFieldValueSchema';
+import { useSetAtomComponentState } from '@/ui/utilities/state/jotai/hooks/useSetAtomComponentState';
 import { useLingui } from '@lingui/react/macro';
 import { useCallback, useContext, useMemo } from 'react';
 import { MULTI_ITEM_FIELD_DEFAULT_MAX_VALUES } from 'twenty-shared/constants';
-import { isDefined } from 'twenty-shared/utils';
+import { emailSchema, isDefined } from 'twenty-shared/utils';
 import { FieldMetadataType } from '~/generated-metadata/graphql';
 import { useCopyToClipboard } from '~/hooks/useCopyToClipboard';
 import { MultiItemFieldInput } from './MultiItemFieldInput';
@@ -18,7 +19,9 @@ export const EmailsFieldInput = () => {
   const { copyToClipboard } = useCopyToClipboard();
   const { t } = useLingui();
 
-  const { onEscape, onClickOutside } = useContext(FieldInputEventContext);
+  const { onEscape, onClickOutside, onEnter, onSubmit } = useContext(
+    FieldInputEventContext,
+  );
 
   const emails = useMemo<string[]>(
     () =>
@@ -29,18 +32,26 @@ export const EmailsFieldInput = () => {
     [draftValue?.primaryEmail, draftValue?.additionalEmails],
   );
 
-  const handleChange = (updatedEmails: string[]) => {
-    const [nextPrimaryEmail, ...nextAdditionalEmails] = updatedEmails;
+  const parseStringArrayToEmailsValue = (emails: string[]) => {
+    const [nextPrimaryEmail, ...nextAdditionalEmails] = emails;
 
-    const nextValue = {
+    const nextValue: FieldEmailsValue = {
       primaryEmail: nextPrimaryEmail ?? '',
       additionalEmails: nextAdditionalEmails,
     };
 
-    const parseResponse = emailsSchema.safeParse(nextValue);
+    const parseResponse = emailsFieldValueSchema.safeParse(nextValue);
 
     if (parseResponse.success) {
-      setDraftValue(parseResponse.data);
+      return parseResponse.data;
+    }
+  };
+
+  const handleChange = (updatedEmails: string[]) => {
+    const nextValue = parseStringArrayToEmailsValue(updatedEmails);
+
+    if (isDefined(nextValue)) {
+      setDraftValue(nextValue);
     }
   };
 
@@ -56,12 +67,12 @@ export const EmailsFieldInput = () => {
     index === 0 && emails.length > 1;
   const getShowSetAsPrimaryButton = (index: number) => index > 0;
 
-  const setIsFieldInError = useSetRecoilComponentState(
+  const setRecordFieldInputIsFieldInError = useSetAtomComponentState(
     recordFieldInputIsFieldInErrorComponentState,
   );
 
   const handleError = (hasError: boolean, values: any[]) => {
-    setIsFieldInError(hasError && values.length === 0);
+    setRecordFieldInputIsFieldInError(hasError && values.length === 0);
   };
 
   const handleCopy = (email: string) => {
@@ -69,14 +80,28 @@ export const EmailsFieldInput = () => {
   };
 
   const handleClickOutside = (
-    _newValue: any,
+    updatedEmails: string[],
     event: MouseEvent | TouchEvent,
   ) => {
-    onClickOutside?.({ newValue: draftValue, event });
+    onClickOutside?.({
+      newValue: parseStringArrayToEmailsValue(updatedEmails),
+      event,
+    });
   };
 
-  const handleEscape = (_newValue: any) => {
-    onEscape?.({ newValue: draftValue });
+  const handleEscape = (updatedEmails: string[]) => {
+    onEscape?.({ newValue: parseStringArrayToEmailsValue(updatedEmails) });
+  };
+
+  const handleEnter = (updatedEmails: string[]) => {
+    onEnter?.({ newValue: parseStringArrayToEmailsValue(updatedEmails) });
+  };
+
+  const handleSubmit = (updatedEmails: string[]) => {
+    onSubmit?.({
+      newValue: parseStringArrayToEmailsValue(updatedEmails),
+      skipClose: true,
+    });
   };
 
   const maxNumberOfValues =
@@ -87,9 +112,11 @@ export const EmailsFieldInput = () => {
     <MultiItemFieldInput
       items={emails}
       onChange={handleChange}
+      onEnter={handleEnter}
+      onSubmit={handleSubmit}
       onEscape={handleEscape}
       onClickOutside={handleClickOutside}
-      placeholder="Email"
+      placeholder={t`Email`}
       fieldMetadataType={FieldMetadataType.EMAILS}
       validateInput={validateInput}
       renderItem={({
@@ -101,7 +128,7 @@ export const EmailsFieldInput = () => {
       }) => (
         <EmailsFieldMenuItem
           key={index}
-          dropdownId={`emails-${index}`}
+          dropdownId={`${MULTI_ITEM_FIELD_INPUT_DROPDOWN_ID_PREFIX}-${fieldDefinition.metadata.fieldName}-${index}`}
           showPrimaryIcon={getShowPrimaryIcon(index)}
           showSetAsPrimaryButton={getShowSetAsPrimaryButton(index)}
           showCopyButton={true}

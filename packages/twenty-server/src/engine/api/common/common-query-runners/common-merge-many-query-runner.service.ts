@@ -1,26 +1,26 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 
+import { msg } from '@lingui/core/macro';
 import {
   MUTATION_MAX_MERGE_RECORDS,
-  QUERY_MAX_RECORDS,
+  QUERY_MAX_RECORDS_FROM_RELATION,
 } from 'twenty-shared/constants';
 import {
+  FieldMetadataSettingsMapping,
   FieldMetadataType,
   ObjectRecord,
   RelationType,
-  FieldMetadataRelationSettings,
 } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 import { FindOptionsRelations, In, ObjectLiteral } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
-
-import { WorkspaceAuthContext } from 'src/engine/api/common/interfaces/workspace-auth-context.interface';
 
 import { CommonBaseQueryRunnerService } from 'src/engine/api/common/common-query-runners/common-base-query-runner.service';
 import {
   CommonQueryRunnerException,
   CommonQueryRunnerExceptionCode,
 } from 'src/engine/api/common/common-query-runners/errors/common-query-runner.exception';
+import { STANDARD_ERROR_MESSAGE } from 'src/engine/api/common/common-query-runners/errors/standard-error-message.constant';
 import { CommonBaseQueryRunnerContext } from 'src/engine/api/common/types/common-base-query-runner-context.type';
 import { CommonExtendedQueryRunnerContext } from 'src/engine/api/common/types/common-extended-query-runner-context.type';
 import {
@@ -29,18 +29,20 @@ import {
   CommonQueryNames,
   MergeManyQueryArgs,
 } from 'src/engine/api/common/types/common-query-args.type';
-import {
-  GraphqlQueryRunnerException,
-  GraphqlQueryRunnerExceptionCode,
-} from 'src/engine/api/graphql/graphql-query-runner/errors/graphql-query-runner.exception';
 import { buildColumnsToReturn } from 'src/engine/api/graphql/graphql-query-runner/utils/build-columns-to-return';
 import { buildColumnsToSelect } from 'src/engine/api/graphql/graphql-query-runner/utils/build-columns-to-select';
 import { hasRecordFieldValue } from 'src/engine/api/graphql/graphql-query-runner/utils/has-record-field-value.util';
 import { mergeFieldValues } from 'src/engine/api/graphql/graphql-query-runner/utils/merge-field-values.util';
+import { WorkspaceAuthContext } from 'src/engine/core-modules/auth/types/workspace-auth-context.type';
+import { MetricsKeys } from 'src/engine/core-modules/metrics/types/metrics-keys.type';
+import { computeMorphOrRelationFieldJoinColumnName } from 'src/engine/metadata-modules/field-metadata/utils/compute-morph-or-relation-field-join-column-name.util';
+import { FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/flat-entity-maps.type';
+import { findFlatEntityByIdInFlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/utils/find-flat-entity-by-id-in-flat-entity-maps.util';
+import { FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
+import { buildFieldMapsFromFlatObjectMetadata } from 'src/engine/metadata-modules/flat-field-metadata/utils/build-field-maps-from-flat-object-metadata.util';
+import { isMorphOrRelationFlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/utils/is-morph-or-relation-flat-field-metadata.util';
+import { FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
 import { assertMutationNotOnRemoteObject } from 'src/engine/metadata-modules/object-metadata/utils/assert-mutation-not-on-remote-object.util';
-import { ObjectMetadataItemWithFieldMaps } from 'src/engine/metadata-modules/types/object-metadata-item-with-field-maps';
-import { ObjectMetadataMaps } from 'src/engine/metadata-modules/types/object-metadata-maps';
-import { isFieldMetadataEntityOfType } from 'src/engine/utils/is-field-metadata-of-type.util';
 
 @Injectable()
 export class CommonMergeManyQueryRunnerService extends CommonBaseQueryRunnerService<
@@ -49,13 +51,11 @@ export class CommonMergeManyQueryRunnerService extends CommonBaseQueryRunnerServ
 > {
   protected readonly operationName = CommonQueryNames.MERGE_MANY;
 
-  private readonly logger = new Logger(CommonMergeManyQueryRunnerService.name);
   async run(
     args: CommonExtendedInput<MergeManyQueryArgs>,
     queryRunnerContext: CommonExtendedQueryRunnerContext,
   ): Promise<ObjectRecord> {
-    const { objectMetadataMaps, objectMetadataItemWithFieldMaps } =
-      queryRunnerContext;
+    const { flatFieldMetadataMaps, flatObjectMetadata } = queryRunnerContext;
 
     const recordsToMerge = await this.fetchRecordsToMerge(
       queryRunnerContext,
@@ -71,7 +71,8 @@ export class CommonMergeManyQueryRunnerService extends CommonBaseQueryRunnerServ
     const mergedData = this.performDeepMerge(
       recordsToMerge,
       priorityRecord.id,
-      objectMetadataItemWithFieldMaps,
+      flatObjectMetadata,
+      flatFieldMetadataMaps,
       args.dryRun ?? false,
     );
 
@@ -81,35 +82,13 @@ export class CommonMergeManyQueryRunnerService extends CommonBaseQueryRunnerServ
 
     const idsToDelete = args.ids.filter((id) => id !== priorityRecord.id);
 
-    await this.migrateRelatedRecords(
-      queryRunnerContext,
-      idsToDelete,
-      priorityRecord.id,
-    );
-
-    const queryBuilder = queryRunnerContext.repository.createQueryBuilder(
-      objectMetadataItemWithFieldMaps.nameSingular,
-    );
-
-    const columnsToReturn = buildColumnsToReturn({
-      select: args.selectedFieldsResult.select,
-      relations: args.selectedFieldsResult.relations,
-      objectMetadataItemWithFieldMaps,
-      objectMetadataMaps,
-    });
-
-    await queryBuilder
-      .softDelete()
-      .whereInIds(idsToDelete)
-      .returning(columnsToReturn)
-      .execute();
-
-    const updatedRecord = await this.updatePriorityRecord(
+    const updatedRecord = await this.executeMergeWithinTransaction({
       args,
       queryRunnerContext,
-      priorityRecord.id,
+      idsToDelete,
+      priorityRecordId: priorityRecord.id,
       mergedData,
-    );
+    });
 
     await this.processNestedRelations({
       args,
@@ -127,40 +106,51 @@ export class CommonMergeManyQueryRunnerService extends CommonBaseQueryRunnerServ
     const columnsToSelect = buildColumnsToSelect({
       select: args.selectedFieldsResult.select,
       relations: args.selectedFieldsResult.relations,
-      objectMetadataItemWithFieldMaps: context.objectMetadataItemWithFieldMaps,
-      objectMetadataMaps: context.objectMetadataMaps,
+      flatObjectMetadata: context.flatObjectMetadata,
+      flatObjectMetadataMaps: context.flatObjectMetadataMaps,
+      flatFieldMetadataMaps: context.flatFieldMetadataMaps,
     });
 
-    const recordsToMerge = await context.repository.find({
+    const fetchedRecords = (await context.repository.find({
       where: { id: In(args.ids) },
       select: columnsToSelect,
-    });
+    })) as ObjectRecord[];
 
-    if (recordsToMerge.length !== args.ids.length) {
+    if (fetchedRecords.length !== args.ids.length) {
       throw new CommonQueryRunnerException(
         'One or more records not found',
         CommonQueryRunnerExceptionCode.RECORD_NOT_FOUND,
+        { userFriendlyMessage: msg`One or more records were not found.` },
       );
     }
 
+    const orderIndex = new Map(args.ids.map((id, index) => [id, index]));
+
+    fetchedRecords.sort(
+      (a, b) => (orderIndex.get(a.id) ?? 0) - (orderIndex.get(b.id) ?? 0),
+    );
+
+    const recordsToMerge = fetchedRecords;
+
     if (args.dryRun && args.selectedFieldsResult.relations) {
       await this.processNestedRelationsHelper.processNestedRelations({
-        objectMetadataMaps: context.objectMetadataMaps,
-        parentObjectMetadataItem: context.objectMetadataItemWithFieldMaps,
-        parentObjectRecords: recordsToMerge as ObjectRecord[],
+        flatObjectMetadataMaps: context.flatObjectMetadataMaps,
+        flatFieldMetadataMaps: context.flatFieldMetadataMaps,
+        parentObjectMetadataItem: context.flatObjectMetadata,
+        parentObjectRecords: recordsToMerge,
         relations: args.selectedFieldsResult.relations as Record<
           string,
           FindOptionsRelations<ObjectLiteral>
         >,
-        limit: QUERY_MAX_RECORDS,
+        limit: QUERY_MAX_RECORDS_FROM_RELATION,
         authContext: context.authContext,
-        workspaceDataSource: context.workspaceDataSource,
         rolePermissionConfig: context.rolePermissionConfig,
         selectedFields: args.selectedFieldsResult.select,
+        ...this.getNestedRelationsReadPathOptions(),
       });
     }
 
-    return recordsToMerge as ObjectRecord[];
+    return recordsToMerge;
   }
 
   private validateAndGetPriorityRecord(
@@ -174,9 +164,12 @@ export class CommonMergeManyQueryRunnerService extends CommonBaseQueryRunnerServ
     );
 
     if (!priorityRecord) {
-      throw new GraphqlQueryRunnerException(
+      throw new CommonQueryRunnerException(
         'Priority record not found',
-        GraphqlQueryRunnerExceptionCode.RECORD_NOT_FOUND,
+        CommonQueryRunnerExceptionCode.RECORD_NOT_FOUND,
+        {
+          userFriendlyMessage: msg`This record does not exist or has been deleted.`,
+        },
       );
     }
 
@@ -186,10 +179,16 @@ export class CommonMergeManyQueryRunnerService extends CommonBaseQueryRunnerServ
   private performDeepMerge(
     recordsToMerge: ObjectRecord[],
     priorityRecordId: string,
-    objectMetadataItemWithFieldMaps: ObjectMetadataItemWithFieldMaps,
+    flatObjectMetadata: FlatObjectMetadata,
+    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>,
     isDryRun = false,
   ): Partial<ObjectRecord> {
     const mergedResult: Partial<ObjectRecord> = {};
+
+    const { fieldIdByName } = buildFieldMapsFromFlatObjectMetadata(
+      flatFieldMetadataMaps,
+      flatObjectMetadata,
+    );
 
     const allFieldNames = new Set<string>();
 
@@ -198,7 +197,8 @@ export class CommonMergeManyQueryRunnerService extends CommonBaseQueryRunnerServ
         if (
           !this.shouldExcludeFieldFromMerge(
             fieldName,
-            objectMetadataItemWithFieldMaps,
+            fieldIdByName,
+            flatFieldMetadataMaps,
           )
         ) {
           allFieldNames.add(fieldName);
@@ -222,9 +222,10 @@ export class CommonMergeManyQueryRunnerService extends CommonBaseQueryRunnerServ
       } else if (recordsWithValues.length === 1) {
         mergedResult[fieldName] = recordsWithValues[0].value;
       } else {
-        const fieldMetadata = Object.values(
-          objectMetadataItemWithFieldMaps.fieldsById,
-        ).find((field) => field?.name === fieldName);
+        const fieldMetadata = findFlatEntityByIdInFlatEntityMaps({
+          flatEntityId: fieldIdByName[fieldName],
+          flatEntityMaps: flatFieldMetadataMaps,
+        });
 
         if (!fieldMetadata) {
           return;
@@ -232,8 +233,9 @@ export class CommonMergeManyQueryRunnerService extends CommonBaseQueryRunnerServ
 
         const relationType =
           isDryRun && fieldMetadata.type === FieldMetadataType.RELATION
-            ? (fieldMetadata.settings as FieldMetadataRelationSettings)
-                ?.relationType
+            ? (
+                fieldMetadata.settings as FieldMetadataSettingsMapping['RELATION']
+              )?.relationType
             : undefined;
 
         mergedResult[fieldName] = mergeFieldValues(
@@ -251,11 +253,13 @@ export class CommonMergeManyQueryRunnerService extends CommonBaseQueryRunnerServ
 
   private shouldExcludeFieldFromMerge(
     fieldName: string,
-    objectMetadataItemWithFieldMaps: ObjectMetadataItemWithFieldMaps,
+    fieldIdByName: Record<string, string>,
+    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>,
   ): boolean {
-    const fieldMetadata = Object.values(
-      objectMetadataItemWithFieldMaps.fieldsById,
-    ).find((field) => field?.name === fieldName);
+    const fieldMetadata = findFlatEntityByIdInFlatEntityMaps({
+      flatEntityId: fieldIdByName[fieldName],
+      flatEntityMaps: flatFieldMetadataMaps,
+    });
 
     return fieldMetadata?.isSystem ?? false;
   }
@@ -274,120 +278,157 @@ export class CommonMergeManyQueryRunnerService extends CommonBaseQueryRunnerServ
     return dryRunRecord;
   }
 
-  private async updatePriorityRecord(
-    args: CommonExtendedInput<MergeManyQueryArgs>,
-    queryRunnerContext: CommonExtendedQueryRunnerContext,
-    priorityRecordId: string,
-    mergedData: Partial<ObjectRecord>,
-  ): Promise<ObjectRecord> {
-    const { objectMetadataItemWithFieldMaps, objectMetadataMaps, repository } =
-      queryRunnerContext;
+  private getRelationFieldsPointingToCurrentObject(
+    context: CommonExtendedQueryRunnerContext,
+  ): Array<{ objectMetadata: FlatObjectMetadata; joinColumnName: string }> {
+    const {
+      flatObjectMetadataMaps,
+      flatFieldMetadataMaps,
+      flatObjectMetadata,
+    } = context;
 
-    const queryBuilder = repository.createQueryBuilder(
-      objectMetadataItemWithFieldMaps.nameSingular,
-    );
+    const relationFields: Array<{
+      objectMetadata: FlatObjectMetadata;
+      joinColumnName: string;
+    }> = [];
+
+    for (const field of Object.values(
+      flatFieldMetadataMaps.byUniversalIdentifier,
+    ).filter(isDefined)) {
+      if (
+        !isMorphOrRelationFlatFieldMetadata(field) ||
+        field.relationTargetObjectMetadataId !== flatObjectMetadata.id ||
+        !field.isActive
+      ) {
+        continue;
+      }
+
+      const relationSettings = field.settings as
+        | FieldMetadataSettingsMapping['RELATION']
+        | FieldMetadataSettingsMapping['MORPH_RELATION']
+        | undefined;
+
+      if (relationSettings?.relationType !== RelationType.MANY_TO_ONE) {
+        continue;
+      }
+
+      const objMetadata = findFlatEntityByIdInFlatEntityMaps({
+        flatEntityId: field.objectMetadataId,
+        flatEntityMaps: flatObjectMetadataMaps,
+      });
+
+      if (!objMetadata) {
+        continue;
+      }
+
+      relationFields.push({
+        objectMetadata: objMetadata,
+        joinColumnName: computeMorphOrRelationFieldJoinColumnName({
+          name: field.name,
+        }),
+      });
+    }
+
+    return relationFields;
+  }
+
+  private async executeMergeWithinTransaction({
+    args,
+    queryRunnerContext,
+    idsToDelete,
+    priorityRecordId,
+    mergedData,
+  }: {
+    args: CommonExtendedInput<MergeManyQueryArgs>;
+    queryRunnerContext: CommonExtendedQueryRunnerContext;
+    idsToDelete: string[];
+    priorityRecordId: string;
+    mergedData: Partial<ObjectRecord>;
+  }): Promise<ObjectRecord> {
+    const {
+      flatObjectMetadata,
+      flatObjectMetadataMaps,
+      flatFieldMetadataMaps,
+      rolePermissionConfig,
+    } = queryRunnerContext;
+    const alias = flatObjectMetadata.nameSingular;
 
     const columnsToReturn = buildColumnsToReturn({
       select: args.selectedFieldsResult.select,
       relations: args.selectedFieldsResult.relations,
-      objectMetadataItemWithFieldMaps,
-      objectMetadataMaps,
+      flatObjectMetadata,
+      flatObjectMetadataMaps,
+      flatFieldMetadataMaps,
     });
 
-    const updatedObjectRecords = await queryBuilder
-      .update()
-      .set(mergedData)
-      .where({ id: priorityRecordId })
-      .returning(columnsToReturn)
-      .execute();
+    this.metricsService.incrementCounterBy({
+      key: MetricsKeys.OrmV2WritePathUsed,
+      amount: 1,
+      attributes: { operation: this.operationName },
+    });
 
-    if (!updatedObjectRecords.generatedMaps.length) {
-      throw new CommonQueryRunnerException(
-        'Failed to update record',
-        CommonQueryRunnerExceptionCode.RECORD_NOT_FOUND,
-      );
-    }
-
-    const updatedRecord = updatedObjectRecords.generatedMaps[0] as ObjectRecord;
-
-    return updatedRecord;
-  }
-
-  private async migrateRelatedRecords(
-    context: CommonExtendedQueryRunnerContext,
-    fromIds: string[],
-    toId: string,
-  ): Promise<void> {
-    const { objectMetadataMaps, objectMetadataItemWithFieldMaps } = context;
-
-    const relationFieldsPointingToCurrentObject = Object.values(
-      objectMetadataMaps.byId,
-    )
-      .filter(isDefined)
-      .flatMap((metadata) => {
-        const relationFields = Object.values(metadata.fieldsById)
-          .filter(isDefined)
-          .filter((field) =>
-            isFieldMetadataEntityOfType(field, FieldMetadataType.RELATION),
-          )
-          .filter(
-            (field) =>
-              field.relationTargetObjectMetadataId ===
-                objectMetadataItemWithFieldMaps.id && field.isActive,
+    return this.workspaceOrmManager.runInWorkspaceTransaction(
+      async (transactionScope) => {
+        for (const relationField of this.getRelationFieldsPointingToCurrentObject(
+          queryRunnerContext,
+        )) {
+          const relatedRepository = transactionScope.getRepository(
+            relationField.objectMetadata.nameSingular,
+            rolePermissionConfig,
           );
 
-        return relationFields
-          .filter((field) => {
-            const relationSettings =
-              field.settings as FieldMetadataRelationSettings;
-
-            return (
-              relationSettings?.relationType === RelationType.MANY_TO_ONE &&
-              relationSettings?.joinColumnName
-            );
-          })
-          .map((field) => {
-            const relationSettings =
-              field.settings as FieldMetadataRelationSettings;
-
-            return {
-              objectMetadata: metadata,
-              fieldName: field.name,
-              fieldId: field.id,
-              joinColumnName: relationSettings.joinColumnName,
-            };
-          });
-      });
-
-    for (const relationField of relationFieldsPointingToCurrentObject) {
-      if (!relationField.joinColumnName) {
-        continue;
-      }
-
-      try {
-        const repository = context.workspaceDataSource.getRepository(
-          relationField.objectMetadata.nameSingular,
-          context.rolePermissionConfig,
-        );
-
-        const whereCondition = { [relationField.joinColumnName]: In(fromIds) };
-
-        const existingRecords = await repository.find({
-          where: whereCondition,
-        });
-
-        if (existingRecords.length > 0) {
-          await repository.update(whereCondition, {
-            [relationField.joinColumnName]: toId,
+          await relatedRepository.runMutation({
+            selectQueryBuilder: relatedRepository
+              .createQueryBuilder(relationField.objectMetadata.nameSingular)
+              .where({ [relationField.joinColumnName]: In(idsToDelete) }),
+            rowLevelPermissionsApplied: false,
+            kind: 'update',
+            columnsToReturn: ['id'],
+            data: { [relationField.joinColumnName]: priorityRecordId },
           });
         }
-      } catch (error) {
-        this.logger.warn(
-          `Failed to migrate relation field "${relationField.fieldName}" (${relationField.joinColumnName}) in object "${relationField.objectMetadata.nameSingular}":`,
-          error.message,
+
+        const objectRepository = transactionScope.getRepository(
+          alias,
+          rolePermissionConfig,
         );
-      }
-    }
+
+        await objectRepository.runMutation({
+          selectQueryBuilder: objectRepository
+            .createQueryBuilder(alias)
+            .where({ id: In(idsToDelete) }),
+          rowLevelPermissionsApplied: false,
+          kind: 'delete',
+          columnsToReturn,
+        });
+
+        const [resolvedMergedData] = await this.resolveNestedRelations({
+          records: [mergedData],
+          queryRunnerContext,
+          writeRepository: objectRepository,
+        });
+
+        const updatedRecords = await objectRepository.runMutation({
+          selectQueryBuilder: objectRepository
+            .createQueryBuilder(alias)
+            .where({ id: priorityRecordId }),
+          rowLevelPermissionsApplied: false,
+          kind: 'update',
+          columnsToReturn,
+          data: resolvedMergedData,
+        });
+
+        if (!isDefined(updatedRecords[0])) {
+          throw new CommonQueryRunnerException(
+            'Failed to update record',
+            CommonQueryRunnerExceptionCode.RECORD_NOT_FOUND,
+            { userFriendlyMessage: STANDARD_ERROR_MESSAGE },
+          );
+        }
+
+        return updatedRecords[0];
+      },
+    );
   }
 
   private async processNestedRelations({
@@ -400,27 +441,28 @@ export class CommonMergeManyQueryRunnerService extends CommonBaseQueryRunnerServ
     updatedRecords: ObjectRecord[];
   }): Promise<void> {
     const {
-      objectMetadataMaps,
-      objectMetadataItemWithFieldMaps,
+      flatObjectMetadataMaps,
+      flatFieldMetadataMaps,
+      flatObjectMetadata,
       authContext,
-      workspaceDataSource,
       rolePermissionConfig,
     } = queryRunnerContext;
 
     if (args.selectedFieldsResult.relations) {
       await this.processNestedRelationsHelper.processNestedRelations({
-        objectMetadataMaps,
-        parentObjectMetadataItem: objectMetadataItemWithFieldMaps,
+        flatObjectMetadataMaps,
+        flatFieldMetadataMaps,
+        parentObjectMetadataItem: flatObjectMetadata,
         parentObjectRecords: updatedRecords,
         relations: args.selectedFieldsResult.relations as Record<
           string,
           FindOptionsRelations<ObjectLiteral>
         >,
-        limit: QUERY_MAX_RECORDS,
+        limit: QUERY_MAX_RECORDS_FROM_RELATION,
         authContext,
-        workspaceDataSource,
         rolePermissionConfig,
         selectedFields: args.selectedFieldsResult.select,
+        ...this.getNestedRelationsReadPathOptions(),
       });
     }
   }
@@ -434,8 +476,9 @@ export class CommonMergeManyQueryRunnerService extends CommonBaseQueryRunnerServ
 
   async processQueryResult(
     queryResult: ObjectRecord,
-    _objectMetadataItemId: string,
-    _objectMetadataMaps: ObjectMetadataMaps,
+    _flatObjectMetadata: FlatObjectMetadata,
+    _flatObjectMetadataMaps: FlatEntityMaps<FlatObjectMetadata>,
+    _flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>,
     _authContext: WorkspaceAuthContext,
   ): Promise<ObjectRecord> {
     return queryResult;
@@ -445,14 +488,15 @@ export class CommonMergeManyQueryRunnerService extends CommonBaseQueryRunnerServ
     args: CommonInput<MergeManyQueryArgs>,
     queryRunnerContext: CommonExtendedQueryRunnerContext,
   ): Promise<void> {
-    const { objectMetadataItemWithFieldMaps } = queryRunnerContext;
+    const { flatObjectMetadata } = queryRunnerContext;
 
-    assertMutationNotOnRemoteObject(objectMetadataItemWithFieldMaps);
+    assertMutationNotOnRemoteObject(flatObjectMetadata);
 
-    if (!isDefined(objectMetadataItemWithFieldMaps.duplicateCriteria)) {
+    if (!isDefined(flatObjectMetadata.duplicateCriteria)) {
       throw new CommonQueryRunnerException(
-        `Merge is only available for objects with duplicate criteria. Object '${objectMetadataItemWithFieldMaps.nameSingular}' does not have duplicate criteria defined.`,
+        `Merge is only available for objects with duplicate criteria. Object '${flatObjectMetadata.nameSingular}' does not have duplicate criteria defined.`,
         CommonQueryRunnerExceptionCode.INVALID_QUERY_INPUT,
+        { userFriendlyMessage: msg`This type of record cannot be merged.` },
       );
     }
 
@@ -462,6 +506,9 @@ export class CommonMergeManyQueryRunnerService extends CommonBaseQueryRunnerServ
       throw new CommonQueryRunnerException(
         'At least 2 record IDs are required for merge',
         CommonQueryRunnerExceptionCode.INVALID_QUERY_INPUT,
+        {
+          userFriendlyMessage: msg`Please select at least 2 records to merge.`,
+        },
       );
     }
 
@@ -469,6 +516,9 @@ export class CommonMergeManyQueryRunnerService extends CommonBaseQueryRunnerServ
       throw new CommonQueryRunnerException(
         `Maximum ${MUTATION_MAX_MERGE_RECORDS} records can be merged at once`,
         CommonQueryRunnerExceptionCode.INVALID_QUERY_INPUT,
+        {
+          userFriendlyMessage: msg`You can merge up to ${MUTATION_MAX_MERGE_RECORDS} records at once.`,
+        },
       );
     }
 
@@ -476,6 +526,7 @@ export class CommonMergeManyQueryRunnerService extends CommonBaseQueryRunnerServ
       throw new CommonQueryRunnerException(
         `Invalid conflict priority '${conflictPriorityIndex}'. Valid options for ${ids.length} records: 0-${ids.length - 1}`,
         CommonQueryRunnerExceptionCode.INVALID_QUERY_INPUT,
+        { userFriendlyMessage: STANDARD_ERROR_MESSAGE },
       );
     }
   }

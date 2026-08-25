@@ -1,38 +1,42 @@
-import { type DraftPageLayout } from '@/page-layout/types/draft-page-layout';
-import { type PageLayout } from '@/page-layout/types/PageLayout';
-import { PageLayoutType } from '~/generated/graphql';
+import { type PageLayoutTab } from '@/page-layout/types/PageLayoutTab';
+import { sortTabsByPosition } from '@/page-layout/utils/sortTabsByPosition';
+import { PageLayoutType } from '~/generated-metadata/graphql';
 
 type GetTabsByDisplayModeParams = {
-  pageLayout: PageLayout | DraftPageLayout;
+  tabs: PageLayoutTab[];
+  pageLayoutType: PageLayoutType;
   isMobile: boolean;
-  isInRightDrawer: boolean;
+  isInSidePanel: boolean;
 };
 
 export const getTabsByDisplayMode = ({
-  pageLayout,
+  tabs,
+  pageLayoutType,
   isMobile,
-  isInRightDrawer,
+  isInSidePanel,
 }: GetTabsByDisplayModeParams) => {
   if (
     isMobile ||
-    isInRightDrawer ||
-    pageLayout.type !== PageLayoutType.RECORD_PAGE
+    isInSidePanel ||
+    pageLayoutType !== PageLayoutType.RECORD_PAGE
   ) {
     return {
-      tabsToRenderInTabList: pageLayout.tabs,
+      tabsToRenderInTabList: tabs,
       pinnedLeftTab: undefined,
     };
   }
 
-  if (pageLayout.tabs.length === 1) {
+  if (tabs.length === 1) {
     return {
-      tabsToRenderInTabList: pageLayout.tabs,
+      tabsToRenderInTabList: tabs,
       pinnedLeftTab: undefined,
     };
   }
 
-  const tabsToRenderInTabList = pageLayout.tabs.slice(1);
-  const pinnedLeftTab = pageLayout.tabs[0];
+  const sortedTabs = sortTabsByPosition(tabs);
+
+  const tabsToRenderInTabList = sortedTabs.slice(1);
+  const pinnedLeftTab = sortedTabs[0];
 
   return {
     tabsToRenderInTabList,

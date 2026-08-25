@@ -7,49 +7,59 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseFilters,
   UseGuards,
 } from '@nestjs/common';
 
+import { ApiPath, ViewSortDirection } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 
 import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
+import { paginateMetadataRestItems } from 'src/engine/api/rest/metadata/utils/paginate-metadata-rest-items.util';
+import { type AuthenticatedRequest } from 'src/engine/api/rest/types/authenticated-request';
 import { AuthWorkspace } from 'src/engine/decorators/auth/auth-workspace.decorator';
 import { NoPermissionGuard } from 'src/engine/guards/no-permission.guard';
 import { WorkspaceAuthGuard } from 'src/engine/guards/workspace-auth.guard';
-import { CreateViewSortPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/create-view-sort-permission.guard';
-import { DeleteViewSortPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/delete-view-sort-permission.guard';
-import { UpdateViewSortPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/update-view-sort-permission.guard';
+import { FlatEntityMapsRestApiExceptionFilter } from 'src/engine/metadata-modules/flat-entity/filters/flat-entity-maps-rest-api-exception.filter';
+import { PermissionsRestApiExceptionFilter } from 'src/engine/metadata-modules/permissions/utils/permissions-rest-api-exception.filter';
 import { CreateViewSortInput } from 'src/engine/metadata-modules/view-sort/dtos/inputs/create-view-sort.input';
-import { UpdateViewSortInput } from 'src/engine/metadata-modules/view-sort/dtos/inputs/update-view-sort.input';
 import { type ViewSortDTO } from 'src/engine/metadata-modules/view-sort/dtos/view-sort.dto';
 import {
+  generateViewSortExceptionMessage,
+  generateViewSortUserFriendlyExceptionMessage,
   ViewSortException,
   ViewSortExceptionCode,
   ViewSortExceptionMessageKey,
-  generateViewSortExceptionMessage,
-  generateViewSortUserFriendlyExceptionMessage,
 } from 'src/engine/metadata-modules/view-sort/exceptions/view-sort.exception';
 import { ViewSortRestApiExceptionFilter } from 'src/engine/metadata-modules/view-sort/filters/view-sort-rest-api-exception.filter';
 import { ViewSortService } from 'src/engine/metadata-modules/view-sort/services/view-sort.service';
-
-@Controller('rest/metadata/viewSorts')
+import { WorkspaceMigrationRunnerRestApiExceptionFilter } from 'src/engine/workspace-manager/workspace-migration/filters/workspace-migration-runner-rest-api-exception.filter';
+import { CreateViewChildEntityPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/create-view-child-entity-permission.guard';
+import { ViewChildEntityPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/view-child-entity-permission.guard';
+@Controller(`${ApiPath.Rest}/metadata/viewSorts`)
 @UseGuards(WorkspaceAuthGuard)
-@UseFilters(ViewSortRestApiExceptionFilter)
+@UseFilters(
+  PermissionsRestApiExceptionFilter,
+  ViewSortRestApiExceptionFilter,
+  FlatEntityMapsRestApiExceptionFilter,
+  WorkspaceMigrationRunnerRestApiExceptionFilter,
+)
 export class ViewSortController {
   constructor(private readonly viewSortService: ViewSortService) {}
 
   @Get()
   @UseGuards(NoPermissionGuard)
   async findMany(
+    @Req() request: AuthenticatedRequest,
     @AuthWorkspace() workspace: WorkspaceEntity,
     @Query('viewId') viewId?: string,
-  ): Promise<ViewSortDTO[]> {
-    if (viewId) {
-      return this.viewSortService.findByViewId(workspace.id, viewId);
-    }
+  ) {
+    const items = viewId
+      ? await this.viewSortService.findByViewId(workspace.id, viewId)
+      : await this.viewSortService.findByWorkspaceId(workspace.id);
 
-    return this.viewSortService.findByWorkspaceId(workspace.id);
+    return paginateMetadataRestItems({ items, request });
   }
 
   @Get(':id')
@@ -79,40 +89,40 @@ export class ViewSortController {
   }
 
   @Post()
-  @UseGuards(CreateViewSortPermissionGuard)
+  @UseGuards(CreateViewChildEntityPermissionGuard)
   async create(
     @Body() input: CreateViewSortInput,
-    @AuthWorkspace() workspace: WorkspaceEntity,
+    @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,
   ): Promise<ViewSortDTO> {
-    return this.viewSortService.create({
-      ...input,
-      workspaceId: workspace.id,
+    return await this.viewSortService.createOne({
+      createViewSortInput: input,
+      workspaceId,
     });
   }
 
   @Patch(':id')
-  @UseGuards(UpdateViewSortPermissionGuard)
+  @UseGuards(ViewChildEntityPermissionGuard('viewSort'))
   async update(
     @Param('id') id: string,
-    @Body() input: UpdateViewSortInput,
-    @AuthWorkspace() workspace: WorkspaceEntity,
+    @Body() input: { direction?: ViewSortDirection },
+    @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,
   ): Promise<ViewSortDTO> {
-    const updatedViewSort = await this.viewSortService.update(
-      id,
-      workspace.id,
-      input,
-    );
-
-    return updatedViewSort;
+    return await this.viewSortService.updateOne({
+      updateViewSortInput: { id, update: input },
+      workspaceId,
+    });
   }
 
   @Delete(':id')
-  @UseGuards(DeleteViewSortPermissionGuard)
+  @UseGuards(ViewChildEntityPermissionGuard('viewSort'))
   async delete(
     @Param('id') id: string,
-    @AuthWorkspace() workspace: WorkspaceEntity,
+    @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,
   ): Promise<{ success: boolean }> {
-    const deletedViewSort = await this.viewSortService.delete(id, workspace.id);
+    const deletedViewSort = await this.viewSortService.deleteOne({
+      deleteViewSortInput: { id },
+      workspaceId,
+    });
 
     return { success: isDefined(deletedViewSort) };
   }

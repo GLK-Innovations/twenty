@@ -10,11 +10,12 @@ on:
     branches: ['main']
     paths:
       - 'packages/twenty-docs/**/*.mdx'
-      - '!packages/twenty-docs/fr/**'
-      - 'crowdin.yml'
+      - '!packages/twenty-docs/l/**'
+      - 'packages/twenty-docs/navigation/navigation.template.json'
+      - '.github/crowdin-docs.yml'
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
@@ -23,33 +24,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           token: ${{ github.token }}
-          ref: main
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'yarn'
-          cache-dependency-path: 'yarn.lock'
+          ref: ${{ github.ref }}
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        uses: ./.github/actions/yarn-install
 
       - name: Generate navigation template for Crowdin
         run: yarn docs:generate-navigation-template
 
       - name: Upload docs to Crowdin
-        uses: crowdin/github-action@v2
+        uses: crowdin/github-action@8868a33591d21088edfc398968173a3b98d51706 # v2
         with:
           upload_sources: true
+          upload_sources_args: '--delete-obsolete'
           upload_translations: false
           download_translations: false
-          localization_branch_name: i18n
+          localization_branch_name: i18n-docs
           base_url: 'https://twenty.api.crowdin.com'
+          config: '.github/crowdin-docs.yml'
         env:
-          CROWDIN_PROJECT_ID: 1
+          # Docs translations project
+          CROWDIN_PROJECT_ID: '2'
           CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
 

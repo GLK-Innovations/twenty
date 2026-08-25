@@ -2,7 +2,7 @@ import { availableWorkspacesState } from '@/auth/states/availableWorkspacesState
 import { currentUserWorkspaceState } from '@/auth/states/currentUserWorkspaceState';
 import { currentWorkspaceState } from '@/auth/states/currentWorkspaceState';
 import { countAvailableWorkspaces } from '@/auth/utils/availableWorkspacesUtils';
-import { useRecoilValue } from 'recoil';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 import { PermissionFlagType } from '~/generated-metadata/graphql';
 
 export type EditableProfileField =
@@ -12,12 +12,15 @@ export type EditableProfileField =
   | 'profilePicture';
 
 export const useCanEditProfileField = (field: EditableProfileField) => {
-  const currentWorkspace = useRecoilValue(currentWorkspaceState);
-  const currentUserWorkspace = useRecoilValue(currentUserWorkspaceState);
-  const availableWorkspaces = useRecoilValue(availableWorkspacesState);
+  const currentWorkspace = useAtomStateValue(currentWorkspaceState);
+  const currentUserWorkspace = useAtomStateValue(currentUserWorkspaceState);
+  const availableWorkspaces = useAtomStateValue(availableWorkspacesState);
 
   if (!currentWorkspace || !currentUserWorkspace) {
-    return { canEdit: false };
+    return {
+      canEdit: false,
+      isBlockedByWorkspaceLimit: false,
+    };
   }
 
   const editableFields = currentWorkspace.editableProfileFields ?? [];
@@ -31,10 +34,14 @@ export const useCanEditProfileField = (field: EditableProfileField) => {
   const requiresSingleWorkspace = field === 'email';
   const isSingleWorkspaceUser =
     countAvailableWorkspaces(availableWorkspaces) <= 1;
-  const meetsWorkspaceLimit = !requiresSingleWorkspace || isSingleWorkspaceUser;
+  const isBlockedByWorkspaceLimit =
+    requiresSingleWorkspace && !isSingleWorkspaceUser;
 
   return {
     canEdit:
-      workspaceAllowsField && hasProfilePermission && meetsWorkspaceLimit,
+      workspaceAllowsField &&
+      hasProfilePermission &&
+      !isBlockedByWorkspaceLimit,
+    isBlockedByWorkspaceLimit,
   };
 };

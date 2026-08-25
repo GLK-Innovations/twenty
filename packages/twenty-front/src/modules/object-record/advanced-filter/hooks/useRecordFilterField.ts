@@ -3,13 +3,13 @@ import { getCompositeSubFieldLabel } from '@/object-record/object-filter-dropdow
 import { isCompositeFieldType } from '@/object-record/object-filter-dropdown/utils/isCompositeFieldType';
 import { currentRecordFiltersComponentState } from '@/object-record/record-filter/states/currentRecordFiltersComponentState';
 import { isValidSubFieldName } from '@/settings/data-model/utils/isValidSubFieldName';
-import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
 import { isNonEmptyString } from '@sniptt/guards';
 import { isDefined } from 'twenty-shared/utils';
-import { useIcons } from 'twenty-ui/display';
+import { useIcons } from 'twenty-ui/icon';
 
 export const useRecordFilterField = (recordFilterId: string) => {
-  const currentRecordFilters = useRecoilComponentValue(
+  const currentRecordFilters = useAtomComponentStateValue(
     currentRecordFiltersComponentState,
   );
 
@@ -20,6 +20,9 @@ export const useRecordFilterField = (recordFilterId: string) => {
   const { fieldMetadataItem } = useFieldMetadataItemById(
     recordFilter?.fieldMetadataId ?? '',
   );
+
+  const { fieldMetadataItem: relationTargetFieldMetadataItem } =
+    useFieldMetadataItemById(recordFilter?.relationTargetFieldMetadataId ?? '');
 
   const { getIcon } = useIcons();
 
@@ -38,9 +41,15 @@ export const useRecordFilterField = (recordFilterId: string) => {
         )
       : '';
 
+  const fieldLabel = fieldMetadataItem?.label ?? '';
+
+  const baseLabel = isDefined(relationTargetFieldMetadataItem)
+    ? `${fieldLabel} → ${relationTargetFieldMetadataItem.label}`
+    : fieldLabel;
+
   const label = isNonEmptyString(subFieldLabel)
-    ? `${recordFilter?.label} / ${subFieldLabel}`
-    : (recordFilter?.label ?? '');
+    ? `${baseLabel} / ${subFieldLabel}`
+    : baseLabel;
 
   return {
     label,

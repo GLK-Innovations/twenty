@@ -1,17 +1,18 @@
-import { type PublicDomain } from '~/generated/graphql';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
-import { useCloseDropdown } from '@/ui/layout/dropdown/hooks/useCloseDropdown';
-import {
-  useDeletePublicDomainMutation,
-  useFindManyPublicDomainsQuery,
-} from '~/generated-metadata/graphql';
-import { useLingui } from '@lingui/react/macro';
-import { LightIconButton } from 'twenty-ui/input';
-import { IconDotsVertical, IconTrash } from 'twenty-ui/display';
+import { Dropdown } from '@/ui/layout/dropdown/components/Dropdown';
 import { DropdownContent } from '@/ui/layout/dropdown/components/DropdownContent';
 import { DropdownMenuItemsContainer } from '@/ui/layout/dropdown/components/DropdownMenuItemsContainer';
+import { useCloseDropdown } from '@/ui/layout/dropdown/hooks/useCloseDropdown';
+import { useLingui } from '@lingui/react/macro';
+import { IconDotsVertical, IconTrash } from 'twenty-ui/icon';
+import { LightIconButton } from 'twenty-ui/input';
 import { MenuItem } from 'twenty-ui/navigation';
-import { Dropdown } from '@/ui/layout/dropdown/components/Dropdown';
+import { useMutation, useQuery } from '@apollo/client/react';
+import {
+  type PublicDomain,
+  DeletePublicDomainDocument,
+  FindManyPublicDomainsDocument,
+} from '~/generated-metadata/graphql';
 
 export const SettingPublicDomainRowDropdownMenu = ({
   publicDomain,
@@ -25,9 +26,11 @@ export const SettingPublicDomainRowDropdownMenu = ({
 
   const { closeDropdown } = useCloseDropdown();
 
-  const { refetch: refetchPublicDomains } = useFindManyPublicDomainsQuery();
+  const { refetch: refetchPublicDomains } = useQuery(
+    FindManyPublicDomainsDocument,
+  );
 
-  const [deletePublicDomain] = useDeletePublicDomainMutation();
+  const [deletePublicDomain] = useMutation(DeletePublicDomainDocument);
 
   const handleDeletePublicDomain = async () => {
     await deletePublicDomain({
@@ -36,7 +39,7 @@ export const SettingPublicDomainRowDropdownMenu = ({
       },
       onCompleted: () =>
         enqueueSuccessSnackBar({
-          message: t`Public domain successfully deleted`,
+          message: t`Custom domain successfully deleted`,
         }),
       onError: (error) => enqueueErrorSnackBar({ apolloError: error }),
     });
@@ -47,7 +50,11 @@ export const SettingPublicDomainRowDropdownMenu = ({
       dropdownId={dropdownId}
       dropdownPlacement="right-start"
       clickableComponent={
-        <LightIconButton Icon={IconDotsVertical} accent="tertiary" />
+        <LightIconButton
+          Icon={IconDotsVertical}
+          accent="tertiary"
+          aria-label={t`More options`}
+        />
       }
       dropdownComponents={
         <DropdownContent>

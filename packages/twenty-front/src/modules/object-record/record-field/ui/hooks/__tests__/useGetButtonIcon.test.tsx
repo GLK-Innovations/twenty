@@ -1,6 +1,5 @@
 import { renderHook } from '@testing-library/react';
 import { type ReactNode } from 'react';
-import { RecoilRoot } from 'recoil';
 
 import {
   phonesFieldDefinition,
@@ -10,7 +9,7 @@ import { FieldContext } from '@/object-record/record-field/ui/contexts/FieldCont
 import { useGetButtonIcon } from '@/object-record/record-field/ui/hooks/useGetButtonIcon';
 import { type FieldDefinition } from '@/object-record/record-field/ui/types/FieldDefinition';
 import { type FieldMetadata } from '@/object-record/record-field/ui/types/FieldMetadata';
-import { IconPencil } from 'twenty-ui/display';
+import { IconPencil } from 'twenty-ui/icon';
 
 const recordId = 'recordId';
 
@@ -25,7 +24,7 @@ const getWrapper =
         isRecordFieldReadOnly: false,
       }}
     >
-      <RecoilRoot>{children}</RecoilRoot>
+      {children}
     </FieldContext.Provider>
   );
 

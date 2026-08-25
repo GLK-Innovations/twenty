@@ -1,16 +1,19 @@
-import styled from '@emotion/styled';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
+import { styled } from '@linaria/react';
 
 const StyledDropdownMenuSectionLabel = styled.div`
-  background-color: ${({ theme }) => theme.background.transparent.lighter};
-  color: ${({ theme }) => theme.font.color.tertiary};
-  min-height: 20px;
-  width: auto;
-  font-size: ${({ theme }) => theme.font.size.xxs};
-  display: flex;
   align-items: center;
+  background-color: ${themeCssVariables.background.transparent.lighter};
+  box-sizing: border-box;
+  color: ${themeCssVariables.font.color.tertiary};
+  display: flex;
+  font-size: ${themeCssVariables.font.size.xxs};
   justify-content: flex-start;
-  padding-left: ${({ theme }) => theme.spacing(1)};
+  min-height: 20px;
+  padding-left: ${themeCssVariables.spacing[2]};
+  padding-right: ${themeCssVariables.spacing[2]};
   user-select: none;
+  width: 100%;
 `;
 
 export type DropdownMenuSectionLabelProps = {
@@ -21,6 +24,8 @@ export const DropdownMenuSectionLabel = ({
   label,
 }: DropdownMenuSectionLabelProps) => {
   return (
-    <StyledDropdownMenuSectionLabel>{label}</StyledDropdownMenuSectionLabel>
+    <StyledDropdownMenuSectionLabel data-dropdown-menu-section-label>
+      {label}
+    </StyledDropdownMenuSectionLabel>
   );
 };

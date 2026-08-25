@@ -1,30 +1,33 @@
 import { RecordGroupContext } from '@/object-record/record-group/states/context/RecordGroupContext';
 import { visibleRecordGroupIdsComponentFamilySelector } from '@/object-record/record-group/states/selectors/visibleRecordGroupIdsComponentFamilySelector';
+import { RecordIndexGroupAggregatesDataLoader } from '@/object-record/record-index/components/RecordIndexGroupAggregatesDataLoader';
 import { recordIndexAllRecordIdsComponentSelector } from '@/object-record/record-index/states/selectors/recordIndexAllRecordIdsComponentSelector';
 import { RecordTableRecordGroupBodyContextProvider } from '@/object-record/record-table/components/RecordTableRecordGroupBodyContextProvider';
 import { RecordTableRecordGroupRows } from '@/object-record/record-table/components/RecordTableRecordGroupRows';
+import { RecordTableBody } from '@/object-record/record-table/record-table-body/components/RecordTableBody';
 import { RecordTableBodyLoading } from '@/object-record/record-table/record-table-body/components/RecordTableBodyLoading';
 import { RecordTableBodyRecordGroupDragDropContextProvider } from '@/object-record/record-table/record-table-body/components/RecordTableBodyRecordGroupDragDropContextProvider';
-import { RecordTableBodyRecordGroupDroppable } from '@/object-record/record-table/record-table-body/components/RecordTableBodyRecordGroupDroppable';
 import { RecordTableCellPortals } from '@/object-record/record-table/record-table-cell/components/RecordTableCellPortals';
+import { RecordTableRecordGroupAddNewGroup } from '@/object-record/record-table/record-table-section/components/RecordTableRecordGroupAddNewGroup';
 import { RecordTableRecordGroupSection } from '@/object-record/record-table/record-table-section/components/RecordTableRecordGroupSection';
 import { isRecordTableInitialLoadingComponentState } from '@/object-record/record-table/states/isRecordTableInitialLoadingComponentState';
-import { useRecoilComponentFamilyValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentFamilyValue';
-import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import { useAtomComponentFamilySelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentFamilySelectorValue';
+import { useAtomComponentSelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentSelectorValue';
 import { ViewType } from '@/views/types/ViewType';
 
 export const RecordTableRecordGroupsBody = () => {
-  const allRecordIds = useRecoilComponentValue(
+  const allRecordIds = useAtomComponentSelectorValue(
     recordIndexAllRecordIdsComponentSelector,
   );
 
-  const isRecordTableInitialLoading = useRecoilComponentValue(
+  const isRecordTableInitialLoading = useAtomComponentStateValue(
     isRecordTableInitialLoadingComponentState,
   );
 
-  const visibleRecordGroupIds = useRecoilComponentFamilyValue(
+  const visibleRecordGroupIds = useAtomComponentFamilySelectorValue(
     visibleRecordGroupIdsComponentFamilySelector,
-    ViewType.Table,
+    ViewType.TABLE,
   );
 
   if (isRecordTableInitialLoading && allRecordIds.length === 0) {
@@ -35,21 +38,18 @@ export const RecordTableRecordGroupsBody = () => {
     <>
       <RecordTableBodyRecordGroupDragDropContextProvider>
         {visibleRecordGroupIds.map((recordGroupId, index) => (
-          <RecordTableRecordGroupBodyContextProvider
-            key={recordGroupId}
-            recordGroupId={recordGroupId}
-          >
+          <RecordTableRecordGroupBodyContextProvider key={recordGroupId}>
             <RecordGroupContext.Provider value={{ recordGroupId }}>
-              <RecordTableBodyRecordGroupDroppable
-                recordGroupId={recordGroupId}
-              >
+              <RecordTableBody data-replay-ignore-mutations="true">
                 <RecordTableRecordGroupSection />
                 <RecordTableRecordGroupRows />
                 {index === 0 && <RecordTableCellPortals />}
-              </RecordTableBodyRecordGroupDroppable>
+              </RecordTableBody>
             </RecordGroupContext.Provider>
           </RecordTableRecordGroupBodyContextProvider>
         ))}
+        <RecordTableRecordGroupAddNewGroup />
+        <RecordIndexGroupAggregatesDataLoader />
       </RecordTableBodyRecordGroupDragDropContextProvider>
     </>
   );

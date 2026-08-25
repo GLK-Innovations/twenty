@@ -1,16 +1,22 @@
-import { type Decorator, type Meta, type StoryObj } from '@storybook/react';
-import { expect, fn, userEvent, within } from '@storybook/test';
+import {
+  type Decorator,
+  type Meta,
+  type StoryObj,
+} from '@storybook/react-vite';
+import { expect, fn, userEvent, within } from 'storybook/test';
 
+import { SettingsObjectInactiveMenuDropDown } from '@/settings/data-model/objects/components/SettingsObjectInactiveMenuDropDown';
 import { ComponentDecorator } from 'twenty-ui/testing';
-import { SettingsObjectInactiveMenuDropDown } from '../SettingsObjectInactiveMenuDropDown';
 
 const handleActivateMockFunction = fn();
 const handleDeleteMockFunction = fn();
+const handleEditMockFunction = fn();
 
 const ClearMocksDecorator: Decorator = (Story, context) => {
   if (context.parameters.clearMocks === true) {
     handleActivateMockFunction.mockClear();
     handleDeleteMockFunction.mockClear();
+    handleEditMockFunction.mockClear();
   }
   return <Story />;
 };
@@ -22,6 +28,7 @@ const meta: Meta<typeof SettingsObjectInactiveMenuDropDown> = {
     objectMetadataItemNamePlural: 'settings-object-inactive-menu-dropdown',
     onActivate: handleActivateMockFunction,
     onDelete: handleDeleteMockFunction,
+    onEdit: handleEditMockFunction,
   },
   decorators: [ComponentDecorator, ClearMocksDecorator],
   parameters: {
@@ -35,8 +42,8 @@ type Story = StoryObj<typeof SettingsObjectInactiveMenuDropDown>;
 export const Default: Story = {};
 
 export const Open: Story = {
-  play: async () => {
-    const canvas = within(document.body);
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement.ownerDocument.body);
 
     const dropdownButton = await canvas.findByRole('button', {
       name: 'Inactive Object Options',
@@ -47,8 +54,8 @@ export const Open: Story = {
 };
 
 export const WithActivate: Story = {
-  play: async () => {
-    const canvas = within(document.body);
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement.ownerDocument.body);
 
     const dropdownButton = await canvas.findByRole('button', {
       name: 'Inactive Object Options',
@@ -68,10 +75,54 @@ export const WithActivate: Story = {
   },
 };
 
+export const WithEdit: Story = {
+  args: { isCustomObject: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement.ownerDocument.body);
+
+    const dropdownButton = await canvas.findByRole('button', {
+      name: 'Inactive Object Options',
+    });
+
+    await userEvent.click(dropdownButton);
+
+    await expect(handleEditMockFunction).toHaveBeenCalledTimes(0);
+
+    const editMenuItem = await canvas.findByText('Edit');
+
+    await userEvent.click(editMenuItem);
+
+    await expect(handleEditMockFunction).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(dropdownButton);
+  },
+};
+
+export const WithView: Story = {
+  args: { isCustomObject: false },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement.ownerDocument.body);
+
+    const dropdownButton = await canvas.findByRole('button', {
+      name: 'Inactive Object Options',
+    });
+
+    await userEvent.click(dropdownButton);
+
+    const viewMenuItem = await canvas.findByText('View');
+
+    await userEvent.click(viewMenuItem);
+
+    await expect(handleEditMockFunction).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(dropdownButton);
+  },
+};
+
 export const WithDelete: Story = {
   args: { isCustomObject: true },
-  play: async () => {
-    const canvas = within(document.body);
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement.ownerDocument.body);
 
     const dropdownButton = await canvas.findByRole('button', {
       name: 'Inactive Object Options',

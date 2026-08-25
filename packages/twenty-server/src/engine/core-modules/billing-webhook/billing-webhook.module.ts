@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { EventLogEmitterModule } from 'src/engine/core-modules/event-logs/emit/event-log-emitter.module';
 import { BillingWebhookController } from 'src/engine/core-modules/billing-webhook/billing-webhook.controller';
-import { BillingWebhookAlertService } from 'src/engine/core-modules/billing-webhook/services/billing-webhook-alert.service';
 import { BillingWebhookCustomerService } from 'src/engine/core-modules/billing-webhook/services/billing-webhook-customer.service';
 import { BillingWebhookEntitlementService } from 'src/engine/core-modules/billing-webhook/services/billing-webhook-entitlement.service';
 import { BillingWebhookInvoiceService } from 'src/engine/core-modules/billing-webhook/services/billing-webhook-invoice.service';
@@ -26,15 +26,20 @@ import { UserWorkspaceEntity } from 'src/engine/core-modules/user-workspace/user
 import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
 import { WorkspaceModule } from 'src/engine/core-modules/workspace/workspace.module';
 import { PermissionsModule } from 'src/engine/metadata-modules/permissions/permissions.module';
+import { RowLevelPermissionModule } from 'src/engine/metadata-modules/row-level-permission-predicate/row-level-permission.module';
+import { provideWorkspaceScopedRepository } from 'src/engine/twenty-orm/workspace-scoped-repository/provide-workspace-scoped-repository';
+import { WorkspaceCacheModule } from 'src/engine/workspace-cache/workspace-cache.module';
 
 @Module({
   imports: [
+    EventLogEmitterModule,
     FeatureFlagModule,
     StripeModule,
     MessageQueueModule,
     PermissionsModule,
     WorkspaceModule,
     BillingModule,
+    WorkspaceCacheModule,
     TypeOrmModule.forFeature([
       BillingSubscriptionEntity,
       BillingSubscriptionItemEntity,
@@ -47,17 +52,19 @@ import { PermissionsModule } from 'src/engine/metadata-modules/permissions/permi
       UserWorkspaceEntity,
       FeatureFlagEntity,
     ]),
+    RowLevelPermissionModule,
   ],
   controllers: [BillingWebhookController],
   providers: [
     BillingWebhookProductService,
     BillingWebhookPriceService,
-    BillingWebhookAlertService,
     BillingWebhookInvoiceService,
     BillingWebhookCustomerService,
     BillingWebhookSubscriptionService,
     BillingWebhookSubscriptionScheduleService,
     BillingWebhookEntitlementService,
+    provideWorkspaceScopedRepository(BillingEntitlementEntity),
+    provideWorkspaceScopedRepository(BillingCustomerEntity),
   ],
 })
 export class BillingWebhookModule {}

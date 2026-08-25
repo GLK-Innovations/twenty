@@ -1,38 +1,42 @@
-import { useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
-import { type ReactNode } from 'react';
+import { styled } from '@linaria/react';
+import { useLingui } from '@lingui/react/macro';
+import { type ReactNode, useContext } from 'react';
 
-import { type ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
+import { useNumberFormat } from '@/localization/hooks/useNumberFormat';
+import { ObjectMetadataIcon } from '@/object-metadata/components/ObjectMetadataIcon';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
+import { isHiddenSystemField } from '@/object-metadata/utils/isHiddenSystemField';
+import { SettingsItemTypeTag } from '@/settings/components/SettingsItemTypeTag';
+import { SettingsNameCellSecondaryLabel } from '@/settings/components/SettingsNameCellSecondaryLabel';
+import {
+  SETTINGS_OBJECT_TABLE_ROW_GRID_TEMPLATE_COLUMNS,
+  StyledActionTableCell,
+  StyledNameTableCell,
+  StyledStickyFirstCell,
+} from '@/settings/data-model/object-details/components/SettingsObjectItemTableRowStyledComponents';
 import { TableCell } from '@/ui/layout/table/components/TableCell';
 import { TableRow } from '@/ui/layout/table/components/TableRow';
-import { useIcons } from 'twenty-ui/display';
-import { SettingsItemTypeTag } from '@/settings/components/SettingsItemTypeTag';
+import { ThemeContext, themeCssVariables } from 'twenty-ui/theme-constants';
 
 export type SettingsObjectMetadataItemTableRowProps = {
   action: ReactNode;
-  objectMetadataItem: ObjectMetadataItem;
+  objectMetadataItem: EnrichedObjectMetadataItem;
   link?: string;
   totalObjectCount: number;
 };
 
-export const StyledObjectTableRow = styled(TableRow)`
-  grid-template-columns: 180px 98.7px 98.7px 98.7px 36px;
-`;
-
-const StyledNameTableCell = styled(TableCell)`
-  color: ${({ theme }) => theme.font.color.primary};
-  gap: ${({ theme }) => theme.spacing(2)};
+const StyledNameContainer = styled.div`
+  align-items: center;
+  display: flex;
+  flex: 1;
+  gap: ${themeCssVariables.spacing[1]};
+  min-width: 0;
 `;
 
 const StyledNameLabel = styled.div`
-  white-space: nowrap;
-  text-overflow: ellipsis;
   overflow: hidden;
-`;
-
-const StyledActionTableCell = styled(TableCell)`
-  justify-content: center;
-  padding-right: ${({ theme }) => theme.spacing(1)};
+  text-overflow: ellipsis;
+  white-space: nowrap;
 `;
 
 export const SettingsObjectMetadataItemTableRow = ({
@@ -41,33 +45,47 @@ export const SettingsObjectMetadataItemTableRow = ({
   link,
   totalObjectCount,
 }: SettingsObjectMetadataItemTableRowProps) => {
-  const theme = useTheme();
-
-  const { getIcon } = useIcons();
-  const Icon = getIcon(objectMetadataItem.icon);
+  const { t } = useLingui();
+  const { theme } = useContext(ThemeContext);
+  const { formatNumber } = useNumberFormat();
 
   return (
-    <StyledObjectTableRow key={objectMetadataItem.namePlural} to={link}>
-      <StyledNameTableCell>
-        {!!Icon && (
-          <Icon
-            style={{ minWidth: theme.icon.size.md }}
+    <TableRow
+      gridTemplateColumns={SETTINGS_OBJECT_TABLE_ROW_GRID_TEMPLATE_COLUMNS}
+      key={objectMetadataItem.namePlural}
+      to={link}
+    >
+      <StyledStickyFirstCell>
+        <StyledNameTableCell>
+          <ObjectMetadataIcon
+            objectMetadataItem={objectMetadataItem}
             size={theme.icon.size.md}
             stroke={theme.icon.stroke.sm}
           />
-        )}
-        <StyledNameLabel title={objectMetadataItem.labelPlural}>
-          {objectMetadataItem.labelPlural}
-        </StyledNameLabel>
-      </StyledNameTableCell>
+          <StyledNameContainer>
+            <StyledNameLabel title={objectMetadataItem.labelPlural}>
+              {objectMetadataItem.labelPlural}
+            </StyledNameLabel>
+            {!objectMetadataItem.isActive && (
+              <SettingsNameCellSecondaryLabel>
+                {t`Deactivated`}
+              </SettingsNameCellSecondaryLabel>
+            )}
+          </StyledNameContainer>
+        </StyledNameTableCell>
+      </StyledStickyFirstCell>
       <TableCell>
         <SettingsItemTypeTag item={objectMetadataItem} />
       </TableCell>
       <TableCell align="right">
-        {objectMetadataItem.fields.filter((field) => !field.isSystem).length}
+        {formatNumber(
+          objectMetadataItem.fields.filter(
+            (field) => !isHiddenSystemField(field),
+          ).length,
+        )}
       </TableCell>
-      <TableCell align="right">{totalObjectCount}</TableCell>
+      <TableCell align="right">{formatNumber(totalObjectCount)}</TableCell>
       <StyledActionTableCell>{action}</StyledActionTableCell>
-    </StyledObjectTableRow>
+    </TableRow>
   );
 };

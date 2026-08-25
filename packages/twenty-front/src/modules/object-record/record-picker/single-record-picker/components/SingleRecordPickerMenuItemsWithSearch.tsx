@@ -10,14 +10,16 @@ import { useSingleRecordPickerSearch } from '@/object-record/record-picker/singl
 import { SingleRecordPickerComponentInstanceContext } from '@/object-record/record-picker/single-record-picker/states/contexts/SingleRecordPickerComponentInstanceContext';
 import { singleRecordPickerSearchFilterComponentState } from '@/object-record/record-picker/single-record-picker/states/singleRecordPickerSearchFilterComponentState';
 import { type RecordPickerLayoutDirection } from '@/object-record/record-picker/types/RecordPickerLayoutDirection';
+import { canCreateRecordsForObjectMetadataItem } from '@/object-record/utils/canCreateRecordsForObjectMetadataItem';
 import { CreateNewButton } from '@/ui/input/relation-picker/components/CreateNewButton';
 import { DropdownMenuItemsContainer } from '@/ui/layout/dropdown/components/DropdownMenuItemsContainer';
 import { DropdownMenuSearchInput } from '@/ui/layout/dropdown/components/DropdownMenuSearchInput';
 import { DropdownMenuSeparator } from '@/ui/layout/dropdown/components/DropdownMenuSeparator';
 import { useAvailableComponentInstanceIdOrThrow } from '@/ui/utilities/state/component-state/hooks/useAvailableComponentInstanceIdOrThrow';
-import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
 import { isDefined } from 'twenty-shared/utils';
-import { IconPlus } from 'twenty-ui/display';
+import { t } from '@lingui/core/macro';
+import { IconPlus } from 'twenty-ui/icon';
 
 export type SingleRecordPickerMenuItemsWithSearchProps = {
   excludedRecordIds?: string[];
@@ -48,7 +50,7 @@ export const SingleRecordPickerMenuItemsWithSearch = ({
     SingleRecordPickerComponentInstanceContext,
   );
 
-  const recordPickerSearchFilter = useRecoilComponentValue(
+  const singleRecordPickerSearchFilter = useAtomComponentStateValue(
     singleRecordPickerSearchFilterComponentState,
     recordPickerInstanceId,
   );
@@ -67,14 +69,21 @@ export const SingleRecordPickerMenuItemsWithSearch = ({
 
   const { objectPermissionsByObjectMetadataId } = useObjectPermissions();
 
-  const hasUpdatePermissions = objectMetadataItems.every(
-    (objectMetadataItem) =>
-      objectPermissionsByObjectMetadataId[objectMetadataItem.id]
-        ?.canUpdateObjectRecords,
-  );
+  const canCreateRecords = objectMetadataItems.every((objectMetadataItem) => {
+    const objectPermissions =
+      objectPermissionsByObjectMetadataId[objectMetadataItem.id];
+
+    return (
+      isDefined(objectPermissions) &&
+      canCreateRecordsForObjectMetadataItem({
+        objectPermissions,
+        objectMetadataItem,
+      })
+    );
+  });
 
   const handleCreateNew = () => {
-    onCreate?.(recordPickerSearchFilter);
+    onCreate?.(singleRecordPickerSearchFilter);
   };
 
   return (
@@ -82,13 +91,13 @@ export const SingleRecordPickerMenuItemsWithSearch = ({
       <SingleRecordPickerLoadingEffect loading={loading} />
       {layoutDirection === 'search-bar-on-bottom' && (
         <>
-          {isDefined(onCreate) && hasUpdatePermissions && (
+          {isDefined(onCreate) && canCreateRecords && (
             <>
               <DropdownMenuItemsContainer scrollable={false}>
                 <CreateNewButton
                   onClick={handleCreateNew}
                   LeftIcon={IconPlus}
-                  text="Add New"
+                  text={t`Add New`}
                 />
               </DropdownMenuItemsContainer>
               <DropdownMenuSeparator />
@@ -130,14 +139,14 @@ export const SingleRecordPickerMenuItemsWithSearch = ({
               }}
             />
           </DropdownMenuItemsContainer>
-          {isDefined(onCreate) && hasUpdatePermissions && (
+          {isDefined(onCreate) && canCreateRecords && (
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItemsContainer scrollable={false}>
                 <CreateNewButton
                   onClick={handleCreateNew}
                   LeftIcon={IconPlus}
-                  text="Add New"
+                  text={t`Add New`}
                 />
               </DropdownMenuItemsContainer>
             </>

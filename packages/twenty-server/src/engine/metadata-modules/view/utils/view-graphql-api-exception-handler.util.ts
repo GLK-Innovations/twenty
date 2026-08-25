@@ -1,11 +1,15 @@
-import { type I18n } from '@lingui/core';
 import { assertUnreachable } from 'twenty-shared/utils';
 
 import {
   ForbiddenError,
+  InternalServerError,
   NotFoundError,
   UserInputError,
 } from 'src/engine/core-modules/graphql/utils/graphql-errors.util';
+import {
+  ViewFieldGroupException,
+  ViewFieldGroupExceptionCode,
+} from 'src/engine/metadata-modules/view-field-group/exceptions/view-field-group.exception';
 import {
   ViewFieldException,
   ViewFieldExceptionCode,
@@ -30,12 +34,12 @@ import {
   ViewException,
   ViewExceptionCode,
 } from 'src/engine/metadata-modules/view/exceptions/view.exception';
-import { WorkspaceMigrationBuilderExceptionV2 } from 'src/engine/workspace-manager/workspace-migration-v2/exceptions/workspace-migration-builder-exception-v2';
-import { workspaceMigrationBuilderExceptionV2Formatter } from 'src/engine/workspace-manager/workspace-migration-v2/interceptors/workspace-migration-builder-exception-v2-formatter';
+import { WorkspaceMigrationBuilderException } from 'src/engine/workspace-manager/workspace-migration/exceptions/workspace-migration-builder-exception';
+import { workspaceMigrationBuilderGraphqlApiExceptionHandler } from 'src/engine/workspace-manager/workspace-migration/interceptors/utils/workspace-migration-builder-graphql-api-exception-handler.util';
 
-export const viewGraphqlApiExceptionHandler = (error: Error, i18n: I18n) => {
-  if (error instanceof WorkspaceMigrationBuilderExceptionV2) {
-    return workspaceMigrationBuilderExceptionV2Formatter(error, i18n);
+export const viewGraphqlApiExceptionHandler = (error: Error) => {
+  if (error instanceof WorkspaceMigrationBuilderException) {
+    return workspaceMigrationBuilderGraphqlApiExceptionHandler(error);
   }
 
   if (error instanceof ViewException) {
@@ -54,6 +58,8 @@ export const viewGraphqlApiExceptionHandler = (error: Error, i18n: I18n) => {
         throw new ForbiddenError(error.message, {
           userFriendlyMessage: error.userFriendlyMessage,
         });
+      case ViewExceptionCode.VIEW_WIDGET_NOT_FOUND:
+        throw new NotFoundError(error.message);
       default: {
         return assertUnreachable(error.code);
       }
@@ -67,6 +73,24 @@ export const viewGraphqlApiExceptionHandler = (error: Error, i18n: I18n) => {
       case ViewFieldExceptionCode.VIEW_NOT_FOUND:
         throw new NotFoundError(error.message);
       case ViewFieldExceptionCode.INVALID_VIEW_FIELD_DATA:
+        throw new UserInputError(error.message, {
+          userFriendlyMessage: error.userFriendlyMessage,
+        });
+      default: {
+        return assertUnreachable(error.code);
+      }
+    }
+  }
+
+  if (error instanceof ViewFieldGroupException) {
+    switch (error.code) {
+      case ViewFieldGroupExceptionCode.VIEW_FIELD_GROUP_NOT_FOUND:
+        throw new NotFoundError(error.message);
+      case ViewFieldGroupExceptionCode.VIEW_NOT_FOUND:
+        throw new NotFoundError(error.message);
+      case ViewFieldGroupExceptionCode.FIELDS_WIDGET_NOT_FOUND:
+        throw new NotFoundError(error.message);
+      case ViewFieldGroupExceptionCode.INVALID_VIEW_FIELD_GROUP_DATA:
         throw new UserInputError(error.message, {
           userFriendlyMessage: error.userFriendlyMessage,
         });
@@ -102,6 +126,14 @@ export const viewGraphqlApiExceptionHandler = (error: Error, i18n: I18n) => {
         throw new UserInputError(error.message, {
           userFriendlyMessage: error.userFriendlyMessage,
         });
+      case ViewFilterGroupExceptionCode.CIRCULAR_DEPENDENCY:
+        throw new UserInputError(error.message, {
+          userFriendlyMessage: error.userFriendlyMessage,
+        });
+      case ViewFilterGroupExceptionCode.MAX_DEPTH_EXCEEDED:
+        throw new UserInputError(error.message, {
+          userFriendlyMessage: error.userFriendlyMessage,
+        });
       default: {
         return assertUnreachable(error.code);
       }
@@ -116,6 +148,10 @@ export const viewGraphqlApiExceptionHandler = (error: Error, i18n: I18n) => {
         throw new NotFoundError(error.message);
       case ViewGroupExceptionCode.INVALID_VIEW_GROUP_DATA:
         throw new UserInputError(error.message, {
+          userFriendlyMessage: error.userFriendlyMessage,
+        });
+      case ViewGroupExceptionCode.MISSING_MAIN_GROUP_BY_FIELD_METADATA_ID:
+        throw new InternalServerError(error.message, {
           userFriendlyMessage: error.userFriendlyMessage,
         });
       default: {

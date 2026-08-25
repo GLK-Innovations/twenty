@@ -1,8 +1,9 @@
 import { type IndexFieldMetadataItem } from '@/object-metadata/types/IndexFieldMetadataItem';
 import { type IndexMetadataItem } from '@/object-metadata/types/IndexMetadataItem';
+import { type SearchFieldMetadataItem } from '@/object-metadata/types/SearchFieldMetadataItem';
 import { objectMetadataItemSchema } from '@/object-metadata/validation-schemas/objectMetadataItemSchema';
 import { type ObjectMetadataItemsQuery } from '~/generated-metadata/graphql';
-import { type ObjectMetadataItem } from '../types/ObjectMetadataItem';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
 
 type mapPaginatedObjectMetadataItemsToObjectMetadataItemsArgs = {
   pagedObjectMetadataItems: ObjectMetadataItemsQuery | undefined;
@@ -12,7 +13,7 @@ export const mapPaginatedObjectMetadataItemsToObjectMetadataItems = ({
   pagedObjectMetadataItems,
 }: mapPaginatedObjectMetadataItemsToObjectMetadataItemsArgs) => {
   const formattedObjects: Omit<
-    ObjectMetadataItem,
+    EnrichedObjectMetadataItem,
     'readableFields' | 'updatableFields'
   >[] =
     pagedObjectMetadataItems?.objects.edges.map((object) => {
@@ -21,18 +22,30 @@ export const mapPaginatedObjectMetadataItemsToObjectMetadataItems = ({
           object.node.labelIdentifierFieldMetadataId,
         );
 
-      const { fieldsList, indexMetadataList, ...objectWithoutFieldsList } =
-        object.node;
+      const {
+        fieldsList,
+        indexMetadataList,
+        searchFieldMetadataList,
+        ...objectWithoutFieldsList
+      } = object.node;
 
       return {
         ...objectWithoutFieldsList,
-        fields: fieldsList,
+        fields: fieldsList.map((field) => ({
+          ...field,
+        })),
         labelIdentifierFieldMetadataId,
-        indexMetadatas: indexMetadataList.map(
-          (index) =>
+        searchFieldMetadatas: searchFieldMetadataList.map(
+          (searchFieldMetadata) =>
             ({
-              ...index,
-              indexFieldMetadatas: index.indexFieldMetadataList.map(
+              ...searchFieldMetadata,
+            }) satisfies SearchFieldMetadataItem,
+        ),
+        indexMetadatas: indexMetadataList.map(
+          ({ indexFieldMetadataList: indexFields, ...indexRest }) =>
+            ({
+              ...indexRest,
+              indexFieldMetadatas: indexFields.map(
                 (indexFieldMetadata) =>
                   ({
                     ...indexFieldMetadata,
@@ -41,7 +54,7 @@ export const mapPaginatedObjectMetadataItemsToObjectMetadataItems = ({
             }) satisfies IndexMetadataItem,
         ),
       } satisfies Omit<
-        ObjectMetadataItem,
+        EnrichedObjectMetadataItem,
         'readableFields' | 'updatableFields'
       >;
     }) ?? [];

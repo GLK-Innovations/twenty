@@ -1,17 +1,11 @@
-import { useMutation } from '@apollo/client';
-import { useApolloCoreClient } from '@/object-metadata/hooks/useApolloCoreClient';
-import { UPDATE_ONE_APPLICATION_VARIABLE } from '@/application-variables/graphql/mutations/updateOneApplicationVariable';
+import { useMutation } from '@apollo/client/react';
 import {
-  type UpdateOneApplicationVariableMutation,
-  type UpdateOneApplicationVariableMutationVariables,
+  FindOneApplicationDocument,
+  UpdateOneApplicationVariableDocument,
 } from '~/generated-metadata/graphql';
 
 export const useUpdateOneApplicationVariable = () => {
-  const apolloMetadataClient = useApolloCoreClient();
-  const [mutate] = useMutation<
-    UpdateOneApplicationVariableMutation,
-    UpdateOneApplicationVariableMutationVariables
-  >(UPDATE_ONE_APPLICATION_VARIABLE, { client: apolloMetadataClient });
+  const [mutate] = useMutation(UpdateOneApplicationVariableDocument);
 
   const updateOneApplicationVariable = async ({
     key,
@@ -22,7 +16,12 @@ export const useUpdateOneApplicationVariable = () => {
     value: string;
     applicationId: string;
   }) => {
-    return await mutate({ variables: { key, value, applicationId } });
+    return await mutate({
+      variables: { key, value, applicationId },
+      refetchQueries: [
+        { query: FindOneApplicationDocument, variables: { id: applicationId } },
+      ],
+    });
   };
 
   return { updateOneApplicationVariable };

@@ -18,6 +18,9 @@ describe('getWebhookTriggerDefaultSettings', () => {
       expectedBody: {
         message: 'Workflow was started',
       },
+      expectedOutputSchema: {
+        message: 'Workflow was started',
+      },
       outputSchema: {
         message: {
           icon: 'IconVariable',
@@ -32,7 +35,7 @@ describe('getWebhookTriggerDefaultSettings', () => {
 
   it('throws an error for an invalid http method', () => {
     // @ts-expect-error Testing invalid input
-    expect(() => getWebhookTriggerDefaultSettings('INVALID')).toThrowError(
+    expect(() => getWebhookTriggerDefaultSettings('INVALID')).toThrow(
       'Invalid webhook http method',
     );
   });

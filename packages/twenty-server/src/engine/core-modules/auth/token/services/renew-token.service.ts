@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 
 import { isDefined } from 'twenty-shared/utils';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 
 import { AppTokenEntity } from 'src/engine/core-modules/app-token/app-token.entity';
 import {
@@ -13,7 +13,7 @@ import { type AuthToken } from 'src/engine/core-modules/auth/dto/auth-token.dto'
 import { AccessTokenService } from 'src/engine/core-modules/auth/token/services/access-token.service';
 import { RefreshTokenService } from 'src/engine/core-modules/auth/token/services/refresh-token.service';
 import { WorkspaceAgnosticTokenService } from 'src/engine/core-modules/auth/token/services/workspace-agnostic-token.service';
-import { JwtTokenTypeEnum } from 'src/engine/core-modules/auth/types/auth-context.type';
+import { JwtTokenTypeEnum } from 'src/engine/core-modules/auth/types/jwt-token-type.enum';
 import { AuthProviderEnum } from 'src/engine/core-modules/workspace/types/workspace.type';
 
 @Injectable()
@@ -47,10 +47,14 @@ export class RenewTokenService {
       impersonatedUserWorkspaceId,
     } = await this.refreshTokenService.verifyRefreshToken(token);
 
-    // Revoke old refresh token
+    // Revoke old refresh token only if not already revoked.
+    // If it was already revoked (concurrent race condition within grace
+    // period), we preserve the original revokedAt timestamp so the grace
+    // window stays anchored and cannot be extended by repeated reuse.
     await this.appTokenRepository.update(
       {
         id,
+        revokedAt: IsNull(),
       },
       {
         revokedAt: new Date(),

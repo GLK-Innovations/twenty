@@ -2,9 +2,10 @@ import { createOneFieldMetadata } from 'test/integration/metadata/suites/field-m
 import { createOneObjectMetadata } from 'test/integration/metadata/suites/object-metadata/utils/create-one-object-metadata.util';
 import { deleteOneObjectMetadata } from 'test/integration/metadata/suites/object-metadata/utils/delete-one-object-metadata.util';
 import { updateOneObjectMetadata } from 'test/integration/metadata/suites/object-metadata/utils/update-one-object-metadata.util';
-import { destroyOneCoreViewGroup } from 'test/integration/metadata/suites/view-group/utils/destroy-one-core-view-group.util';
+import { destroyOneViewGroup } from 'test/integration/metadata/suites/view-group/utils/destroy-one-view-group.util';
 import { makeRestAPIRequest } from 'test/integration/rest/utils/make-rest-api-request.util';
 import {
+  assertMetadataRestListResponse,
   assertRestApiErrorNotFoundResponse,
   assertRestApiSuccessfulResponse,
 } from 'test/integration/rest/utils/rest-test-assertions.util';
@@ -18,7 +19,6 @@ import { jestExpectToBeDefined } from 'test/utils/jest-expect-to-be-defined.util
 import { FieldMetadataType } from 'twenty-shared/types';
 
 import { type ViewGroupDTO } from 'src/engine/metadata-modules/view-group/dtos/view-group.dto';
-import { type ViewGroupEntity } from 'src/engine/metadata-modules/view-group/entities/view-group.entity';
 
 describe('View Group REST API', () => {
   let testObjectMetadataId: string;
@@ -47,9 +47,14 @@ describe('View Group REST API', () => {
     const createFieldInput = {
       name: 'testField',
       label: 'Test Field',
-      type: FieldMetadataType.TEXT,
+      type: FieldMetadataType.SELECT,
       objectMetadataId: testObjectMetadataId,
       isLabelSyncedWithName: true,
+      options: [
+        { label: 'Option 1', value: 'OPTION_1', color: 'blue', position: 0 },
+        { label: 'Option 2', value: 'OPTION_2', color: 'red', position: 1 },
+        { label: 'Option 3', value: 'OPTION_3', color: 'green', position: 2 },
+      ],
     };
 
     const {
@@ -72,6 +77,7 @@ describe('View Group REST API', () => {
     const testView = await createTestViewWithRestApi({
       name: 'Test View for Group Integration',
       objectMetadataId: testObjectMetadataId,
+      mainGroupByFieldMetadataId: testFieldMetadataId,
     });
 
     testViewId = testView.id;
@@ -96,7 +102,7 @@ describe('View Group REST API', () => {
   afterEach(async () => {
     if (!testViewGroupId) return;
 
-    await destroyOneCoreViewGroup({
+    await destroyOneViewGroup({
       input: {
         id: testViewGroupId,
       },
@@ -106,17 +112,6 @@ describe('View Group REST API', () => {
   });
 
   describe('GET /metadata/viewGroups', () => {
-    it('should return empty array when no view groups exist', async () => {
-      const response = await makeRestAPIRequest({
-        method: 'get',
-        path: `/metadata/viewGroups?viewId=${testViewId}`,
-        bearer: APPLE_JANE_ADMIN_ACCESS_TOKEN,
-      });
-
-      assertRestApiSuccessfulResponse(response);
-      expect(response.body).toEqual([]);
-    });
-
     it('should return all view groups for workspace when no viewId provided', async () => {
       const response = await makeRestAPIRequest({
         method: 'get',
@@ -124,103 +119,91 @@ describe('View Group REST API', () => {
         bearer: APPLE_JANE_ADMIN_ACCESS_TOKEN,
       });
 
-      assertRestApiSuccessfulResponse(response);
-      expect(Array.isArray(response.body)).toBe(true);
+      assertMetadataRestListResponse<ViewGroupDTO>(response);
     });
 
     it('should return view groups for a specific view after creating one', async () => {
-      const viewGroup = await createTestViewGroupWithRestApi({
-        viewId: testViewId,
-        fieldMetadataId: testFieldMetadataId,
-        fieldValue: 'test-field-value',
-        isVisible: true,
-        position: 0,
-      });
-
-      testViewGroupId = viewGroup.id;
-
       const response = await makeRestAPIRequest({
         method: 'get',
         path: `/metadata/viewGroups?viewId=${testViewId}`,
         bearer: APPLE_JANE_ADMIN_ACCESS_TOKEN,
       });
 
-      assertRestApiSuccessfulResponse(response);
-      expect(Array.isArray(response.body)).toBe(true);
+      const returnedViewGroups =
+        assertMetadataRestListResponse<ViewGroupDTO>(response);
 
-      const returnedViewGroup = response.body.find(
-        (el: ViewGroupDTO) => el.id === viewGroup.id,
-      );
+      expect(returnedViewGroups).toHaveLength(4);
+      // For a nullable field with three options, we expect groups for OPTION_1, OPTION_2, OPTION_3, and '' (empty string)
+      const expectedFieldValues = ['OPTION_1', 'OPTION_2', 'OPTION_3', ''];
 
-      jestExpectToBeDefined(returnedViewGroup);
+      expectedFieldValues.forEach((expectedFieldValue) => {
+        const group = returnedViewGroups.find(
+          (group) => group.fieldValue === expectedFieldValue,
+        );
 
-      assertViewGroupStructure(returnedViewGroup, {
-        id: viewGroup.id,
-        viewId: testViewId,
-        fieldValue: 'test-field-value',
-        isVisible: true,
-        position: 0,
+        jestExpectToBeDefined(group);
+        expect(group.isVisible).toBe(true);
+        expect(group.viewId).toBe(testViewId);
       });
-
-      testViewGroupId = viewGroup.id;
     });
 
-    it('should return multiple view groups for a view', async () => {
-      const viewGroup1 = await createTestViewGroupWithRestApi({
-        viewId: testViewId,
-        fieldMetadataId: testFieldMetadataId,
-        fieldValue: 'group-1',
-        position: 0,
-      });
-
-      const viewGroup2 = await createTestViewGroupWithRestApi({
-        viewId: testViewId,
-        fieldMetadataId: testFieldMetadataId,
-        fieldValue: 'group-2',
-        position: 1,
-      });
-
-      const response = await makeRestAPIRequest({
+    it('paginates the position-ordered result in both directions', async () => {
+      const firstResponse = await makeRestAPIRequest({
         method: 'get',
-        path: `/metadata/viewGroups?viewId=${testViewId}`,
+        path: `/metadata/viewGroups?viewId=${testViewId}&limit=2`,
         bearer: APPLE_JANE_ADMIN_ACCESS_TOKEN,
       });
+      const firstPage =
+        assertMetadataRestListResponse<ViewGroupDTO>(firstResponse);
 
-      assertRestApiSuccessfulResponse(response);
-      expect(Array.isArray(response.body)).toBe(true);
-      expect(response.body).toHaveLength(2);
-
-      const group1 = response.body.find(
-        (group: ViewGroupEntity) => group.id === viewGroup1.id,
-      );
-      const group2 = response.body.find(
-        (group: ViewGroupEntity) => group.id === viewGroup2.id,
-      );
-
-      assertViewGroupStructure(group1, {
-        fieldValue: 'group-1',
-        position: 0,
+      expect(firstPage).toHaveLength(2);
+      expect(firstResponse.body.totalCount).toBe(4);
+      expect(firstResponse.body.pageInfo).toMatchObject({
+        hasNextPage: true,
+        hasPreviousPage: false,
       });
 
-      assertViewGroupStructure(group2, {
-        fieldValue: 'group-2',
-        position: 1,
+      const secondResponse = await makeRestAPIRequest({
+        method: 'get',
+        path: `/metadata/viewGroups?viewId=${testViewId}&limit=2&starting_after=${firstResponse.body.pageInfo.endCursor}`,
+        bearer: APPLE_JANE_ADMIN_ACCESS_TOKEN,
+      });
+      const secondPage =
+        assertMetadataRestListResponse<ViewGroupDTO>(secondResponse);
+
+      expect(secondPage).toHaveLength(2);
+      expect(secondResponse.body.pageInfo).toMatchObject({
+        hasNextPage: false,
+        hasPreviousPage: true,
       });
 
-      testViewGroupId = viewGroup2.id;
+      const previousResponse = await makeRestAPIRequest({
+        method: 'get',
+        path: `/metadata/viewGroups?viewId=${testViewId}&limit=2&ending_before=${secondResponse.body.pageInfo.startCursor}`,
+        bearer: APPLE_JANE_ADMIN_ACCESS_TOKEN,
+      });
+      const previousPage =
+        assertMetadataRestListResponse<ViewGroupDTO>(previousResponse);
+
+      expect(previousPage.map(({ id }) => id)).toEqual(
+        firstPage.map(({ id }) => id),
+      );
     });
   });
 
   describe('GET /metadata/viewGroups/:id', () => {
     it('should return a specific view group by id', async () => {
-      const viewGroup = await createTestViewGroupWithRestApi({
-        viewId: testViewId,
-        fieldMetadataId: testFieldMetadataId,
-        fieldValue: 'specific-group',
-        isVisible: false,
+      const viewGroupsFromViewReponse = await makeRestAPIRequest({
+        method: 'get',
+        path: `/metadata/viewGroups?viewId=${testViewId}`,
+        bearer: APPLE_JANE_ADMIN_ACCESS_TOKEN,
       });
 
-      testViewGroupId = viewGroup.id;
+      const viewGroup = assertMetadataRestListResponse<ViewGroupDTO>(
+        viewGroupsFromViewReponse,
+      ).find((group) => group.fieldValue === 'OPTION_1');
+
+      jestExpectToBeDefined(viewGroup);
 
       const response = await makeRestAPIRequest({
         method: 'get',
@@ -232,19 +215,18 @@ describe('View Group REST API', () => {
       assertViewGroupStructure(response.body, {
         id: viewGroup.id,
         viewId: testViewId,
-        fieldValue: 'specific-group',
-        isVisible: false,
+        fieldValue: 'OPTION_1',
+        isVisible: true,
       });
 
       testViewGroupId = viewGroup.id;
     });
   });
 
-  describe.only('POST /metadata/viewGroups', () => {
+  describe('POST /metadata/viewGroups', () => {
     it('should create a new view group', async () => {
       const viewGroupData = {
         viewId: testViewId,
-        fieldMetadataId: testFieldMetadataId,
         fieldValue: 'new-group-value',
         isVisible: true,
         position: 5,
@@ -450,7 +432,7 @@ describe('View Group REST API', () => {
         bearer: APPLE_JANE_ADMIN_ACCESS_TOKEN,
       });
 
-      assertRestApiErrorNotFoundResponse(deleteResponse2);
+      assertRestApiSuccessfulResponse(deleteResponse2);
     });
   });
 });

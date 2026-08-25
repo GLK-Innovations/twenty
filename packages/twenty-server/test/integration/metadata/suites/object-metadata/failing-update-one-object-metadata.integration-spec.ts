@@ -36,12 +36,6 @@ const labelIdentifierFailingTestsUseCase: CreateOneObjectMetadataItemTestingCont
       },
     },
     {
-      title: 'when labelIdentifier is null',
-      context: {
-        labelIdentifierFieldMetadataId: null as any,
-      },
-    },
-    {
       title: 'when labelIdentifier is not a TEXT or NAME field',
       context: ({ numberFieldMetadataId }) => ({
         labelIdentifierFieldMetadataId: numberFieldMetadataId,
@@ -49,7 +43,20 @@ const labelIdentifierFailingTestsUseCase: CreateOneObjectMetadataItemTestingCont
     },
   ];
 
-const allTestsUseCases = [...labelIdentifierFailingTestsUseCase];
+const imageIdentifierFailingTestsUseCase: CreateOneObjectMetadataItemTestingContext =
+  [
+    {
+      title: 'when imageIdentifier is not a uuid',
+      context: {
+        imageIdentifierFieldMetadataId: 'not-a-uuid',
+      },
+    },
+  ];
+
+const allTestsUseCases = [
+  ...labelIdentifierFailingTestsUseCase,
+  ...imageIdentifierFailingTestsUseCase,
+];
 
 describe('Object metadata update should fail', () => {
   let objectMetadataId: string;
@@ -106,7 +113,10 @@ describe('Object metadata update should fail', () => {
     async ({ context }) => {
       const updatePayload =
         typeof context === 'function'
-          ? context({ numberFieldMetadataId, objectMetadataId })
+          ? context({
+              numberFieldMetadataId,
+              objectMetadataId,
+            })
           : context;
 
       const { errors } = await updateOneObjectMetadata({

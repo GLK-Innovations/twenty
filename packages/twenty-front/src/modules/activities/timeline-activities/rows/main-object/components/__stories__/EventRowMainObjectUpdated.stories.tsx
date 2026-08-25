@@ -1,11 +1,10 @@
 import { EventRowMainObjectUpdated } from '@/activities/timeline-activities/rows/main-object/components/EventRowMainObjectUpdated';
-import { type TimelineActivity } from '@/activities/timeline-activities/types/TimelineActivity';
-import { type Meta, type StoryObj } from '@storybook/react';
+import { type Meta, type StoryObj } from '@storybook/react-vite';
 
 import { ComponentDecorator, RouterDecorator } from 'twenty-ui/testing';
 import { ObjectMetadataItemsDecorator } from '~/testing/decorators/ObjectMetadataItemsDecorator';
 import { SnackBarDecorator } from '~/testing/decorators/SnackBarDecorator';
-import { generatedMockObjectMetadataItems } from '~/testing/utils/generatedMockObjectMetadataItems';
+import { getTestEnrichedObjectMetadataItemsMock } from '~/testing/utils/getTestEnrichedObjectMetadataItemsMock';
 
 const meta: Meta<typeof EventRowMainObjectUpdated> = {
   title: 'Modules/TimelineActivities/Rows/MainObject/EventRowMainObjectUpdated',
@@ -15,7 +14,6 @@ const meta: Meta<typeof EventRowMainObjectUpdated> = {
     labelIdentifierValue: 'Mock',
     event: {
       id: '1',
-      name: 'mock.updated',
       properties: {
         diff: {
           jobTitle: {
@@ -34,8 +32,8 @@ const meta: Meta<typeof EventRowMainObjectUpdated> = {
           },
         },
       },
-    } as TimelineActivity,
-    mainObjectMetadataItem: generatedMockObjectMetadataItems.find(
+    },
+    mainObjectMetadataItem: getTestEnrichedObjectMetadataItemsMock().find(
       (item) => item.nameSingular === 'person',
     ),
   },

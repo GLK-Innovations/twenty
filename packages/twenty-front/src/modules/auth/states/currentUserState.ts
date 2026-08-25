@@ -1,5 +1,5 @@
-import { createState } from 'twenty-ui/utilities';
-import { type User } from '~/generated/graphql';
+import { createAtomState } from '@/ui/utilities/state/jotai/utils/createAtomState';
+import { type User } from '~/generated-metadata/graphql';
 
 export type CurrentUser = Pick<
   User,
@@ -9,13 +9,17 @@ export type CurrentUser = Pick<
   | 'canAccessFullAdminPanel'
   | 'canImpersonate'
   | 'onboardingStatus'
+  | 'previousOnboardingStatus'
+  | 'isWorkspaceCreator'
   | 'userVars'
   | 'firstName'
   | 'lastName'
   | 'hasPassword'
 >;
 
-export const currentUserState = createState<CurrentUser | null>({
+export const currentUserState = createAtomState<CurrentUser | null>({
   key: 'currentUserState',
   defaultValue: null,
+  useLocalStorage: true,
+  localStorageOptions: { getOnInit: true },
 });

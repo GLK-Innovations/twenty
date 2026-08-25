@@ -1,58 +1,64 @@
-import styled from '@emotion/styled';
-import { type ReactElement } from 'react';
+import { styled } from '@linaria/react';
 
 import { ActivityList } from '@/activities/components/ActivityList';
 import { type Task } from '@/activities/types/Task';
+import { SelectDisplay } from 'twenty-ui/data-display';
+import { type ThemeColor } from 'twenty-ui/theme';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
 import { TaskRow } from './TaskRow';
 
 type TaskListProps = {
   title: string;
+  titleColor: ThemeColor | 'transparent';
   tasks: Task[];
-  button?: ReactElement | false;
+  isFirst: boolean;
 };
 
 const StyledContainer = styled.div`
   align-items: flex-start;
-  width: 100%;
   align-self: stretch;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 8px ${({ theme }) => theme.spacing(6)};
-
-  width: calc(100% - ${({ theme }) => theme.spacing(12)});
+  width: 100%;
 `;
 
-const StyledTitleBar = styled.div`
+const StyledTitleBar = styled.div<{ isFirst: boolean }>`
   display: flex;
   justify-content: space-between;
-  margin-bottom: ${({ theme }) => theme.spacing(4)};
-  margin-top: ${({ theme }) => theme.spacing(4)};
+  margin-bottom: ${themeCssVariables.spacing[3]};
+  margin-top: ${({ isFirst }) =>
+    isFirst ? '0' : themeCssVariables.spacing[4]};
   place-items: center;
   width: 100%;
 `;
 
 const StyledTitle = styled.span`
-  color: ${({ theme }) => theme.font.color.primary};
-  font-weight: ${({ theme }) => theme.font.weight.semiBold};
+  display: flex;
 `;
 
 const StyledCount = styled.span`
-  color: ${({ theme }) => theme.font.color.light};
-  margin-left: ${({ theme }) => theme.spacing(2)};
+  color: ${themeCssVariables.font.color.light};
+  margin-left: ${themeCssVariables.spacing[2]};
 `;
 
-export const TaskList = ({ title, tasks, button }: TaskListProps) => (
+export const TaskList = ({
+  title,
+  titleColor,
+  tasks,
+  isFirst,
+}: TaskListProps) => (
   <>
-    {tasks && tasks.length > 0 && (
+    {tasks.length > 0 && (
       <StyledContainer>
-        <StyledTitleBar>
+        <StyledTitleBar isFirst={isFirst}>
           {title && (
             <StyledTitle>
-              {title} <StyledCount>{tasks.length}</StyledCount>
+              <SelectDisplay color={titleColor} label={title} />
+              <StyledCount>{tasks.length}</StyledCount>
             </StyledTitle>
           )}
-          {button}
         </StyledTitleBar>
         <ActivityList>
           {tasks.map((task) => (

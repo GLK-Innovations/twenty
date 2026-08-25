@@ -9,8 +9,10 @@ import { SelectableListItem } from '@/ui/layout/selectable-list/components/Selec
 import { useSelectableList } from '@/ui/layout/selectable-list/hooks/useSelectableList';
 import { selectedItemIdComponentState } from '@/ui/layout/selectable-list/states/selectedItemIdComponentState';
 import { useHotkeysOnFocusedElement } from '@/ui/utilities/hotkey/hooks/useHotkeysOnFocusedElement';
-import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
-import { Avatar } from 'twenty-ui/display';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import { getAbsoluteImageUrl } from '~/utils/image/getAbsoluteImageUrl';
+import { t } from '@lingui/core/macro';
+import { Avatar } from 'twenty-ui/data-display';
 import { MenuItem, MenuItemMultiSelectAvatar } from 'twenty-ui/navigation';
 
 export const MultipleSelectDropdown = ({
@@ -38,7 +40,7 @@ export const MultipleSelectDropdown = ({
 
   const { resetSelectedItem } = useSelectableList(selectableListId);
 
-  const selectedItemId = useRecoilComponentValue(
+  const selectedItemId = useAtomComponentStateValue(
     selectedItemIdComponentState,
     selectableListId,
   );
@@ -106,7 +108,7 @@ export const MultipleSelectDropdown = ({
                 text={item.name}
                 avatar={
                   <Avatar
-                    avatarUrl={item.avatarUrl}
+                    avatarUrl={getAbsoluteImageUrl(item.avatarUrl)}
                     placeholderColorSeed={item.id}
                     placeholder={item.name}
                     size="md"
@@ -117,7 +119,7 @@ export const MultipleSelectDropdown = ({
             </SelectableListItem>
           );
         })}
-        {showNoResult && <MenuItem text="No results" />}
+        {showNoResult && <MenuItem text={t`No results`} />}
         {loadingItems && <DropdownMenuSkeletonItem />}
       </DropdownMenuItemsContainer>
     </SelectableList>

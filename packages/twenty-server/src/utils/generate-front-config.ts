@@ -8,21 +8,17 @@ config({
 });
 
 export function generateFrontConfig(): void {
-  const configObject = {
-    window: {
-      _env_: {
-        REACT_APP_SERVER_BASE_URL: process.env.SERVER_URL,
-      },
-    },
-  };
-
+  // A page served by this server can always reach the API on the origin it
+  // was loaded from, so the front resolves it from window.location (see
+  // packages/twenty-front/src/config). Rewriting clears any value baked into
+  // index.html at build time.
   const configString = `<!-- BEGIN: Twenty Config -->
     <script id="twenty-env-config">
-      window._env_ = ${JSON.stringify(configObject.window._env_, null, 2)};
+      window._env_ = {};
     </script>
     <!-- END: Twenty Config -->`;
 
-  const distPath = path.join(__dirname, '../..', 'front');
+  const distPath = path.join(__dirname, '..', 'front');
   const indexPath = path.join(distPath, 'index.html');
 
   try {
@@ -35,7 +31,7 @@ export function generateFrontConfig(): void {
 
     fs.writeFileSync(indexPath, indexContent, 'utf8');
   } catch {
-    // eslint-disable-next-line no-console
+    // oxlint-disable-next-line no-console
     console.log(
       'Frontend build not found or not writable, assuming it is served independently',
     );

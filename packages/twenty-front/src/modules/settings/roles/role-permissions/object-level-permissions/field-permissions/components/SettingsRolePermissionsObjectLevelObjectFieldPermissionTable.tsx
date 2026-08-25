@@ -1,40 +1,41 @@
-import { type ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
 import { filterUserFacingFieldMetadataItems } from '@/object-metadata/utils/filterUserFacingFieldMetadataItems';
 import { SettingsRolePermissionsObjectLevelObjectFieldPermissionTableAllHeaderRow } from '@/settings/roles/role-permissions/object-level-permissions/field-permissions/components/SettingsRolePermissionsObjectLevelObjectFieldPermissionTableAllHeaderRow';
+import { TableRow } from '@/ui/layout/table/components/TableRow';
 import {
+  FIELD_PERMISSION_TABLE_ROW_GRID_TEMPLATE_COLUMNS,
   SettingsRolePermissionsObjectLevelObjectFieldPermissionTableRow,
-  StyledObjectFieldTableRow,
 } from '@/settings/roles/role-permissions/object-level-permissions/field-permissions/components/SettingsRolePermissionsObjectLevelObjectFieldPermissionTableRow';
 import { useObjectPermissionDerivedStates } from '@/settings/roles/role-permissions/object-level-permissions/field-permissions/hooks/useObjectPermissionDerivedStates';
 import { settingsDraftRoleFamilyState } from '@/settings/roles/states/settingsDraftRoleFamilyState';
-import { type OrderBy } from '@/types/OrderBy';
 import { SettingsTextInput } from '@/ui/input/components/SettingsTextInput';
 import { SortableTableHeader } from '@/ui/layout/table/components/SortableTableHeader';
 import { Table } from '@/ui/layout/table/components/Table';
 import { TableHeader } from '@/ui/layout/table/components/TableHeader';
 import { TableHeaderText } from '@/ui/layout/table/components/TableHeaderText';
 import { sortedFieldByTableFamilyState } from '@/ui/layout/table/states/sortedFieldByTableFamilyState';
-import styled from '@emotion/styled';
+import { useAtomFamilyStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomFamilyStateValue';
+import { styled } from '@linaria/react';
 import { useLingui } from '@lingui/react/macro';
 import { useState } from 'react';
-import { useRecoilValue } from 'recoil';
 import { isNonEmptyArray } from 'twenty-shared/utils';
-import { H2Title, IconSearch } from 'twenty-ui/display';
+import { IconSearch } from 'twenty-ui/icon';
+import { H2Title } from 'twenty-ui/typography';
 import { Section } from 'twenty-ui/layout';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
 import { sortByProperty } from '~/utils/array/sortByProperty';
-import { turnOrderByIntoSort } from '~/utils/turnOrderByIntoSort';
 
 export const SETTINGS_ROLE_PERMISSION_OBJECT_LEVEL_FIELD_PERMISSION_TABLE_ID =
   'settings-role-permissions-object-level-object-field-permission';
 
-const StyledSearchInput = styled(SettingsTextInput)`
-  padding-bottom: ${({ theme }) => theme.spacing(2)};
+const StyledSearchInputContainer = styled.div`
+  padding-bottom: ${themeCssVariables.spacing[2]};
   width: 100%;
 `;
 
 export type SettingsRolePermissionsObjectLevelObjectFieldPermissionTableProps =
   {
-    objectMetadataItem: ObjectMetadataItem;
+    objectMetadataItem: EnrichedObjectMetadataItem;
     roleId: string;
   };
 
@@ -45,10 +46,11 @@ export const SettingsRolePermissionsObjectLevelObjectFieldPermissionTable = ({
   const { t } = useLingui();
   const [searchTerm, setSearchTerm] = useState('');
 
-  const sortedFieldByTable = useRecoilValue(
-    sortedFieldByTableFamilyState({
+  const sortedFieldByTable = useAtomFamilyStateValue(
+    sortedFieldByTableFamilyState,
+    {
       tableId: SETTINGS_ROLE_PERMISSION_OBJECT_LEVEL_FIELD_PERMISSION_TABLE_ID,
-    }),
+    },
   );
 
   const searchedFields = objectMetadataItem.fields.filter((fieldMetadataItem) =>
@@ -59,17 +61,11 @@ export const SettingsRolePermissionsObjectLevelObjectFieldPermissionTable = ({
 
   const restrictableFieldMetadataItems = [
     ...searchedFields.filter(filterUserFacingFieldMetadataItems),
-  ].sort(
-    sortByProperty(
-      'label',
-      turnOrderByIntoSort(
-        sortedFieldByTable?.orderBy ?? ('AscNullsFirst' satisfies OrderBy),
-      ),
-    ),
-  );
+  ].sort(sortByProperty('label', sortedFieldByTable?.direction ?? 'asc'));
 
-  const settingsDraftRole = useRecoilValue(
-    settingsDraftRoleFamilyState(roleId),
+  const settingsDraftRole = useAtomFamilyStateValue(
+    settingsDraftRoleFamilyState,
+    roleId,
   );
 
   const fieldPermissions =
@@ -96,22 +92,26 @@ export const SettingsRolePermissionsObjectLevelObjectFieldPermissionTable = ({
         title={t`Fields Permissions`}
         description={t`Ability to interact with this object's fields.`}
       />
-      <StyledSearchInput
-        instanceId="object-field-table-search"
-        LeftIcon={IconSearch}
-        placeholder={t`Search a field...`}
-        value={searchTerm}
-        onChange={setSearchTerm}
-      />
+      <StyledSearchInputContainer>
+        <SettingsTextInput
+          instanceId="object-field-table-search"
+          LeftIcon={IconSearch}
+          placeholder={t`Search a field...`}
+          value={searchTerm}
+          onChange={setSearchTerm}
+        />
+      </StyledSearchInputContainer>
       <Table>
-        <StyledObjectFieldTableRow>
+        <TableRow
+          gridTemplateColumns={FIELD_PERMISSION_TABLE_ROW_GRID_TEMPLATE_COLUMNS}
+        >
           <SortableTableHeader
             fieldName="label"
             label={t`Name`}
             tableId={
               SETTINGS_ROLE_PERMISSION_OBJECT_LEVEL_FIELD_PERMISSION_TABLE_ID
             }
-            initialSort={{ fieldName: 'label', orderBy: 'AscNullsFirst' }}
+            initialSort={{ fieldName: 'label', direction: 'asc' }}
           />
           <TableHeader>
             <TableHeaderText>{t`Data type`}</TableHeaderText>
@@ -129,7 +129,7 @@ export const SettingsRolePermissionsObjectLevelObjectFieldPermissionTable = ({
               </TableHeader>
             )}
           </>
-        </StyledObjectFieldTableRow>
+        </TableRow>
         <SettingsRolePermissionsObjectLevelObjectFieldPermissionTableAllHeaderRow
           roleId={roleId}
           objectMetadataItem={objectMetadataItem}

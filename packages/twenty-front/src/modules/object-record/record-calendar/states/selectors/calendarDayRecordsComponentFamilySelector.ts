@@ -1,25 +1,40 @@
-import { objectMetadataItemsState } from '@/object-metadata/states/objectMetadataItemsState';
+import { objectMetadataItemsSelector } from '@/object-metadata/states/objectMetadataItemsSelector';
 import { hasObjectMetadataItemPositionField } from '@/object-metadata/utils/hasObjectMetadataItemPositionField';
+
 import { RecordCalendarComponentInstanceContext } from '@/object-record/record-calendar/states/contexts/RecordCalendarComponentInstanceContext';
 import { recordCalendarRecordIdsComponentState } from '@/object-record/record-calendar/states/recordCalendarRecordIdsComponentState';
-import { recordIndexCalendarFieldMetadataIdState } from '@/object-record/record-index/states/recordIndexCalendarFieldMetadataIdState';
+import { isRecordCalendarDayInDateRange } from '@/object-record/record-calendar/utils/isRecordCalendarDayInDateRange';
+import { isRecordCalendarDayInDateTimeRange } from '@/object-record/record-calendar/utils/isRecordCalendarDayInDateTimeRange';
+import { recordIndexCalendarEndFieldMetadataIdComponentState } from '@/object-record/record-index/states/recordIndexCalendarEndFieldMetadataIdComponentState';
+import { recordIndexCalendarFieldMetadataIdComponentState } from '@/object-record/record-index/states/recordIndexCalendarFieldMetadataIdComponentState';
 import { recordStoreFamilyState } from '@/object-record/record-store/states/recordStoreFamilyState';
-import { createComponentFamilySelector } from '@/ui/utilities/state/component-state/utils/createComponentFamilySelector';
-import { isSameDay, parse } from 'date-fns';
-import { isDefined } from 'twenty-shared/utils';
+import { createAtomComponentFamilySelector } from '@/ui/utilities/state/jotai/utils/createAtomComponentFamilySelector';
+import { isNonEmptyString } from '@sniptt/guards';
+
+import { Temporal } from 'temporal-polyfill';
+import { isDefined, isSamePlainDate } from 'twenty-shared/utils';
+import { FieldMetadataType } from '~/generated-metadata/graphql';
 
 export const calendarDayRecordIdsComponentFamilySelector =
-  createComponentFamilySelector<string[], string>({
+  createAtomComponentFamilySelector<
+    string[],
+    { day: Temporal.PlainDate; timeZone: string }
+  >({
     key: 'calendarDayRecordsComponentFamilySelector',
     componentInstanceContext: RecordCalendarComponentInstanceContext,
     get:
-      ({ instanceId, familyKey: dayAsString }) =>
+      ({ instanceId, familyKey: { day, timeZone } }) =>
       ({ get }) => {
         const calendarFieldMetadataId = get(
-          recordIndexCalendarFieldMetadataIdState,
+          recordIndexCalendarFieldMetadataIdComponentState,
+          { instanceId },
+        );
+        const calendarEndFieldMetadataId = get(
+          recordIndexCalendarEndFieldMetadataIdComponentState,
+          { instanceId },
         );
 
-        const objectMetadataItems = get(objectMetadataItemsState);
+        const objectMetadataItems = get(objectMetadataItemsSelector);
         const objectMetadataItem = objectMetadataItems.find(
           (objectMetadataItem) =>
             objectMetadataItem.fields.some(
@@ -41,24 +56,61 @@ export const calendarDayRecordIdsComponentFamilySelector =
           return [];
         }
 
-        const allRecordIds = get(
-          recordCalendarRecordIdsComponentState.atomFamily({
-            instanceId,
-          }),
+        const endFieldMetadataItem = objectMetadataItem.fields.find(
+          (fieldMetadataItem) =>
+            fieldMetadataItem.id === calendarEndFieldMetadataId,
         );
 
+        const allRecordIds = get(recordCalendarRecordIdsComponentState, {
+          instanceId,
+        });
+
         const recordIds = allRecordIds.filter((recordId) => {
-          const record = get(recordStoreFamilyState(recordId));
+          const record = get(recordStoreFamilyState, recordId);
+
           const recordDate = record?.[fieldMetadataItem.name];
 
-          if (!recordDate) {
+          if (!isNonEmptyString(recordDate)) {
             return false;
           }
 
-          const dayDate = parse(dayAsString, 'yyyy-MM-dd', new Date());
-          const recordDateObj = new Date(recordDate);
+          if (fieldMetadataItem.type === FieldMetadataType.DATE) {
+            const recordStartDate = Temporal.PlainDate.from(recordDate);
+            const recordEndDateValue = isDefined(endFieldMetadataItem)
+              ? record?.[endFieldMetadataItem.name]
+              : undefined;
 
-          return isSameDay(recordDateObj, dayDate);
+            if (
+              endFieldMetadataItem?.type === FieldMetadataType.DATE &&
+              isNonEmptyString(recordEndDateValue)
+            ) {
+              try {
+                return isRecordCalendarDayInDateRange({
+                  day,
+                  startDate: recordStartDate,
+                  endDate: Temporal.PlainDate.from(recordEndDateValue),
+                });
+              } catch {
+                return isSamePlainDate(day, recordStartDate);
+              }
+            }
+
+            return isSamePlainDate(day, recordStartDate);
+          }
+
+          const recordEndDateValue = isDefined(endFieldMetadataItem)
+            ? record?.[endFieldMetadataItem.name]
+            : undefined;
+
+          return isRecordCalendarDayInDateTimeRange({
+            day,
+            startDateTime: recordDate,
+            endDateTime:
+              endFieldMetadataItem?.type === FieldMetadataType.DATE_TIME
+                ? recordEndDateValue
+                : undefined,
+            timeZone,
+          });
         });
 
         if (
@@ -66,8 +118,8 @@ export const calendarDayRecordIdsComponentFamilySelector =
           hasObjectMetadataItemPositionField(objectMetadataItem)
         ) {
           return recordIds.sort((a, b) => {
-            const recordA = get(recordStoreFamilyState(a));
-            const recordB = get(recordStoreFamilyState(b));
+            const recordA = get(recordStoreFamilyState, a);
+            const recordB = get(recordStoreFamilyState, b);
 
             const positionA = recordA?.position;
             const positionB = recordB?.position;

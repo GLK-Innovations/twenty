@@ -1,47 +1,41 @@
 import { ConfigService } from '@nestjs/config';
 import { Test, type TestingModule } from '@nestjs/testing';
 
-import { ConnectedAccountProvider } from 'twenty-shared/types';
+import {
+  ConnectedAccountProvider,
+  MessageFolderImportPolicy,
+  MessageFolderPendingSyncAction,
+} from 'twenty-shared/types';
 
 import { TwentyConfigModule } from 'src/engine/core-modules/twenty-config/twenty-config.module';
-import { MicrosoftOAuth2ClientManagerService } from 'src/modules/connected-account/oauth2-client-manager/drivers/microsoft/microsoft-oauth2-client-manager.service';
-import { OAuth2ClientManagerService } from 'src/modules/connected-account/oauth2-client-manager/services/oauth2-client-manager.service';
-import { type ConnectedAccountWorkspaceEntity } from 'src/modules/connected-account/standard-objects/connected-account.workspace-entity';
-import { MessageChannelWorkspaceEntity } from 'src/modules/messaging/common/standard-objects/message-channel.workspace-entity';
-import { MessageFolderWorkspaceEntity } from 'src/modules/messaging/common/standard-objects/message-folder.workspace-entity';
+import { type ConnectedAccountEntity } from 'src/engine/metadata-modules/connected-account/entities/connected-account.entity';
+import { ConnectedAccountTokenEncryptionService } from 'src/engine/metadata-modules/connected-account/services/connected-account-token-encryption.service';
+import { MessageChannelEntity } from 'src/engine/metadata-modules/message-channel/entities/message-channel.entity';
+import { MessageFolderEntity } from 'src/engine/metadata-modules/message-folder/entities/message-folder.entity';
+import { MicrosoftOAuth2ClientProvider } from 'src/modules/connected-account/oauth2-client-manager/drivers/microsoft/microsoft-oauth2-client.provider';
 import { microsoftGraphWithMessagesDeltaLink } from 'src/modules/messaging/message-import-manager/drivers/microsoft/mocks/microsoft-api-examples';
 import { MessageFolderName } from 'src/modules/messaging/message-import-manager/drivers/microsoft/types/folders';
 
 import { MicrosoftGetMessageListService } from './microsoft-get-message-list.service';
 import { MicrosoftMessageListFetchErrorHandler } from './microsoft-message-list-fetch-error-handler.service';
 
-// in case you have "Please provide a valid token" it may be because you need to pass the env varible to the .env.test file
-const accessToken = 'replace-with-your-access-token';
-const refreshToken = 'replace-with-your-refresh-token';
 const syncCursor = `replace-with-your-sync-cursor`;
 const mockConnectedAccount: Pick<
-  ConnectedAccountWorkspaceEntity,
-  | 'provider'
-  | 'accessToken'
-  | 'refreshToken'
-  | 'id'
-  | 'handle'
-  | 'connectionParameters'
+  ConnectedAccountEntity,
+  'provider' | 'id' | 'handle'
 > = {
   id: 'connected-account-id',
   provider: ConnectedAccountProvider.MICROSOFT,
-  accessToken: accessToken,
-  refreshToken: refreshToken,
-  handle: 'test@gmail.com',
-  connectionParameters: {},
+  handle: 'test@outlook.com',
 };
 
 const mockMessageChannel: Pick<
-  MessageChannelWorkspaceEntity,
-  'id' | 'syncCursor'
+  MessageChannelEntity,
+  'id' | 'syncCursor' | 'messageFolderImportPolicy'
 > = {
   id: 'message-channel-id',
   syncCursor: '', // Should be empty for Microsoft as cursors are stored at the folder level
+  messageFolderImportPolicy: MessageFolderImportPolicy.SELECTED_FOLDERS,
 };
 
 xdescribe('Microsoft dev tests : get message list service', () => {
@@ -52,13 +46,16 @@ xdescribe('Microsoft dev tests : get message list service', () => {
       imports: [TwentyConfigModule.forRoot()],
       providers: [
         MicrosoftGetMessageListService,
-        OAuth2ClientManagerService,
+        {
+          provide: MicrosoftOAuth2ClientProvider,
+          useValue: { getClient: jest.fn() },
+        },
         {
           provide: MicrosoftMessageListFetchErrorHandler,
           useValue: { handleError: jest.fn() },
         },
-        MicrosoftOAuth2ClientManagerService,
         ConfigService,
+        { provide: ConnectedAccountTokenEncryptionService, useValue: {} },
       ],
     }).compile();
 
@@ -79,39 +76,13 @@ xdescribe('Microsoft dev tests : get message list service', () => {
           isSynced: false,
           isSentFolder: false,
           externalId: null,
+          parentFolderId: null,
+          pendingSyncAction: MessageFolderPendingSyncAction.NONE,
         },
       ],
     });
 
     expect(result[0].messageExternalIds.length).toBeGreaterThan(0);
-  });
-
-  it('Should throw token error', async () => {
-    const mockConnectedAccountUnvalid = {
-      id: 'connected-account-id',
-      provider: ConnectedAccountProvider.MICROSOFT,
-      accessToken: 'invalid-token',
-      refreshToken: 'invalid-token',
-      handle: 'test@microsoft.com',
-      connectionParameters: {},
-    };
-
-    await expect(
-      service.getMessageLists({
-        connectedAccount: mockConnectedAccountUnvalid,
-        messageChannel: mockMessageChannel,
-        messageFolders: [
-          {
-            id: 'inbox-folder-id',
-            name: MessageFolderName.INBOX,
-            syncCursor: 'inbox-sync-cursor',
-            isSynced: false,
-            isSentFolder: false,
-            externalId: null,
-          },
-        ],
-      }),
-    ).rejects.toThrowError('Access token is undefined or empty');
   });
 
   // if you need to run this test, you need to manually update the syncCursor to a valid one
@@ -127,6 +98,8 @@ xdescribe('Microsoft dev tests : get message list service', () => {
           isSynced: false,
           isSentFolder: false,
           externalId: null,
+          parentFolderId: null,
+          pendingSyncAction: MessageFolderPendingSyncAction.NONE,
         },
       ],
     });
@@ -140,6 +113,7 @@ xdescribe('Microsoft dev tests : get message list service', () => {
         messageChannel: {
           id: 'message-channel-id',
           syncCursor: '',
+          messageFolderImportPolicy: MessageFolderImportPolicy.SELECTED_FOLDERS,
         },
         connectedAccount: mockConnectedAccount,
         messageFolders: [
@@ -150,6 +124,8 @@ xdescribe('Microsoft dev tests : get message list service', () => {
             isSynced: false,
             isSentFolder: false,
             externalId: null,
+            parentFolderId: null,
+            pendingSyncAction: MessageFolderPendingSyncAction.NONE,
           },
         ],
       }),
@@ -162,57 +138,69 @@ xdescribe('Microsoft dev tests : get message list service', () => {
 xdescribe('Microsoft dev tests : get message list service for folders', () => {
   let service: MicrosoftGetMessageListService;
 
-  const inboxFolder = new MessageFolderWorkspaceEntity();
+  const inboxFolder = new MessageFolderEntity();
 
   inboxFolder.id = 'inbox-folder-id';
   inboxFolder.name = MessageFolderName.INBOX;
   inboxFolder.syncCursor = 'inbox-sync-cursor';
   inboxFolder.messageChannelId = 'message-channel-1';
+  inboxFolder.parentFolderId = null;
 
-  const sentFolder = new MessageFolderWorkspaceEntity();
+  const sentFolder = new MessageFolderEntity();
 
   sentFolder.id = 'sent-folder-id';
   sentFolder.name = MessageFolderName.SENT_ITEMS;
   sentFolder.syncCursor = 'sent-sync-cursor';
   sentFolder.messageChannelId = 'message-channel-1';
+  sentFolder.parentFolderId = null;
 
-  const otherFolder = new MessageFolderWorkspaceEntity();
+  const otherFolder = new MessageFolderEntity();
 
   otherFolder.id = 'other-folder-id';
   otherFolder.name = 'other';
   otherFolder.syncCursor = 'other-sync-cursor';
   otherFolder.messageChannelId = 'message-channel-2';
+  otherFolder.parentFolderId = null;
 
-  const messageChannelNoFolders = new MessageChannelWorkspaceEntity();
+  const messageChannelNoFolders = new MessageChannelEntity();
 
   messageChannelNoFolders.id = 'message-channel-0';
   messageChannelNoFolders.messageFolders = [];
   messageChannelNoFolders.syncCursor = '';
+  messageChannelNoFolders.messageFolderImportPolicy =
+    MessageFolderImportPolicy.SELECTED_FOLDERS;
 
-  const messageChannelMicrosoftOneFolder = new MessageChannelWorkspaceEntity();
+  const messageChannelMicrosoftOneFolder = new MessageChannelEntity();
 
   messageChannelMicrosoftOneFolder.id = 'message-channel-1';
   messageChannelMicrosoftOneFolder.messageFolders = [inboxFolder];
   messageChannelMicrosoftOneFolder.syncCursor = '';
+  messageChannelMicrosoftOneFolder.messageFolderImportPolicy =
+    MessageFolderImportPolicy.SELECTED_FOLDERS;
 
-  const messageChannelMicrosoft = new MessageChannelWorkspaceEntity();
+  const messageChannelMicrosoft = new MessageChannelEntity();
 
   messageChannelMicrosoft.id = 'message-channel-2';
   messageChannelMicrosoft.messageFolders = [inboxFolder, sentFolder];
   messageChannelMicrosoft.syncCursor = '';
+  messageChannelMicrosoft.messageFolderImportPolicy =
+    MessageFolderImportPolicy.SELECTED_FOLDERS;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       imports: [TwentyConfigModule.forRoot()],
       providers: [
         MicrosoftGetMessageListService,
-        OAuth2ClientManagerService,
+        {
+          provide: MicrosoftOAuth2ClientProvider,
+          useValue: { getClient: jest.fn() },
+        },
         {
           provide: MicrosoftMessageListFetchErrorHandler,
           useValue: { handleError: jest.fn() },
         },
-        MicrosoftOAuth2ClientManagerService,
         ConfigService,
+        { provide: ConnectedAccountTokenEncryptionService, useValue: {} },
       ],
     }).compile();
 
@@ -228,7 +216,7 @@ xdescribe('Microsoft dev tests : get message list service for folders', () => {
     };
 
     jest
-      .spyOn(OAuth2ClientManagerService.prototype, 'getMicrosoftOAuth2Client')
+      .spyOn(MicrosoftOAuth2ClientProvider.prototype, 'getClient')
       .mockResolvedValue(mockMicrosoftClient as any);
   });
 

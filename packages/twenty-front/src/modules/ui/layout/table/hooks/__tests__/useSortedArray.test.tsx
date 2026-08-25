@@ -1,6 +1,6 @@
 import { renderHook } from '@testing-library/react';
 import React, { type ReactNode } from 'react';
-import { type MutableSnapshot, RecoilRoot } from 'recoil';
+import { createStore, Provider } from 'jotai';
 
 import {
   mockedTableMetadata,
@@ -12,46 +12,37 @@ import {
   tableDataSortedBylabelInDescendingOrder,
 } from '~/testing/mock-data/tableData';
 
-import { type OrderBy } from '@/types/OrderBy';
 import { sortedFieldByTableFamilyState } from '@/ui/layout/table/states/sortedFieldByTableFamilyState';
+import { type ArraySortDirection } from 'twenty-shared/types';
 
 import { useSortedArray } from '@/ui/layout/table/hooks/useSortedArray';
 
-interface WrapperProps {
-  children: ReactNode;
-  initializeState?: (mutableSnapshot: MutableSnapshot) => void;
-}
-
-const Wrapper: React.FC<WrapperProps> = ({ children, initializeState }) => (
-  <RecoilRoot initializeState={initializeState}>{children}</RecoilRoot>
-);
+const createSortedWrapper = (
+  fieldName: keyof MockedTableType,
+  direction: ArraySortDirection,
+) => {
+  const store = createStore();
+  store.set(
+    sortedFieldByTableFamilyState.atomFamily({
+      tableId: mockedTableMetadata.tableId,
+    }),
+    {
+      fieldName: fieldName as string,
+      direction,
+    },
+  );
+  const Wrapper = ({ children }: { children: ReactNode }) => (
+    <Provider store={store}>{children}</Provider>
+  );
+  return Wrapper;
+};
 
 describe('useSortedArray hook', () => {
-  const initializeState =
-    (fieldName: keyof MockedTableType, orderBy: OrderBy) =>
-    ({ set }: MutableSnapshot) => {
-      set(
-        sortedFieldByTableFamilyState({
-          tableId: mockedTableMetadata.tableId,
-        }),
-        {
-          fieldName,
-          orderBy,
-        },
-      );
-    };
-
   test('initial sorting behavior for string fields - Ascending', () => {
     const { result } = renderHook(
       () => useSortedArray(tableData, mockedTableMetadata),
       {
-        wrapper: ({ children }: { children: ReactNode }) => (
-          <Wrapper
-            initializeState={initializeState('labelPlural', 'AscNullsLast')}
-          >
-            {children}
-          </Wrapper>
-        ),
+        wrapper: createSortedWrapper('labelPlural', 'asc'),
       },
     );
 
@@ -64,13 +55,7 @@ describe('useSortedArray hook', () => {
     const { result } = renderHook(
       () => useSortedArray(tableData, mockedTableMetadata),
       {
-        wrapper: ({ children }: { children: ReactNode }) => (
-          <Wrapper
-            initializeState={initializeState('labelPlural', 'DescNullsLast')}
-          >
-            {children}
-          </Wrapper>
-        ),
+        wrapper: createSortedWrapper('labelPlural', 'desc'),
       },
     );
 
@@ -83,13 +68,7 @@ describe('useSortedArray hook', () => {
     const { result } = renderHook(
       () => useSortedArray(tableData, mockedTableMetadata),
       {
-        wrapper: ({ children }: { children: ReactNode }) => (
-          <Wrapper
-            initializeState={initializeState('fieldsCount', 'AscNullsLast')}
-          >
-            {children}
-          </Wrapper>
-        ),
+        wrapper: createSortedWrapper('fieldsCount', 'asc'),
       },
     );
 
@@ -102,13 +81,7 @@ describe('useSortedArray hook', () => {
     const { result } = renderHook(
       () => useSortedArray(tableData, mockedTableMetadata),
       {
-        wrapper: ({ children }: { children: ReactNode }) => (
-          <Wrapper
-            initializeState={initializeState('fieldsCount', 'DescNullsLast')}
-          >
-            {children}
-          </Wrapper>
-        ),
+        wrapper: createSortedWrapper('fieldsCount', 'desc'),
       },
     );
 

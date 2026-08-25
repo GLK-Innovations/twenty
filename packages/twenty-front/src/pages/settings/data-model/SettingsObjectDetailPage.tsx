@@ -1,99 +1,95 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
+import { ObjectMetadataIcon } from '@/object-metadata/components/ObjectMetadataIcon';
 import { useFilteredObjectMetadataItems } from '@/object-metadata/hooks/useFilteredObjectMetadataItems';
 import { SettingsPageContainer } from '@/settings/components/SettingsPageContainer';
 import { ObjectFields } from '@/settings/data-model/object-details/components/tabs/ObjectFields';
-import { ObjectIndexes } from '@/settings/data-model/object-details/components/tabs/ObjectIndexes';
+import { ObjectLayout } from '@/settings/data-model/object-details/components/tabs/ObjectLayout';
 import { ObjectSettings } from '@/settings/data-model/object-details/components/tabs/ObjectSettings';
-import { SubMenuTopBarContainer } from '@/ui/layout/page/components/SubMenuTopBarContainer';
-import { TabList } from '@/ui/layout/tab-list/components/TabList';
-import { isAdvancedModeEnabledState } from '@/ui/navigation/navigation-drawer/states/isAdvancedModeEnabledState';
-import { useIsFeatureEnabled } from '@/workspace/hooks/useIsFeatureEnabled';
-import styled from '@emotion/styled';
-import { useRecoilState, useRecoilValue } from 'recoil';
-import { AppPath, SettingsPath } from 'twenty-shared/types';
-
-import { SettingsItemTypeTag } from '@/settings/components/SettingsItemTypeTag';
-import { activeTabIdComponentState } from '@/ui/layout/tab-list/states/activeTabIdComponentState';
-import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
-import { useTheme } from '@emotion/react';
-import { useLingui } from '@lingui/react/macro';
-import { getSettingsPath, isDefined } from 'twenty-shared/utils';
+import { SettingsPageLayout } from '@/settings/components/layout/SettingsPageLayout';
+import { SettingsTabBar } from '@/settings/components/layout/SettingsTabBar';
+import { useAtomState } from '@/ui/utilities/state/jotai/hooks/useAtomState';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { styled } from '@linaria/react';
 import {
-  H3Title,
-  IconCodeCircle,
+  AppPath,
+  CoreObjectNameSingular,
+  SettingsPath,
+} from 'twenty-shared/types';
+
+import { isDDLLockedState } from '@/client-config/states/isDDLLockedState';
+import { isObjectMetadataReadOnly } from '@/object-record/read-only/utils/isObjectMetadataReadOnly';
+import { activeTabIdComponentState } from '@/ui/layout/tab-list/states/activeTabIdComponentState';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import { useLingui } from '@lingui/react/macro';
+import { getAppPath, getSettingsPath, isDefined } from 'twenty-shared/utils';
+import {
+  IconArrowUpRight,
+  IconLayout,
   IconListDetails,
   IconPlus,
-  IconPoint,
   IconSettings,
-} from 'twenty-ui/display';
+} from 'twenty-ui/icon';
 import { Button } from 'twenty-ui/input';
 import { UndecoratedLink } from 'twenty-ui/navigation';
-import { FeatureFlagKey } from '~/generated/graphql';
 import { useNavigateApp } from '~/hooks/useNavigateApp';
 import { SETTINGS_OBJECT_DETAIL_TABS } from '~/pages/settings/data-model/constants/SettingsObjectDetailTabs';
 import { updatedObjectNamePluralState } from '~/pages/settings/data-model/states/updatedObjectNamePluralState';
-import { isObjectMetadataSettingsReadOnly } from '@/object-record/read-only/utils/isObjectMetadataSettingsReadOnly';
 
 const StyledContentContainer = styled.div`
   flex: 1;
-  width: 100%;
   padding-left: 0;
-`;
-
-const StyledObjectTypeTag = styled(SettingsItemTypeTag)`
-  box-sizing: border-box;
-  height: ${({ theme }) => theme.spacing(5)};
-  margin-left: ${({ theme }) => theme.spacing(2)};
-`;
-
-const StyledTitleContainer = styled.div`
-  display: flex;
+  width: 100%;
 `;
 
 export const SettingsObjectDetailPage = () => {
   const navigateApp = useNavigateApp();
   const { t } = useLingui();
-
   const { objectNamePlural = '' } = useParams();
-  const { findActiveObjectMetadataItemByNamePlural } =
+
+  const { findObjectMetadataItemByNamePlural } =
     useFilteredObjectMetadataItems();
 
-  const [updatedObjectNamePlural, setUpdatedObjectNamePlural] = useRecoilState(
+  const [updatedObjectNamePlural, setUpdatedObjectNamePlural] = useAtomState(
     updatedObjectNamePluralState,
   );
   const objectMetadataItem =
-    findActiveObjectMetadataItemByNamePlural(objectNamePlural) ??
-    findActiveObjectMetadataItemByNamePlural(updatedObjectNamePlural);
+    findObjectMetadataItemByNamePlural(objectNamePlural) ??
+    findObjectMetadataItemByNamePlural(updatedObjectNamePlural);
 
-  const readonly = isObjectMetadataSettingsReadOnly({ objectMetadataItem });
+  const isDDLLocked = useAtomStateValue(isDDLLockedState);
 
-  const activeTabId = useRecoilComponentValue(
-    activeTabIdComponentState,
-    SETTINGS_OBJECT_DETAIL_TABS.COMPONENT_INSTANCE_ID,
-  );
+  const readonly =
+    isObjectMetadataReadOnly({
+      objectMetadataItem,
+    }) || isDDLLocked;
 
-  const isAdvancedModeEnabled = useRecoilValue(isAdvancedModeEnabledState);
-  const isUniqueIndexesEnabled = useIsFeatureEnabled(
-    FeatureFlagKey.IS_UNIQUE_INDEXES_ENABLED,
-  );
+  const activeTabId =
+    useAtomComponentStateValue(
+      activeTabIdComponentState,
+      SETTINGS_OBJECT_DETAIL_TABS.COMPONENT_INSTANCE_ID,
+    ) ?? SETTINGS_OBJECT_DETAIL_TABS.TABS_IDS.FIELDS;
+
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (objectNamePlural === updatedObjectNamePlural)
       setUpdatedObjectNamePlural('');
-    if (!isDefined(objectMetadataItem)) navigateApp(AppPath.NotFound);
+    if (!isDeleting && !isDefined(objectMetadataItem))
+      navigateApp(AppPath.NotFound);
   }, [
     objectMetadataItem,
     navigateApp,
     objectNamePlural,
     updatedObjectNamePlural,
     setUpdatedObjectNamePlural,
+    isDeleting,
   ]);
 
-  const theme = useTheme();
-
-  if (!isDefined(objectMetadataItem)) return <></>;
+  if (!isDefined(objectMetadataItem)) {
+    return null;
+  }
 
   const tabs = [
     {
@@ -109,17 +105,12 @@ export const SettingsObjectDetailPage = () => {
       hide: false,
     },
     {
-      id: SETTINGS_OBJECT_DETAIL_TABS.TABS_IDS.INDEXES,
-      title: t`Indexes`,
-      Icon: IconCodeCircle,
-      hide: !isAdvancedModeEnabled || !isUniqueIndexesEnabled,
-      pill: (
-        <IconPoint
-          size={12}
-          color={theme.color.yellow}
-          fill={theme.color.yellow}
-        />
-      ),
+      id: SETTINGS_OBJECT_DETAIL_TABS.TABS_IDS.LAYOUT,
+      title: t`Layout`,
+      Icon: IconLayout,
+      hide:
+        objectMetadataItem.isRemote ||
+        objectMetadataItem.nameSingular === CoreObjectNameSingular.Dashboard,
     },
   ];
 
@@ -128,60 +119,76 @@ export const SettingsObjectDetailPage = () => {
       case SETTINGS_OBJECT_DETAIL_TABS.TABS_IDS.FIELDS:
         return <ObjectFields objectMetadataItem={objectMetadataItem} />;
       case SETTINGS_OBJECT_DETAIL_TABS.TABS_IDS.SETTINGS:
-        return <ObjectSettings objectMetadataItem={objectMetadataItem} />;
-      case SETTINGS_OBJECT_DETAIL_TABS.TABS_IDS.INDEXES:
-        return <ObjectIndexes objectMetadataItem={objectMetadataItem} />;
+        return (
+          <ObjectSettings
+            objectMetadataItem={objectMetadataItem}
+            isDeleting={isDeleting}
+            setIsDeleting={setIsDeleting}
+          />
+        );
+      case SETTINGS_OBJECT_DETAIL_TABS.TABS_IDS.LAYOUT:
+        return <ObjectLayout objectMetadataItem={objectMetadataItem} />;
       default:
         return <></>;
     }
   };
 
   return (
-    <>
-      <SubMenuTopBarContainer
-        title={
-          <StyledTitleContainer>
-            <H3Title title={objectMetadataItem.labelPlural} />
-            <StyledObjectTypeTag item={objectMetadataItem} />
-          </StyledTitleContainer>
-        }
-        links={[
-          {
-            children: t`Workspace`,
-            href: getSettingsPath(SettingsPath.Workspace),
-          },
-          { children: t`Objects`, href: getSettingsPath(SettingsPath.Objects) },
-          {
-            children: objectMetadataItem.labelPlural,
-          },
-        ]}
-        actionButton={
-          !readonly &&
-          activeTabId === SETTINGS_OBJECT_DETAIL_TABS.TABS_IDS.FIELDS && (
-            <UndecoratedLink to="./new-field/select">
-              <Button
-                title={t`New Field`}
-                variant="primary"
-                size="small"
-                accent="blue"
-                Icon={IconPlus}
-              />
-            </UndecoratedLink>
-          )
-        }
-      >
-        <SettingsPageContainer>
-          <TabList
-            tabs={tabs}
-            componentInstanceId={
-              SETTINGS_OBJECT_DETAIL_TABS.COMPONENT_INSTANCE_ID
-            }
+    <SettingsPageLayout
+      title={objectMetadataItem.labelPlural}
+      icon={<ObjectMetadataIcon objectMetadataItem={objectMetadataItem} />}
+      links={[
+        {
+          children: t`Workspace`,
+          href: getSettingsPath(SettingsPath.General),
+        },
+        {
+          children: t`Objects`,
+          href: getSettingsPath(SettingsPath.Objects),
+        },
+        {
+          children: objectMetadataItem.labelPlural,
+        },
+      ]}
+      actionButton={
+        <>
+          <Button
+            Icon={IconArrowUpRight}
+            title={t`See records`}
+            variant="tertiary"
+            size="small"
+            to={getAppPath(AppPath.RecordIndexPage, {
+              objectNamePlural: objectMetadataItem.namePlural,
+            })}
           />
-          <StyledContentContainer>
-            {renderActiveTabContent()}
-          </StyledContentContainer>
-        </SettingsPageContainer>
-      </SubMenuTopBarContainer>
-    </>
+          {!readonly &&
+            activeTabId === SETTINGS_OBJECT_DETAIL_TABS.TABS_IDS.FIELDS && (
+              <UndecoratedLink to="./new-field/select">
+                <Button
+                  title={t`New Field`}
+                  variant="primary"
+                  size="small"
+                  accent="blue"
+                  Icon={IconPlus}
+                />
+              </UndecoratedLink>
+            )}
+        </>
+      }
+      secondaryBar={
+        <SettingsTabBar
+          tabs={tabs}
+          componentInstanceId={
+            SETTINGS_OBJECT_DETAIL_TABS.COMPONENT_INSTANCE_ID
+          }
+        />
+      }
+    >
+      <SettingsPageContainer>
+        <StyledContentContainer>
+          {renderActiveTabContent()}
+        </StyledContentContainer>
+      </SettingsPageContainer>
+    </SettingsPageLayout>
   );
 };

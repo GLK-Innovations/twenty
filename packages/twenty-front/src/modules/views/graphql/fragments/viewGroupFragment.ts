@@ -1,9 +1,8 @@
 import { gql } from '@apollo/client';
 
 export const VIEW_GROUP_FRAGMENT = gql`
-  fragment ViewGroupFragment on CoreViewGroup {
+  fragment ViewGroupFragment on ViewGroup {
     id
-    fieldMetadataId
     isVisible
     fieldValue
     position

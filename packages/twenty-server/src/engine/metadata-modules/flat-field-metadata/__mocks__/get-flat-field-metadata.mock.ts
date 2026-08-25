@@ -1,32 +1,35 @@
 import { faker } from '@faker-js/faker';
-import { type FieldMetadataType } from 'twenty-shared/types';
+import {
+  MetadataWritability,
+  type FieldMetadataType,
+} from 'twenty-shared/types';
 
 import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
 
 type FlatFieldMetadataOverrides<
   T extends FieldMetadataType = FieldMetadataType,
 > = Required<
-  Pick<
-    FlatFieldMetadata<T>,
-    'universalIdentifier' | 'objectMetadataId' | 'type'
-  >
+  Pick<FlatFieldMetadata, 'universalIdentifier' | 'objectMetadataId' | 'type'>
 > &
   Partial<FlatFieldMetadata<T>>;
 
 export const getFlatFieldMetadataMock = <T extends FieldMetadataType>(
   overrides: FlatFieldMetadataOverrides<T>,
 ): FlatFieldMetadata => {
-  const createdAt = '2024-01-01T00:00:00.000Z' as unknown as Date;
+  const createdAt = '2024-01-01T00:00:00.000Z';
 
   return {
     calendarViewIds: [],
+    calendarEndViewIds: [],
     viewFilterIds: [],
-    viewGroupIds: [],
     kanbanAggregateOperationViewIds: [],
     viewFieldIds: [],
+    fieldPermissionIds: [],
     createdAt,
+    mainGroupByFieldMetadataViewIds: [],
     updatedAt: createdAt,
     defaultValue: null,
+    writability: MetadataWritability.OPEN,
     options: null,
     morphId: null,
     settings: null,
@@ -34,20 +37,35 @@ export const getFlatFieldMetadataMock = <T extends FieldMetadataType>(
     icon: 'icon',
     id: faker.string.uuid(),
     isActive: true,
-    isCustom: true,
+    isSystemSideEffect: false,
     name: 'flatFieldMetadataName',
     label: 'flat field metadata label',
     isNullable: true,
     isUnique: false,
-    isUIReadOnly: false,
+    isUIEditable: true,
     isLabelSyncedWithName: false,
     isSystem: false,
-    standardId: null,
-    standardOverrides: null,
+    overrides: null,
     workspaceId: faker.string.uuid(),
     applicationId: faker.string.uuid(),
     relationTargetFieldMetadataId: null,
     relationTargetObjectMetadataId: null,
+    applicationUniversalIdentifier: faker.string.uuid(),
+    objectMetadataUniversalIdentifier: faker.string.uuid(),
+    relationTargetObjectMetadataUniversalIdentifier: null,
+    relationTargetFieldMetadataUniversalIdentifier: null,
+    viewFilterUniversalIdentifiers: [],
+    viewFieldUniversalIdentifiers: [],
+    fieldPermissionUniversalIdentifiers: [],
+    kanbanAggregateOperationViewUniversalIdentifiers: [],
+    calendarViewUniversalIdentifiers: [],
+    calendarEndViewUniversalIdentifiers: [],
+    mainGroupByFieldMetadataViewUniversalIdentifiers: [],
+    viewSortIds: [],
+    viewSortUniversalIdentifiers: [],
+    searchFieldMetadataIds: [],
+    searchFieldMetadataUniversalIdentifiers: [],
+    universalSettings: null,
     ...overrides,
   };
 };
@@ -56,9 +74,7 @@ export const getStandardFlatFieldMetadataMock = (
   overrides: Omit<FlatFieldMetadataOverrides, 'isCustom' | 'isSystem'>,
 ) => {
   return getFlatFieldMetadataMock({
-    standardId: faker.string.uuid(),
-    standardOverrides: {},
-    isCustom: false,
+    overrides: {},
     isSystem: true,
     ...overrides,
   });

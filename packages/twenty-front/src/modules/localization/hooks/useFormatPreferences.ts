@@ -1,8 +1,6 @@
 import { useCallback } from 'react';
-import { useRecoilState, useRecoilValue, useSetRecoilState } from 'recoil';
 
 import { currentWorkspaceMemberState } from '@/auth/states/currentWorkspaceMemberState';
-import { CalendarStartDay } from 'twenty-shared';
 import { DateFormat } from '@/localization/constants/DateFormat';
 import { NumberFormat } from '@/localization/constants/NumberFormat';
 import { TimeFormat } from '@/localization/constants/TimeFormat';
@@ -17,8 +15,10 @@ import { detectTimeFormat } from '@/localization/utils/detection/detectTimeForma
 import { detectTimeZone } from '@/localization/utils/detection/detectTimeZone';
 import { getFormatPreferencesFromWorkspaceMember } from '@/localization/utils/format-preferences/getFormatPreferencesFromWorkspaceMember';
 import { getWorkspaceMemberUpdateFromFormatPreferences } from '@/localization/utils/format-preferences/getWorkspaceMemberUpdateFromFormatPreferences';
-import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
-import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
+import { useUpdateWorkspaceMemberSettings } from '@/settings/profile/hooks/useUpdateWorkspaceMemberSettings';
+import { useAtomState } from '@/ui/utilities/state/jotai/hooks/useAtomState';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { CalendarStartDay } from 'twenty-shared/constants';
 import { logError } from '~/utils/logError';
 
 export type FormatPreferenceKey = keyof WorkspaceMemberFormatPreferences;
@@ -27,15 +27,10 @@ export const useFormatPreferences = () => {
   const [
     workspaceMemberFormatPreferences,
     setWorkspaceMemberFormatPreferences,
-  ] = useRecoilState(workspaceMemberFormatPreferencesState);
-  const currentWorkspaceMember = useRecoilValue(currentWorkspaceMemberState);
-  const setCurrentWorkspaceMember = useSetRecoilState(
-    currentWorkspaceMemberState,
-  );
+  ] = useAtomState(workspaceMemberFormatPreferencesState);
+  const currentWorkspaceMember = useAtomStateValue(currentWorkspaceMemberState);
 
-  const { updateOneRecord } = useUpdateOneRecord({
-    objectNameSingular: CoreObjectNameSingular.WorkspaceMember,
-  });
+  const { updateWorkspaceMemberSettings } = useUpdateWorkspaceMemberSettings();
 
   const updateFormatPreference = useCallback(
     async <K extends FormatPreferenceKey>(
@@ -47,9 +42,7 @@ export const useFormatPreferences = () => {
         return;
       }
 
-      // Handle system values by detecting the actual format
       let resolvedValue = value;
-      // This is dirty and will need to be unified
       if (
         value === 'SYSTEM' ||
         value === 'system' ||
@@ -96,18 +89,9 @@ export const useFormatPreferences = () => {
         });
 
       try {
-        await updateOneRecord({
-          idToUpdate: currentWorkspaceMember.id,
-          updateOneRecordInput: workspaceMemberUpdate,
-        });
-
-        // Update the currentWorkspaceMemberState with the new backend values
-        setCurrentWorkspaceMember((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            ...workspaceMemberUpdate,
-          };
+        await updateWorkspaceMemberSettings({
+          workspaceMemberId: currentWorkspaceMember.id,
+          update: workspaceMemberUpdate,
         });
       } catch (error) {
         logError(error);
@@ -116,9 +100,8 @@ export const useFormatPreferences = () => {
     },
     [
       currentWorkspaceMember,
-      updateOneRecord,
+      updateWorkspaceMemberSettings,
       setWorkspaceMemberFormatPreferences,
-      setCurrentWorkspaceMember,
     ],
   );
 
@@ -166,18 +149,9 @@ export const useFormatPreferences = () => {
         getWorkspaceMemberUpdateFromFormatPreferences(updates);
 
       try {
-        await updateOneRecord({
-          idToUpdate: currentWorkspaceMember.id,
-          updateOneRecordInput: workspaceMemberUpdate,
-        });
-
-        // Update the currentWorkspaceMemberState with the new backend values
-        setCurrentWorkspaceMember((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            ...workspaceMemberUpdate,
-          };
+        await updateWorkspaceMemberSettings({
+          workspaceMemberId: currentWorkspaceMember.id,
+          update: workspaceMemberUpdate,
         });
       } catch (error) {
         logError(error);
@@ -186,9 +160,8 @@ export const useFormatPreferences = () => {
     },
     [
       currentWorkspaceMember,
-      updateOneRecord,
+      updateWorkspaceMemberSettings,
       setWorkspaceMemberFormatPreferences,
-      setCurrentWorkspaceMember,
     ],
   );
 

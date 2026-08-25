@@ -1,4 +1,4 @@
-import { type IconComponent } from 'twenty-ui/display';
+import { type IconComponent } from 'twenty-ui/icon';
 import { type PermissionFlagType } from '~/generated-metadata/graphql';
 
 export type SettingsRolePermissionsSettingPermission = {
@@ -7,4 +7,7 @@ export type SettingsRolePermissionsSettingPermission = {
   description: string;
   Icon: IconComponent;
   isToolPermission?: boolean;
+  isRelevantForAgents?: boolean;
+  isRelevantForApiKeys?: boolean;
+  isRelevantForUsers?: boolean;
 };

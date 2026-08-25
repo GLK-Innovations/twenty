@@ -1,18 +1,18 @@
 import react from '@vitejs/plugin-react-swc';
-import wyw from '@wyw-in-js/vite';
+import * as fs from 'fs';
 import * as path from 'path';
 import { defineConfig } from 'vite';
 import checker from 'vite-plugin-checker';
 import dts, { type PluginOptions } from 'vite-plugin-dts';
+import sassDts from 'vite-plugin-sass-dts';
 import svgr from 'vite-plugin-svgr';
-import tsconfigPaths from 'vite-tsconfig-paths';
 
 type Checkers = Parameters<typeof checker>[0];
 
 import packageJson from './package.json';
 
 const entries = Object.keys(packageJson.exports)
-  .filter((el) => el !== './style.css')
+  .filter((el) => !el.endsWith('.css'))
   .map((module) => `src/${module}/index.ts`);
 
 const entryFileNames = (chunk: any, extension: 'cjs' | 'mjs') => {
@@ -41,7 +41,7 @@ export default defineConfig(({ command }) => {
 
   const tsConfigPath = isBuildCommand
     ? path.resolve(__dirname, './tsconfig.lib.json')
-    : path.resolve(__dirname, './tsconfig.dev.json');
+    : path.resolve(__dirname, './tsconfig.json');
 
   const checkersConfig: Checkers = {
     typescript: {
@@ -54,53 +54,82 @@ export default defineConfig(({ command }) => {
     tsconfigPath: tsConfigPath,
   };
 
+  const BUNDLED_DEPS: string[] = [];
+
+  const externalDeps = Object.keys({
+    ...(packageJson.dependencies || {}),
+    ...(packageJson.peerDependencies || {}),
+  }).filter((dep) => !BUNDLED_DEPS.includes(dep));
+
   return {
+    resolve: {
+      tsconfigPaths: true,
+      alias: {
+        '@ui/': path.resolve(__dirname, 'src') + '/',
+        '@assets/': path.resolve(__dirname, 'src/assets') + '/',
+        '@styles/': path.resolve(__dirname, 'src/styles') + '/',
+      },
+    },
     css: {
       modules: {
         localsConvention: 'camelCaseOnly',
       },
+      preprocessorOptions: {
+        scss: {
+          api: 'modern-compiler',
+          loadPaths: [path.resolve(__dirname, 'src/styles')],
+          additionalData: [
+            `@use 'abstracts/functions' as *;`,
+            `@use 'abstracts/mixins' as *;`,
+            `@use 'abstracts/breakpoints' as *;`,
+            '',
+          ].join('\n'),
+        },
+      },
     },
     optimizeDeps: {
-      exclude: ['../../node_modules/.vite', '../../node_modules/.cache'],
+      // Pre-bundle React up front so Vite's dep optimizer doesn't re-bundle it
+      // mid-run during browser-mode Storybook tests — re-bundling rotates the
+      // optimized chunk hash and 404s in-flight dynamic imports (vite 8 / rolldown).
+      include: [
+        'react',
+        'react-dom',
+        'react-dom/client',
+        'react/jsx-runtime',
+        'react/jsx-dev-runtime',
+      ],
     },
     root: __dirname,
-    cacheDir: '../../node_modules/.vite/packages/twenty-ui',
+    cacheDir: 'node_modules/.vite',
     assetsInclude: ['src/**/*.svg'],
     plugins: [
-      react({
-        jsxImportSource: '@emotion/react',
-        plugins: [['@swc/plugin-emotion', {}]],
-      }),
-      tsconfigPaths({
-        root: __dirname,
-        projects: ['tsconfig.json'],
-      }),
+      react(),
       svgr(),
+      // Generates typed *.module.scss.d.ts siblings (dev mode only — backed by
+      // sass-embedded). CI/build relies on the ambient src/scss-modules.d.ts.
+      sassDts({ esmExport: true, legacyFileFormat: true }),
       dts(dtsConfig),
       checker(checkersConfig),
-      wyw({
-        include: [
-          '**/OverflowingTextWithTooltip.tsx',
-          '**/Tag.tsx',
-          '**/Avatar.tsx',
-          '**/Chip.tsx',
-          '**/LinkChip.tsx',
-          '**/Avatar.tsx',
-          '**/AvatarChipLeftComponent.tsx',
-          '**/ContactLink.tsx',
-          '**/RoundedLink.tsx',
-        ],
-        babelOptions: {
-          presets: ['@babel/preset-typescript', '@babel/preset-react'],
+      {
+        name: 'copy-theme-css',
+        closeBundle() {
+          const distDir = path.resolve(__dirname, 'dist');
+          fs.mkdirSync(distDir, { recursive: true });
+          const themeCssFiles = ['theme-light.css', 'theme-dark.css'];
+          for (const file of themeCssFiles) {
+            fs.copyFileSync(
+              path.resolve(__dirname, `src/theme-constants/${file}`),
+              path.resolve(distDir, file),
+            );
+          }
         },
-      }),
+      },
     ],
-    // Configuration for building your library.
-    // See: https://vitejs.dev/guide/build.html#library-mode
     build: {
       cssCodeSplit: false,
       minify: 'esbuild',
       sourcemap: false,
+      emptyOutDir: false,
       outDir: './dist',
       reportCompressedSize: true,
       commonjsOptions: {
@@ -114,8 +143,8 @@ export default defineConfig(({ command }) => {
         name: 'twenty-ui',
       },
       rollupOptions: {
-        // External packages that should not be bundled into your library.
-        external: Object.keys(packageJson.dependencies || {}),
+        external: (id: string) =>
+          externalDeps.some((dep) => id === dep || id.startsWith(dep + '/')),
         output: [
           {
             assetFileNames: 'style.css',
@@ -133,7 +162,6 @@ export default defineConfig(({ command }) => {
               react: 'React',
               'react-dom': 'ReactDOM',
             },
-            interop: 'auto',
             esModule: true,
             exports: 'named',
             entryFileNames: (chunk) => entryFileNames(chunk, 'cjs'),

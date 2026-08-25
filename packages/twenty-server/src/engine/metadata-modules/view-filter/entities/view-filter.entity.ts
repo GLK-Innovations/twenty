@@ -8,24 +8,27 @@ import {
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
-  Relation,
+  type Relation,
   UpdateDateColumn,
 } from 'typeorm';
 
-import { SyncableEntity } from 'src/engine/workspace-manager/workspace-sync/interfaces/syncable-entity.interface';
-
-import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
+import { WasIntroducedInUpgrade } from 'src/engine/core-modules/upgrade/decorators/was-introduced-in-upgrade.decorator';
+import { type JsonbProperty } from 'src/engine/workspace-manager/workspace-migration/universal-flat-entity/types/jsonb-property.type';
 import { FieldMetadataEntity } from 'src/engine/metadata-modules/field-metadata/field-metadata.entity';
 import { ViewFilterGroupEntity } from 'src/engine/metadata-modules/view-filter-group/entities/view-filter-group.entity';
-import { ViewFilterValue } from 'src/engine/metadata-modules/view-filter/types/view-filter-value.type';
+import { type ViewFilterValue } from 'src/engine/metadata-modules/view-filter/types/view-filter-value.type';
 import { ViewEntity } from 'src/engine/metadata-modules/view/entities/view.entity';
+import { SyncableEntity } from 'src/engine/workspace-manager/types/syncable-entity.interface';
 
 @Entity({ name: 'viewFilter', schema: 'core' })
 @Index('IDX_VIEW_FILTER_WORKSPACE_ID_VIEW_ID', ['workspaceId', 'viewId'])
-@Index('IDX_VIEW_FILTER_VIEW_ID', ['viewId'], {
-  where: '"deletedAt" IS NULL',
-})
+@Index('IDX_VIEW_FILTER_VIEW_ID', ['viewId'])
 @Index('IDX_VIEW_FILTER_FIELD_METADATA_ID', ['fieldMetadataId'])
+@Index(
+  'IDX_VIEW_FILTER_RELATION_TARGET_FIELD_METADATA_ID',
+  ['relationTargetFieldMetadataId'],
+  { where: '"relationTargetFieldMetadataId" IS NOT NULL' },
+)
 export class ViewFilterEntity
   extends SyncableEntity
   implements Required<ViewFilterEntity>
@@ -51,7 +54,7 @@ export class ViewFilterEntity
   operand: ViewFilterOperand;
 
   @Column({ nullable: false, type: 'jsonb' })
-  value: ViewFilterValue;
+  value: JsonbProperty<ViewFilterValue>;
 
   @Column({ nullable: true, type: 'uuid' })
   viewFilterGroupId: string | null;
@@ -62,11 +65,22 @@ export class ViewFilterEntity
   @Column({ nullable: true, type: 'text', default: null })
   subFieldName: string | null;
 
-  @Column({ nullable: false, type: 'uuid' })
-  viewId: string;
+  @WasIntroducedInUpgrade({
+    upgradeCommandName:
+      '2.6.0_AddRelationTargetFieldMetadataIdToViewFilterFastInstanceCommand_1798000005000',
+  })
+  @Column({ nullable: true, type: 'uuid', default: null })
+  relationTargetFieldMetadataId: string | null;
+
+  @ManyToOne(() => FieldMetadataEntity, {
+    onDelete: 'CASCADE',
+    nullable: true,
+  })
+  @JoinColumn({ name: 'relationTargetFieldMetadataId' })
+  relationTargetFieldMetadata: Relation<FieldMetadataEntity> | null;
 
   @Column({ nullable: false, type: 'uuid' })
-  workspaceId: string;
+  viewId: string;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
@@ -76,10 +90,6 @@ export class ViewFilterEntity
 
   @DeleteDateColumn({ type: 'timestamptz' })
   deletedAt: Date | null;
-
-  @ManyToOne(() => WorkspaceEntity, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'workspaceId' })
-  workspace: Relation<WorkspaceEntity>;
 
   @ManyToOne(() => ViewEntity, (view) => view.viewFilters, {
     onDelete: 'CASCADE',
@@ -95,5 +105,5 @@ export class ViewFilterEntity
     },
   )
   @JoinColumn({ name: 'viewFilterGroupId' })
-  viewFilterGroup: Relation<ViewFilterGroupEntity>;
+  viewFilterGroup: Relation<ViewFilterGroupEntity> | null;
 }

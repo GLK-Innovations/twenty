@@ -1,54 +1,78 @@
 import { Injectable } from '@nestjs/common';
-import { InjectDataSource } from '@nestjs/typeorm';
 
+import { FieldMetadataType, RelationType } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
-import { DataSource } from 'typeorm';
 
-import { type DataSourceEntity } from 'src/engine/metadata-modules/data-source/data-source.entity';
-import { CreateFieldInput } from 'src/engine/metadata-modules/field-metadata/dtos/create-field.input';
-import { FieldMetadataServiceV2 } from 'src/engine/metadata-modules/field-metadata/services/field-metadata.service-v2';
-import { ObjectMetadataServiceV2 } from 'src/engine/metadata-modules/object-metadata/object-metadata-v2.service';
+import { FieldMetadataService } from 'src/engine/metadata-modules/field-metadata/services/field-metadata.service';
+import { WorkspaceManyOrAllFlatEntityMapsCacheService } from 'src/engine/metadata-modules/flat-entity/services/workspace-many-or-all-flat-entity-maps-cache.service';
+import { type FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/flat-entity-maps.type';
+import { findFlatEntityByIdInFlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/utils/find-flat-entity-by-id-in-flat-entity-maps.util';
+import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
+import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
+import { buildObjectIdByNameMaps } from 'src/engine/metadata-modules/flat-object-metadata/utils/build-object-id-by-name-maps.util';
 import { ObjectMetadataService } from 'src/engine/metadata-modules/object-metadata/object-metadata.service';
-import { ObjectMetadataMaps } from 'src/engine/metadata-modules/types/object-metadata-maps';
-import { WorkspaceMetadataCacheService } from 'src/engine/metadata-modules/workspace-metadata-cache/services/workspace-metadata-cache.service';
 import {
   SEED_APPLE_WORKSPACE_ID,
   SEED_YCOMBINATOR_WORKSPACE_ID,
 } from 'src/engine/workspace-manager/dev-seeder/core/constants/seeder-workspaces.constant';
 import { COMPANY_CUSTOM_FIELD_SEEDS } from 'src/engine/workspace-manager/dev-seeder/metadata/custom-fields/constants/company-custom-field-seeds.constant';
 import { PERSON_CUSTOM_FIELD_SEEDS } from 'src/engine/workspace-manager/dev-seeder/metadata/custom-fields/constants/person-custom-field-seeds.constant';
+import { PET_CARE_AGREEMENT_CARETAKER_MORPH_SEED } from 'src/engine/workspace-manager/dev-seeder/metadata/custom-fields/constants/pet-care-agreement-custom-relation-field-seeds.constant';
 import { PET_CUSTOM_FIELD_SEEDS } from 'src/engine/workspace-manager/dev-seeder/metadata/custom-fields/constants/pet-custom-field-seeds.constant';
 import { PET_CUSTOM_RELATION_FIELD_SEEDS } from 'src/engine/workspace-manager/dev-seeder/metadata/custom-fields/constants/pet-custom-relation-field-seeds.constant';
 import { SURVEY_RESULT_CUSTOM_FIELD_SEEDS } from 'src/engine/workspace-manager/dev-seeder/metadata/custom-fields/constants/survey-results-field-seeds.constant';
+import { EMPLOYMENT_HISTORY_CUSTOM_OBJECT_SEED } from 'src/engine/workspace-manager/dev-seeder/metadata/custom-objects/constants/employment-history-custom-object-seed.constant';
+import { PET_CARE_AGREEMENT_CUSTOM_OBJECT_SEED } from 'src/engine/workspace-manager/dev-seeder/metadata/custom-objects/constants/pet-care-agreement-custom-object-seed.constant';
 import { PET_CUSTOM_OBJECT_SEED } from 'src/engine/workspace-manager/dev-seeder/metadata/custom-objects/constants/pet-custom-object-seed.constant';
 import { ROCKET_CUSTOM_OBJECT_SEED } from 'src/engine/workspace-manager/dev-seeder/metadata/custom-objects/constants/rocket-custom-object-seed.constant';
 import { SURVEY_RESULT_CUSTOM_OBJECT_SEED } from 'src/engine/workspace-manager/dev-seeder/metadata/custom-objects/constants/survey-results-object-seed.constant';
 import { type FieldMetadataSeed } from 'src/engine/workspace-manager/dev-seeder/metadata/types/field-metadata-seed.type';
 import { type ObjectMetadataSeed } from 'src/engine/workspace-manager/dev-seeder/metadata/types/object-metadata-seed.type';
-import { prefillCoreViews } from 'src/engine/workspace-manager/standard-objects-prefill-data/prefill-core-views';
+
+type MorphRelationSeed = FieldMetadataSeed & {
+  targetObjectMetadataNames: string[];
+};
+
+type JunctionFieldSeed = {
+  sourceObjectName: string;
+  name: string;
+  label: string;
+  icon: string;
+  targetObjectName: string;
+  targetFieldLabel: string;
+  targetFieldIcon: string;
+};
+
+type JunctionConfigSeed = {
+  objectName: string;
+  fieldName: string;
+  junctionTargetFieldRef: string;
+  label?: string;
+};
+
+type WorkspaceSeedConfig = {
+  objects: { seed: ObjectMetadataSeed; fields?: FieldMetadataSeed[] }[];
+  fields: { objectName: string; seeds: FieldMetadataSeed[] }[];
+  morphRelations?: { objectName: string; seeds: MorphRelationSeed[] }[];
+  junctionFields?: JunctionFieldSeed[];
+  junctionConfigs?: JunctionConfigSeed[];
+};
+
+type FlatMaps = {
+  flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
+  flatObjectMetadataMaps: FlatEntityMaps<FlatObjectMetadata>;
+  objectIdByName: Record<string, string>;
+};
 
 @Injectable()
 export class DevSeederMetadataService {
   constructor(
     private readonly objectMetadataService: ObjectMetadataService,
-    private readonly objectMetadataServiceV2: ObjectMetadataServiceV2,
-    private readonly fieldMetadataServiceV2: FieldMetadataServiceV2,
-    private readonly workspaceMetadataCacheService: WorkspaceMetadataCacheService,
-    @InjectDataSource()
-    private readonly coreDataSource: DataSource,
+    private readonly fieldMetadataService: FieldMetadataService,
+    private readonly flatEntityMapsCacheService: WorkspaceManyOrAllFlatEntityMapsCacheService,
   ) {}
 
-  private readonly workspaceConfigs: Record<
-    string,
-    {
-      objects: { seed: ObjectMetadataSeed; fields?: FieldMetadataSeed[] }[];
-      fields: { objectName: string; seeds: FieldMetadataSeed[] }[];
-      relations?: {
-        objectName: string;
-        seeds: (FieldMetadataSeed & { targetObjectMetadataNames: string[] })[];
-      }[];
-    }
-  > = {
+  private readonly workspaceConfigs: Record<string, WorkspaceSeedConfig> = {
     [SEED_APPLE_WORKSPACE_ID]: {
       objects: [
         { seed: ROCKET_CUSTOM_OBJECT_SEED },
@@ -57,15 +81,77 @@ export class DevSeederMetadataService {
           seed: SURVEY_RESULT_CUSTOM_OBJECT_SEED,
           fields: SURVEY_RESULT_CUSTOM_FIELD_SEEDS,
         },
+        { seed: EMPLOYMENT_HISTORY_CUSTOM_OBJECT_SEED },
+        { seed: PET_CARE_AGREEMENT_CUSTOM_OBJECT_SEED },
       ],
       fields: [
         { objectName: 'company', seeds: COMPANY_CUSTOM_FIELD_SEEDS },
         { objectName: 'person', seeds: PERSON_CUSTOM_FIELD_SEEDS },
       ],
-      relations: [
+      morphRelations: [
         {
           objectName: PET_CUSTOM_OBJECT_SEED.nameSingular,
           seeds: PET_CUSTOM_RELATION_FIELD_SEEDS,
+        },
+        {
+          objectName: PET_CARE_AGREEMENT_CUSTOM_OBJECT_SEED.nameSingular,
+          seeds: [PET_CARE_AGREEMENT_CARETAKER_MORPH_SEED],
+        },
+      ],
+      junctionFields: [
+        {
+          sourceObjectName: 'person',
+          name: 'previousCompanies',
+          label: 'Previous Companies',
+          icon: 'IconBuildingSkyscraper',
+          targetObjectName: EMPLOYMENT_HISTORY_CUSTOM_OBJECT_SEED.nameSingular,
+          targetFieldLabel: 'Person',
+          targetFieldIcon: 'IconUser',
+        },
+        {
+          sourceObjectName: 'company',
+          name: 'previousEmployees',
+          label: 'Previous Employees',
+          icon: 'IconUser',
+          targetObjectName: EMPLOYMENT_HISTORY_CUSTOM_OBJECT_SEED.nameSingular,
+          targetFieldLabel: 'Company',
+          targetFieldIcon: 'IconBuildingSkyscraper',
+        },
+        {
+          sourceObjectName: PET_CUSTOM_OBJECT_SEED.nameSingular,
+          name: 'caretakers',
+          label: 'Caretakers',
+          icon: 'IconUser',
+          targetObjectName: PET_CARE_AGREEMENT_CUSTOM_OBJECT_SEED.nameSingular,
+          targetFieldLabel: 'Pet',
+          targetFieldIcon: 'IconCat',
+        },
+      ],
+      junctionConfigs: [
+        {
+          objectName: 'person',
+          fieldName: 'previousCompanies',
+          junctionTargetFieldRef: `${EMPLOYMENT_HISTORY_CUSTOM_OBJECT_SEED.nameSingular}.company`,
+        },
+        {
+          objectName: 'company',
+          fieldName: 'previousEmployees',
+          junctionTargetFieldRef: `${EMPLOYMENT_HISTORY_CUSTOM_OBJECT_SEED.nameSingular}.person`,
+        },
+        {
+          objectName: PET_CUSTOM_OBJECT_SEED.nameSingular,
+          fieldName: 'caretakers',
+          junctionTargetFieldRef: `${PET_CARE_AGREEMENT_CUSTOM_OBJECT_SEED.nameSingular}.caretakerPerson`,
+        },
+        {
+          objectName: 'company',
+          fieldName: 'caredForPets',
+          junctionTargetFieldRef: `${PET_CARE_AGREEMENT_CUSTOM_OBJECT_SEED.nameSingular}.pet`,
+        },
+        {
+          objectName: 'person',
+          fieldName: 'caredForPets',
+          junctionTargetFieldRef: `${PET_CARE_AGREEMENT_CUSTOM_OBJECT_SEED.nameSingular}.pet`,
         },
       ],
     },
@@ -83,15 +169,14 @@ export class DevSeederMetadataService {
     },
   };
 
-  public async seed({
-    dataSourceMetadata,
-    workspaceId,
-    featureFlags,
-  }: {
-    dataSourceMetadata: DataSourceEntity;
-    workspaceId: string;
-    featureFlags?: Record<string, boolean>;
-  }) {
+  private getLightConfig(_config: WorkspaceSeedConfig): WorkspaceSeedConfig {
+    return {
+      objects: [],
+      fields: [],
+    };
+  }
+
+  private getConfig(workspaceId: string, light: boolean): WorkspaceSeedConfig {
     const config = this.workspaceConfigs[workspaceId];
 
     if (!config) {
@@ -100,9 +185,20 @@ export class DevSeederMetadataService {
       );
     }
 
+    return light ? this.getLightConfig(config) : config;
+  }
+
+  public async seed({
+    workspaceId,
+    light = false,
+  }: {
+    workspaceId: string;
+    light?: boolean;
+  }) {
+    const config = this.getConfig(workspaceId, light);
+
     for (const obj of config.objects) {
       await this.seedCustomObject({
-        dataSourceId: dataSourceMetadata.id,
         workspaceId,
         objectMetadataSeed: obj.seed,
       });
@@ -123,28 +219,17 @@ export class DevSeederMetadataService {
         fieldMetadataSeeds: fieldConfig.seeds,
       });
     }
-
-    await this.seedCoreViews({
-      workspaceId,
-      dataSourceMetadata,
-      featureFlags,
-    });
   }
 
   private async seedCustomObject({
-    dataSourceId,
     workspaceId,
     objectMetadataSeed,
   }: {
-    dataSourceId: string;
     workspaceId: string;
     objectMetadataSeed: ObjectMetadataSeed;
   }): Promise<void> {
-    await this.objectMetadataServiceV2.createOne({
-      createObjectInput: {
-        ...objectMetadataSeed,
-        dataSourceId,
-      },
+    await this.objectMetadataService.createOneObject({
+      createObjectInput: objectMetadataSeed,
       workspaceId,
     });
   }
@@ -173,94 +258,128 @@ export class DevSeederMetadataService {
       objectMetadataId: objectMetadata.id,
     }));
 
-    await this.fieldMetadataServiceV2.createMany({
+    await this.fieldMetadataService.createManyFields({
       createFieldInputs,
       workspaceId,
     });
   }
 
-  private async seedCoreViews({
+  public async seedRelations({
     workspaceId,
-    dataSourceMetadata,
-    featureFlags,
+    light = false,
   }: {
     workspaceId: string;
-    dataSourceMetadata: DataSourceEntity;
-    featureFlags?: Record<string, boolean>;
-  }): Promise<void> {
-    const createdObjectMetadata =
-      await this.objectMetadataService.findManyWithinWorkspace(workspaceId);
+    light?: boolean;
+  }) {
+    const config = this.getConfig(workspaceId, light);
 
-    await prefillCoreViews({
-      coreDataSource: this.coreDataSource,
-      workspaceId,
-      objectMetadataItems: createdObjectMetadata,
-      workspaceSchemaName: dataSourceMetadata.schema,
-      featureFlags,
-    });
-  }
+    // 1. Seed morph relations (creates inverses on target objects)
+    let maps = await this.getFreshFlatMaps(workspaceId);
 
-  public async seedRelations({ workspaceId }: { workspaceId: string }) {
-    const config = this.workspaceConfigs[workspaceId];
-
-    if (!config) {
-      throw new Error(
-        `Workspace configuration not found for workspaceId: ${workspaceId}`,
-      );
-    }
-
-    if (!config.relations) {
-      return;
-    }
-
-    for (const relation of config.relations) {
-      await this.seedCustomRelation({
+    for (const relation of config.morphRelations ?? []) {
+      await this.seedMorphRelations({
         workspaceId,
         relation,
+        objectIdByNameSingular: maps.objectIdByName,
       });
+    }
+
+    // 2. Seed junction fields (creates relations + inverses on junction objects)
+    maps = await this.getFreshFlatMaps(workspaceId);
+
+    for (const field of config.junctionFields ?? []) {
+      await this.seedJunctionField({ workspaceId, field, flatMaps: maps });
+    }
+
+    // 3. Configure junction settings (after all fields exist)
+    if (config.junctionConfigs && config.junctionConfigs.length > 0) {
+      maps = await this.getFreshFlatMaps(workspaceId);
+
+      for (const junctionConfig of config.junctionConfigs) {
+        await this.applyJunctionConfig({
+          workspaceId,
+          junctionConfig,
+          flatMaps: maps,
+        });
+      }
     }
   }
 
-  private async seedCustomRelation({
-    workspaceId,
-    relation,
-  }: {
-    workspaceId: string;
-    relation: {
-      objectName: string;
-      seeds: (FieldMetadataSeed & { targetObjectMetadataNames: string[] })[];
-    };
-  }): Promise<void> {
-    const { objectMetadataMaps } =
-      await this.workspaceMetadataCacheService.getExistingOrRecomputeMetadataMaps(
+  private async getFreshFlatMaps(workspaceId: string): Promise<FlatMaps> {
+    await this.flatEntityMapsCacheService.invalidateFlatEntityMaps({
+      workspaceId,
+      flatMapsKeys: ['flatObjectMetadataMaps', 'flatFieldMetadataMaps'],
+    });
+
+    const { flatObjectMetadataMaps, flatFieldMetadataMaps } =
+      await this.flatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
         {
           workspaceId,
+          flatMapsKeys: ['flatObjectMetadataMaps', 'flatFieldMetadataMaps'],
         },
       );
 
-    const createFieldInputs = this.createFieldInputs({
-      relation,
-      objectMetadataMaps,
-    });
+    const { idByNameSingular } = buildObjectIdByNameMaps(
+      flatObjectMetadataMaps,
+    );
 
-    await this.fieldMetadataServiceV2.createMany({
-      createFieldInputs,
+    return {
+      flatFieldMetadataMaps,
+      flatObjectMetadataMaps,
+      objectIdByName: idByNameSingular,
+    };
+  }
+
+  private async applyJunctionConfig({
+    workspaceId,
+    junctionConfig,
+    flatMaps,
+  }: {
+    workspaceId: string;
+    junctionConfig: JunctionConfigSeed;
+    flatMaps: FlatMaps;
+  }): Promise<void> {
+    const [targetObjectName, targetFieldName] =
+      junctionConfig.junctionTargetFieldRef.split('.');
+
+    const junctionTargetFieldId = this.findFieldId(
+      targetObjectName,
+      targetFieldName,
+      flatMaps,
+    );
+
+    const fieldId = this.findFieldId(
+      junctionConfig.objectName,
+      junctionConfig.fieldName,
+      flatMaps,
+    );
+
+    await this.fieldMetadataService.updateOneField({
       workspaceId,
+      updateFieldInput: {
+        id: fieldId,
+        ...(junctionConfig.label && { label: junctionConfig.label }),
+        settings: {
+          relationType: RelationType.ONE_TO_MANY,
+          junctionTargetFieldId,
+        },
+      },
     });
   }
 
-  private createFieldInputs({
+  private async seedMorphRelations({
+    workspaceId,
     relation,
-    objectMetadataMaps,
+    objectIdByNameSingular,
   }: {
+    workspaceId: string;
     relation: {
       objectName: string;
-      seeds: (FieldMetadataSeed & { targetObjectMetadataNames: string[] })[];
+      seeds: MorphRelationSeed[];
     };
-    objectMetadataMaps: ObjectMetadataMaps;
-  }): Omit<CreateFieldInput, 'workspaceId'>[] {
-    const objectMetadataId =
-      objectMetadataMaps.idByNameSingular[relation.objectName];
+    objectIdByNameSingular: Record<string, string>;
+  }): Promise<void> {
+    const objectMetadataId = objectIdByNameSingular[relation.objectName];
 
     if (!isDefined(objectMetadataId)) {
       throw new Error(
@@ -268,15 +387,16 @@ export class DevSeederMetadataService {
       );
     }
 
-    const relationFieldInputs = relation.seeds.map((seed) => ({
+    const createFieldInputs = relation.seeds.map((seed) => ({
       type: seed.type,
       label: seed.label,
       name: seed.name,
+      icon: seed.icon,
       objectMetadataId,
       morphRelationsCreationPayload: seed.targetObjectMetadataNames.map(
         (targetObjectMetadataName) => {
           const targetObjectMetadataId =
-            objectMetadataMaps.idByNameSingular[targetObjectMetadataName];
+            objectIdByNameSingular[targetObjectMetadataName];
 
           if (!isDefined(targetObjectMetadataId)) {
             throw new Error(
@@ -300,6 +420,82 @@ export class DevSeederMetadataService {
       ),
     }));
 
-    return relationFieldInputs;
+    await this.fieldMetadataService.createManyFields({
+      createFieldInputs,
+      workspaceId,
+    });
+  }
+
+  private async seedJunctionField({
+    workspaceId,
+    field,
+    flatMaps,
+  }: {
+    workspaceId: string;
+    field: JunctionFieldSeed;
+    flatMaps: FlatMaps;
+  }): Promise<void> {
+    const sourceObjectId = flatMaps.objectIdByName[field.sourceObjectName];
+    const targetObjectId = flatMaps.objectIdByName[field.targetObjectName];
+
+    if (!isDefined(sourceObjectId)) {
+      throw new Error(`Source object not found: ${field.sourceObjectName}`);
+    }
+    if (!isDefined(targetObjectId)) {
+      throw new Error(`Target object not found: ${field.targetObjectName}`);
+    }
+
+    await this.fieldMetadataService.createManyFields({
+      createFieldInputs: [
+        {
+          type: FieldMetadataType.RELATION,
+          name: field.name,
+          label: field.label,
+          icon: field.icon,
+          objectMetadataId: sourceObjectId,
+          relationCreationPayload: {
+            type: RelationType.ONE_TO_MANY,
+            targetFieldLabel: field.targetFieldLabel,
+            targetFieldIcon: field.targetFieldIcon,
+            targetObjectMetadataId: targetObjectId,
+          },
+        },
+      ],
+      workspaceId,
+    });
+  }
+
+  private findFieldId(
+    objectName: string,
+    fieldName: string,
+    flatMaps: FlatMaps,
+  ): string {
+    const objectId = flatMaps.objectIdByName[objectName];
+
+    if (!isDefined(objectId)) {
+      throw new Error(`Object not found: ${objectName}`);
+    }
+
+    const objectMetadata = findFlatEntityByIdInFlatEntityMaps({
+      flatEntityId: objectId,
+      flatEntityMaps: flatMaps.flatObjectMetadataMaps,
+    });
+
+    if (!isDefined(objectMetadata)) {
+      throw new Error(`Object metadata not found: ${objectName}`);
+    }
+
+    for (const fieldId of objectMetadata.fieldIds) {
+      const field = findFlatEntityByIdInFlatEntityMaps({
+        flatEntityId: fieldId,
+        flatEntityMaps: flatMaps.flatFieldMetadataMaps,
+      });
+
+      if (field?.name === fieldName) {
+        return fieldId;
+      }
+    }
+
+    throw new Error(`Field not found: ${objectName}.${fieldName}`);
   }
 }

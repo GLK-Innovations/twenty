@@ -1,18 +1,18 @@
-import { FormFieldInputContainer } from '@/object-record/record-field/ui/form-types/components/FormFieldInputContainer';
+import { FormFieldInputContainer } from '@/ui/input/components/FormFieldInputContainer';
 import { FormFieldInputInnerContainer } from '@/object-record/record-field/ui/form-types/components/FormFieldInputInnerContainer';
 import { FormFieldInputRowContainer } from '@/object-record/record-field/ui/form-types/components/FormFieldInputRowContainer';
 import { VariableChipStandalone } from '@/object-record/record-field/ui/form-types/components/VariableChipStandalone';
 import { type VariablePickerComponent } from '@/object-record/record-field/ui/form-types/types/VariablePickerComponent';
-import { InputLabel } from '@/ui/input/components/InputLabel';
+import { Field } from 'twenty-ui/input';
 import { Select } from '@/ui/input/components/Select';
 import { GenericDropdownContentWidth } from '@/ui/layout/dropdown/constants/GenericDropdownContentWidth';
 import { useRemoveFocusItemFromFocusStackById } from '@/ui/utilities/focus/hooks/useRemoveFocusItemFromFocusStackById';
-import { isStandaloneVariableString } from '@/workflow/utils/isStandaloneVariableString';
-import { useTheme } from '@emotion/react';
+import { isStandaloneVariableString } from 'twenty-shared/workflow';
 import { useLingui } from '@lingui/react/macro';
-import { useId, useState } from 'react';
+import { useContext, useId, useState } from 'react';
 import { isDefined } from 'twenty-shared/utils';
-import { IconCheck, IconCircleOff, IconX } from 'twenty-ui/display';
+import { IconCheck, IconCircleOff, IconX } from 'twenty-ui/icon';
+import { ThemeContext } from 'twenty-ui/theme-constants';
 
 type FormBooleanFieldInputProps = {
   label?: string;
@@ -45,8 +45,8 @@ export const FormBooleanFieldInput = ({
   readonly,
   VariablePicker,
 }: FormBooleanFieldInputProps) => {
-  const theme = useTheme();
   const { t } = useLingui();
+  const { theme } = useContext(ThemeContext);
 
   const instanceId = useId();
 
@@ -117,7 +117,7 @@ export const FormBooleanFieldInput = ({
 
   return (
     <FormFieldInputContainer>
-      {label ? <InputLabel>{label}</InputLabel> : null}
+      {label ? <Field.Label>{label}</Field.Label> : null}
 
       <FormFieldInputRowContainer>
         {draftValue.type === 'static' ? (
@@ -134,7 +134,9 @@ export const FormBooleanFieldInput = ({
             hasRightElement={isDefined(VariablePicker) && !readonly}
             disabled={readonly}
             dropdownWidth={GenericDropdownContentWidth.ExtraLarge}
-            dropdownOffset={{ y: parseInt(theme.spacing(1), 10) }}
+            dropdownOffset={{
+              y: parseInt(theme.spacing[1], 10),
+            }}
           />
         ) : (
           <FormFieldInputInnerContainer

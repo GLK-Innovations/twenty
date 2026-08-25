@@ -1,26 +1,35 @@
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 import { useContext } from 'react';
-import { useRecoilValue } from 'recoil';
 
 import { TimelineActivityContext } from '@/activities/timeline-activities/contexts/TimelineActivityContext';
 
-import { useLinkedObjectObjectMetadataItem } from '@/activities/timeline-activities/hooks/useLinkedObjectObjectMetadataItem';
 import { EventIconDynamicComponent } from '@/activities/timeline-activities/rows/components/EventIconDynamicComponent';
 import { EventRowDynamicComponent } from '@/activities/timeline-activities/rows/components/EventRowDynamicComponent';
+import { getStandardTimelineActivityRenderer } from '@/activities/timeline-activities/rows/components/StandardTimelineActivityRenderer';
+import { type TimelineActivityRenderer } from '@/activities/timeline-activities/rows/components/TimelineActivityRenderer';
 import { type TimelineActivity } from '@/activities/timeline-activities/types/TimelineActivity';
+import { useTimelineActivityTypes } from '@/activities/timeline-activities/hooks/useTimelineActivityTypes';
+import { getTimelineActivityAction } from '@/activities/timeline-activities/utils/getTimelineActivityAction';
+import { getTimelineActivityType } from '@/activities/timeline-activities/utils/getTimelineActivityType';
+import { getTimelineActivityLinkedObjectMetadataItem } from '@/activities/timeline-activities/utils/getTimelineActivityLinkedObjectMetadataItem';
 import { getTimelineActivityAuthorFullName } from '@/activities/timeline-activities/utils/getTimelineActivityAuthorFullName';
 import { currentWorkspaceMemberState } from '@/auth/states/currentWorkspaceMemberState';
-import { type ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
 import { getObjectRecordIdentifier } from '@/object-metadata/utils/getObjectRecordIdentifier';
 import { recordStoreFamilyState } from '@/object-record/record-store/states/recordStoreFamilyState';
-import { dateLocaleState } from '~/localization/states/dateLocaleState';
-import { beautifyPastDateRelativeToNow } from '~/utils/date-utils';
+import { useAtomFamilyStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomFamilyStateValue';
+import { useObjectMetadataItems } from '@/object-metadata/hooks/useObjectMetadataItems';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
 import { isUndefinedOrNull } from '~/utils/isUndefinedOrNull';
+import { allowRequestsToTwentyIconsState } from '@/client-config/states/allowRequestsToTwentyIcons';
+import { frontComponentsSelector } from '@/front-components/states/frontComponentsSelector';
+import { isDefined } from 'twenty-shared/utils';
 
 const StyledTimelineItemContainer = styled.div`
-  color: ${({ theme }) => theme.font.color.primary};
+  color: ${themeCssVariables.font.color.primary};
   display: flex;
-  gap: ${({ theme }) => theme.spacing(4)};
+  gap: ${themeCssVariables.spacing[4]};
   height: 'auto';
   justify-content: space-between;
   overflow: hidden;
@@ -33,39 +42,30 @@ const StyledLeftContainer = styled.div`
 `;
 
 const StyledIconContainer = styled.div`
-  display: flex;
   align-items: center;
-  justify-content: center;
-  color: ${({ theme }) => theme.font.color.tertiary};
+  color: ${themeCssVariables.font.color.tertiary};
+  display: flex;
   height: 16px;
-  width: 16px;
+  justify-content: center;
   margin: 5px;
-  user-select: none;
   text-decoration-line: underline;
+  user-select: none;
+  width: 16px;
   z-index: 2;
 `;
 
 const StyledVerticalLineContainer = styled.div`
   display: flex;
   flex-shrink: 0;
+  height: 100%;
   justify-content: center;
   z-index: 2;
-  height: 100%;
 `;
 
 const StyledVerticalLine = styled.div`
-  background: ${({ theme }) => theme.border.color.light};
-  width: 2px;
+  background: ${themeCssVariables.border.color.light};
   height: 100%;
-`;
-
-const StyledSummary = styled.summary`
-  align-items: center;
-  display: flex;
-  flex: 1;
-  flex-direction: row;
-  gap: ${({ theme }) => theme.spacing(1)};
-  width: 100%;
+  width: 2px;
 `;
 
 const StyledItemContainer = styled.div<{ isMarginBottom?: boolean }>`
@@ -73,17 +73,35 @@ const StyledItemContainer = styled.div<{ isMarginBottom?: boolean }>`
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: ${({ theme }) => theme.spacing(1)};
-  overflow: hidden;
-  margin-bottom: ${({ isMarginBottom, theme }) =>
-    isMarginBottom ? theme.spacing(3) : 0};
+  gap: ${themeCssVariables.spacing[1]};
+  margin-bottom: ${({ isMarginBottom }) =>
+    isMarginBottom ? themeCssVariables.spacing[3] : '0'};
   min-height: 26px;
+  overflow: hidden;
 `;
 
 type EventRowProps = {
-  mainObjectMetadataItem: ObjectMetadataItem | null;
+  mainObjectMetadataItem: EnrichedObjectMetadataItem | null;
   isLastEvent?: boolean;
   event: TimelineActivity;
+};
+
+const getTimelineActivityRenderer = ({
+  standardRenderer,
+  frontComponentId,
+}: {
+  standardRenderer: ReturnType<typeof getStandardTimelineActivityRenderer>;
+  frontComponentId: string | null;
+}): TimelineActivityRenderer | null => {
+  if (isDefined(standardRenderer)) {
+    return { type: 'standard', Component: standardRenderer };
+  }
+
+  if (isDefined(frontComponentId)) {
+    return { type: 'frontComponent', frontComponentId };
+  }
+
+  return null;
 };
 
 export const EventRow = ({
@@ -91,26 +109,59 @@ export const EventRow = ({
   event,
   mainObjectMetadataItem,
 }: EventRowProps) => {
-  const currentWorkspaceMember = useRecoilValue(currentWorkspaceMemberState);
-  const { localeCatalog } = useRecoilValue(dateLocaleState);
+  const currentWorkspaceMember = useAtomStateValue(currentWorkspaceMemberState);
+
+  const allowRequestsToTwentyIcons = useAtomStateValue(
+    allowRequestsToTwentyIconsState,
+  );
 
   const { recordId } = useContext(TimelineActivityContext);
 
-  const recordFromStore = useRecoilValue(recordStoreFamilyState(recordId));
+  const recordStore = useAtomFamilyStateValue(recordStoreFamilyState, recordId);
 
-  const beautifiedCreatedAt = beautifyPastDateRelativeToNow(
-    event.createdAt,
-    localeCatalog,
+  const { timelineActivityTypeMaps } = useTimelineActivityTypes();
+  const frontComponents = useAtomStateValue(frontComponentsSelector);
+
+  const { objectMetadataItems } = useObjectMetadataItems();
+
+  const timelineActivityType = getTimelineActivityType(
+    event,
+    timelineActivityTypeMaps,
   );
-  const linkedObjectMetadataItem = useLinkedObjectObjectMetadataItem(
-    event.linkedObjectMetadataId,
+
+  const rendererUniversalIdentifier =
+    timelineActivityType?.frontComponentUniversalIdentifier;
+  const standardRenderer = getStandardTimelineActivityRenderer(
+    rendererUniversalIdentifier,
   );
+  const frontComponentId = isDefined(rendererUniversalIdentifier)
+    ? (frontComponents.find(
+        (frontComponent) =>
+          frontComponent.universalIdentifier === rendererUniversalIdentifier,
+      )?.id ?? null)
+    : null;
+  const renderer = getTimelineActivityRenderer({
+    standardRenderer,
+    frontComponentId,
+  });
+
+  const timelineActivityAction = getTimelineActivityAction(
+    event,
+    timelineActivityTypeMaps,
+  );
+
+  const linkedObjectMetadataItem =
+    getTimelineActivityLinkedObjectMetadataItem({
+      timelineActivity: event,
+      timelineActivityTypeMaps,
+      objectMetadataItems,
+    }) ?? null;
 
   if (isUndefinedOrNull(currentWorkspaceMember)) {
     return null;
   }
 
-  if (isUndefinedOrNull(recordFromStore)) {
+  if (isUndefinedOrNull(recordStore)) {
     return null;
   }
   if (isUndefinedOrNull(mainObjectMetadataItem)) {
@@ -119,7 +170,8 @@ export const EventRow = ({
 
   const labelIdentifier = getObjectRecordIdentifier({
     objectMetadataItem: mainObjectMetadataItem,
-    record: recordFromStore,
+    record: recordStore,
+    allowRequestsToTwentyIcons,
   });
 
   const authorFullName = getTimelineActivityAuthorFullName(
@@ -127,17 +179,13 @@ export const EventRow = ({
     currentWorkspaceMember,
   );
 
-  if (isUndefinedOrNull(mainObjectMetadataItem)) {
-    throw new Error('mainObjectMetadataItem is required');
-  }
-
   return (
     <>
       <StyledTimelineItemContainer>
         <StyledLeftContainer>
           <StyledIconContainer>
             <EventIconDynamicComponent
-              event={event}
+              eventIcon={timelineActivityType?.icon ?? null}
               linkedObjectMetadataItem={linkedObjectMetadataItem}
             />
           </StyledIconContainer>
@@ -148,16 +196,17 @@ export const EventRow = ({
           )}
         </StyledLeftContainer>
         <StyledItemContainer isMarginBottom={!isLastEvent}>
-          <StyledSummary>
-            <EventRowDynamicComponent
-              authorFullName={authorFullName}
-              labelIdentifierValue={labelIdentifier.name}
-              event={event}
-              mainObjectMetadataItem={mainObjectMetadataItem}
-              linkedObjectMetadataItem={linkedObjectMetadataItem}
-              createdAt={beautifiedCreatedAt}
-            />
-          </StyledSummary>
+          <EventRowDynamicComponent
+            authorFullName={authorFullName}
+            labelIdentifierValue={labelIdentifier.name}
+            event={event}
+            eventAction={timelineActivityAction}
+            eventTypeLabel={timelineActivityType?.label}
+            renderer={renderer}
+            mainObjectMetadataItem={mainObjectMetadataItem}
+            linkedObjectMetadataItem={linkedObjectMetadataItem}
+            happensAt={event.happensAt}
+          />
         </StyledItemContainer>
       </StyledTimelineItemContainer>
     </>

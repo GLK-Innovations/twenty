@@ -1,30 +1,45 @@
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
 import { useApolloCoreClient } from '@/object-metadata/hooks/useApolloCoreClient';
 import { hasObjectMetadataItemPositionField } from '@/object-metadata/utils/hasObjectMetadataItemPositionField';
 import { getRecordsFromRecordConnection } from '@/object-record/cache/utils/getRecordsFromRecordConnection';
-import { type RecordGqlOperationOrderBy } from '@/object-record/graphql/types/RecordGqlOperationOrderBy';
 import { useGroupByRecordsQuery } from '@/object-record/hooks/useGroupByRecordsQuery';
 import { useRecordCalendarContextOrThrow } from '@/object-record/record-calendar/contexts/RecordCalendarContext';
 import { useRecordCalendarQueryDateRangeFilter } from '@/object-record/record-calendar/month/hooks/useRecordCalendarQueryDateRangeFilter';
-import { useRecordsFieldVisibleGqlFields } from '@/object-record/record-field/hooks/useRecordsFieldVisibleGqlFields';
-import { recordIndexCalendarFieldMetadataIdState } from '@/object-record/record-index/states/recordIndexCalendarFieldMetadataIdState';
+import { useRelevantRecordsGqlFields } from '@/object-record/record-field/hooks/useRelevantRecordsGqlFields';
+import { recordIndexCalendarEndFieldMetadataIdComponentState } from '@/object-record/record-index/states/recordIndexCalendarEndFieldMetadataIdComponentState';
+import { recordIndexCalendarFieldMetadataIdComponentState } from '@/object-record/record-index/states/recordIndexCalendarFieldMetadataIdComponentState';
 import { type ObjectRecord } from '@/object-record/types/ObjectRecord';
 import { buildGroupByFieldObject } from '@/page-layout/widgets/graph/utils/buildGroupByFieldObject';
-import { useQuery } from '@apollo/client';
+import { useUserTimezone } from '@/ui/input/components/internal/date/hooks/useUserTimezone';
+import { useQuery } from '@apollo/client/react';
 import { useMemo } from 'react';
-import { useRecoilValue } from 'recoil';
-import { ObjectRecordGroupByDateGranularity } from 'twenty-shared/types';
+import { type Temporal } from 'temporal-polyfill';
+import {
+  ObjectRecordGroupByDateGranularity,
+  type RecordGqlOperationOrderBy,
+} from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 
-export const useRecordCalendarGroupByRecords = (selectedDate: Date) => {
+export const useRecordCalendarGroupByRecords = (
+  selectedDate: Temporal.PlainDate,
+) => {
   const { objectMetadataItem } = useRecordCalendarContextOrThrow();
 
-  const recordIndexCalendarFieldMetadataId = useRecoilValue(
-    recordIndexCalendarFieldMetadataIdState,
+  const { userTimezone } = useUserTimezone();
+
+  const recordIndexCalendarFieldMetadataId = useAtomComponentStateValue(
+    recordIndexCalendarFieldMetadataIdComponentState,
+  );
+  const recordIndexCalendarEndFieldMetadataId = useAtomComponentStateValue(
+    recordIndexCalendarEndFieldMetadataIdComponentState,
   );
 
-  const recordGqlFields = useRecordsFieldVisibleGqlFields({
+  const recordGqlFields = useRelevantRecordsGqlFields({
     objectMetadataItem,
-    additionalFieldMetadataId: recordIndexCalendarFieldMetadataId,
+    additionalFieldMetadataIds: [
+      recordIndexCalendarFieldMetadataId,
+      recordIndexCalendarEndFieldMetadataId,
+    ],
   });
 
   const { dateRangeFilter } =
@@ -40,6 +55,7 @@ export const useRecordCalendarGroupByRecords = (selectedDate: Date) => {
         buildGroupByFieldObject({
           field: calendarFieldMetadataItem,
           dateGranularity: ObjectRecordGroupByDateGranularity.DAY,
+          timeZone: userTimezone,
         }),
       ];
 
@@ -75,7 +91,9 @@ export const useRecordCalendarGroupByRecords = (selectedDate: Date) => {
     },
   });
 
-  const groupByResults = data?.[`${objectMetadataItem.namePlural}GroupBy`];
+  const groupByResults = (data as Record<string, any>)?.[
+    `${objectMetadataItem.namePlural}GroupBy`
+  ];
 
   const records: ObjectRecord[] = useMemo(() => {
     if (!isDefined(groupByResults)) {

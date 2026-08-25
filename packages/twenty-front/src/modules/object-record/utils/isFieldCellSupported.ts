@@ -1,20 +1,20 @@
-import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
+import { CoreObjectNameSingular } from 'twenty-shared/types';
 import { type FieldMetadataItem } from '@/object-metadata/types/FieldMetadataItem';
-import { type ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
+import { isHiddenSystemField } from '@/object-metadata/utils/isHiddenSystemField';
 import { isObjectMetadataAvailableForRelation } from '@/object-metadata/utils/isObjectMetadataAvailableForRelation';
 import { FieldMetadataType } from '~/generated-metadata/graphql';
 
+type IsFieldCellSupportedOptions = {
+  includeSystemObjectRelations?: boolean;
+};
+
 export const isFieldCellSupported = (
   fieldMetadataItem: FieldMetadataItem,
-  objectMetadataItems: ObjectMetadataItem[],
+  objectMetadataItems: EnrichedObjectMetadataItem[],
+  options: IsFieldCellSupportedOptions = {},
 ) => {
-  if (
-    [
-      FieldMetadataType.UUID,
-      FieldMetadataType.POSITION,
-      FieldMetadataType.RICH_TEXT,
-    ].includes(fieldMetadataItem.type)
-  ) {
+  if (fieldMetadataItem.type === FieldMetadataType.POSITION) {
     return false;
   }
 
@@ -45,14 +45,19 @@ export const isFieldCellSupported = (
       return true;
     }
 
+    if (!fieldMetadataItem.relation || !relationObjectMetadataItem) {
+      return false;
+    }
+
     if (
-      !fieldMetadataItem.relation ||
-      !relationObjectMetadataItem ||
+      !options.includeSystemObjectRelations &&
       !isObjectMetadataAvailableForRelation(relationObjectMetadataItem)
     ) {
       return false;
     }
   }
 
-  return !fieldMetadataItem.isSystem && !!fieldMetadataItem.isActive;
+  return (
+    !isHiddenSystemField(fieldMetadataItem) && !!fieldMetadataItem.isActive
+  );
 };

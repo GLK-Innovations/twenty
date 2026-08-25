@@ -4,73 +4,59 @@ import {
   SignInUpStep,
   signInUpStepState,
 } from '@/auth/states/signInUpStepState';
+import {
+  StyledTwoFactorInstructions,
+  StyledTwoFactorMainContent,
+} from '@/auth/sign-in-up/components/internal/SignInUpTwoFactorAuthenticationStyles';
+import { ONBOARDING_CONTENT_BLOCK_WIDTH } from '@/onboarding/constants/OnboardingContentBlockWidth';
 import { extractSecretFromOtpUri } from '@/settings/two-factor-authentication/utils/extractSecretFromOtpUri';
-import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
-import { useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
 import { Trans, useLingui } from '@lingui/react/macro';
-import QRCode from 'react-qr-code';
-import { useRecoilValue, useSetRecoilState } from 'recoil';
-import { IconCopy } from 'twenty-ui/display';
+import QRCodeModule from 'react-qr-code';
+import { useSetAtomState } from '@/ui/utilities/state/jotai/hooks/useSetAtomState';
+import { IconCopy } from 'twenty-ui/icon';
 import { Loader } from 'twenty-ui/feedback';
 import { MainButton } from 'twenty-ui/input';
+import { useContext } from 'react';
+import { ThemeContext, themeCssVariables } from 'twenty-ui/theme-constants';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { resolveCjsModuleDefaultExport } from '~/utils/resolveCjsModuleDefaultExport';
+import { useCopyToClipboard } from '~/hooks/useCopyToClipboard';
 
-const StyledMainContentContainer = styled.div`
-  margin-bottom: ${({ theme }) => theme.spacing(8)};
-  margin-top: ${({ theme }) => theme.spacing(4)};
-  text-align: center;
-`;
-
-const StyledTextContainer = styled.div`
-  align-items: center;
-  margin-bottom: ${({ theme }) => theme.spacing(4)};
-  color: ${({ theme }) => theme.font.color.tertiary};
-
-  max-width: 280px;
-  text-align: center;
-  font-size: ${({ theme }) => theme.font.size.sm};
-
-  & > a {
-    color: ${({ theme }) => theme.font.color.tertiary};
-    text-decoration: none;
-
-    &:hover {
-      text-decoration: underline;
-    }
-  }
-`;
+const QRCode = resolveCjsModuleDefaultExport(QRCodeModule);
 
 const StyledForm = styled.div`
   align-items: center;
   display: flex;
   flex-direction: column;
-  width: 100%;
+  max-width: 100%;
+  width: ${ONBOARDING_CONTENT_BLOCK_WIDTH}px;
 `;
 
 const StyledCopySetupKeyLink = styled.button`
+  align-items: center;
   background: none;
   border: none;
-  color: ${({ theme }) => theme.font.color.secondary};
+  color: ${themeCssVariables.font.color.secondary};
   cursor: pointer;
   display: flex;
-  align-items: center;
-  gap: ${({ theme }) => theme.spacing(1)};
-  font-size: ${({ theme }) => theme.font.size.sm};
-  margin-top: ${({ theme }) => theme.spacing(2)};
+  font-size: ${themeCssVariables.font.size.sm};
+  gap: ${themeCssVariables.spacing[1]};
+  margin-top: ${themeCssVariables.spacing[2]};
   padding: 0;
   text-decoration: underline;
 
   &:hover {
-    color: ${({ theme }) => theme.font.color.primary};
+    color: ${themeCssVariables.font.color.primary};
   }
 `;
 
 export const SignInUpTwoFactorAuthenticationProvision = () => {
+  const { theme } = useContext(ThemeContext);
   const { t } = useLingui();
-  const theme = useTheme();
-  const { enqueueSuccessSnackBar } = useSnackBar();
-  const qrCode = useRecoilValue(qrCodeState);
-  const setSignInUpStep = useSetRecoilState(signInUpStepState);
+  const { copyToClipboard } = useCopyToClipboard();
+  const qrCode = useAtomStateValue(qrCodeState);
+  const setSignInUpStep = useSetAtomState(signInUpStepState);
 
   const handleClick = () => {
     setSignInUpStep(SignInUpStep.TwoFactorAuthenticationVerification);
@@ -81,14 +67,7 @@ export const SignInUpTwoFactorAuthenticationProvision = () => {
 
     const secret = extractSecretFromOtpUri(qrCode);
     if (secret !== null) {
-      await navigator.clipboard.writeText(secret);
-      enqueueSuccessSnackBar({
-        message: t`Setup key copied to clipboard`,
-        options: {
-          icon: <IconCopy size={theme.icon.size.md} />,
-          duration: 2000,
-        },
-      });
+      await copyToClipboard(secret, t`Setup key copied to clipboard`);
     }
   };
 
@@ -96,13 +75,13 @@ export const SignInUpTwoFactorAuthenticationProvision = () => {
     <>
       <TwoFactorAuthenticationSetupEffect />
       <StyledForm>
-        <StyledTextContainer>
+        <StyledTwoFactorInstructions>
           <Trans>
             Use authenticator apps and browser extensions like 1Password, Authy,
             Microsoft Authenticator to generate one-time passwords
           </Trans>
-        </StyledTextContainer>
-        <StyledMainContentContainer>
+        </StyledTwoFactorInstructions>
+        <StyledTwoFactorMainContent>
           {!qrCode ? <Loader /> : <QRCode value={qrCode} />}
           {qrCode && (
             <StyledCopySetupKeyLink onClick={handleCopySetupKey}>
@@ -110,7 +89,7 @@ export const SignInUpTwoFactorAuthenticationProvision = () => {
               <Trans>Copy Setup Key</Trans>
             </StyledCopySetupKeyLink>
           )}
-        </StyledMainContentContainer>
+        </StyledTwoFactorMainContent>
         <MainButton
           title={t`Next`}
           onClick={handleClick}

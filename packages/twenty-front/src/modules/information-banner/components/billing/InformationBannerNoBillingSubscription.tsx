@@ -1,5 +1,5 @@
-import { BILLING_CHECKOUT_SESSION_DEFAULT_VALUE } from '@/billing/constants/BillingCheckoutSessionDefaultValue';
-import { useHandleCheckoutSession } from '@/billing/hooks/useHandleCheckoutSession';
+import { BILLING_CHECKOUT_SESSION_DEFAULT_VALUE } from '@/settings/billing/constants/BillingCheckoutSessionDefaultValue';
+import { useHandleCheckoutSession } from '@/settings/billing/hooks/useHandleCheckoutSession';
 import { InformationBanner } from '@/information-banner/components/InformationBanner';
 import { usePermissionFlagMap } from '@/settings/roles/hooks/usePermissionFlagMap';
 import { t } from '@lingui/core/macro';
@@ -20,7 +20,9 @@ export const InformationBannerNoBillingSubscription = () => {
 
   return (
     <InformationBanner
-      variant="danger"
+      componentInstanceId="information-banner-no-billing-subscription"
+      color="danger"
+      variant="secondary"
       message={
         hasPermissionToSubscribe
           ? t`Your workspace doesn't have an active subscription.`

@@ -4,13 +4,18 @@ import { type MetadataManyToOneRelatedMetadataNames } from 'src/engine/metadata-
 
 type MetadataRequiredForValidation = {
   [T in AllMetadataName]: Record<
-    MetadataManyToOneRelatedMetadataNames<T>,
+    Exclude<MetadataManyToOneRelatedMetadataNames<T>, T>,
     true
   > & {
     [K in Exclude<AllMetadataName, T>]?: true;
   };
 };
 
+export type MetadataRelatedMetadataNameForValidation<
+  T extends AllMetadataName,
+> = keyof (typeof ALL_METADATA_REQUIRED_METADATA_FOR_VALIDATION)[T];
+
+// TODO deprecate in favor of ALL_METADATA_SERIALIZED_RELATION
 export const ALL_METADATA_REQUIRED_METADATA_FOR_VALIDATION = {
   fieldMetadata: {
     objectMetadata: true,
@@ -26,27 +31,102 @@ export const ALL_METADATA_REQUIRED_METADATA_FOR_VALIDATION = {
     view: true,
     fieldMetadata: true,
     objectMetadata: true,
+    viewFieldGroup: true,
+  },
+  viewFieldGroup: {
+    view: true,
   },
   index: {
     objectMetadata: true,
     fieldMetadata: true,
   },
-  serverlessFunction: {},
-  cronTrigger: {
-    serverlessFunction: true,
-  },
-  databaseEventTrigger: {
-    serverlessFunction: true,
-  },
-  routeTrigger: {
-    serverlessFunction: true,
-  },
+  logicFunction: {},
   viewFilter: {
     view: true,
     fieldMetadata: true,
+    viewFilterGroup: true,
   },
   viewGroup: {
     fieldMetadata: true,
     view: true,
+  },
+  viewFilterGroup: {
+    view: true,
+  },
+  viewSort: {
+    fieldMetadata: true,
+    view: true,
+  },
+  role: {},
+  roleTarget: {
+    role: true,
+    agent: true,
+  },
+  agent: {
+    role: true,
+  },
+  skill: {},
+  commandMenuItem: {
+    objectMetadata: true,
+    frontComponent: true,
+    pageLayout: true,
+  },
+  navigationMenuItem: {
+    objectMetadata: true,
+    view: true,
+    pageLayout: true,
+  },
+  rolePermissionFlag: {
+    permissionFlag: true,
+    role: true,
+  },
+  permissionFlag: {
+    rolePermissionFlag: true,
+  },
+  objectPermission: {
+    role: true,
+    objectMetadata: true,
+  },
+  fieldPermission: {
+    role: true,
+    objectMetadata: true,
+    fieldMetadata: true,
+  },
+  pageLayout: {
+    objectMetadata: true,
+    pageLayoutTab: true,
+  },
+  pageLayoutTab: {
+    pageLayout: true,
+  },
+  pageLayoutWidget: {
+    objectMetadata: true,
+    pageLayoutTab: true,
+    frontComponent: true,
+    fieldMetadata: true,
+    commandMenuItem: true,
+  },
+  rowLevelPermissionPredicate: {
+    fieldMetadata: true,
+    objectMetadata: true,
+    role: true,
+    rowLevelPermissionPredicateGroup: true,
+  },
+  rowLevelPermissionPredicateGroup: {
+    role: true,
+    objectMetadata: true,
+  },
+  frontComponent: {},
+  webhook: {},
+  applicationVariable: {},
+  connectionProvider: {},
+  searchFieldMetadata: {
+    objectMetadata: true,
+    fieldMetadata: true,
+  },
+  timelineActivityType: {
+    objectMetadata: true,
+    fieldMetadata: true,
+    frontComponent: true,
   },
 } as const satisfies MetadataRequiredForValidation;

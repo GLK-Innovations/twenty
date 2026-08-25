@@ -1,89 +1,204 @@
 {
   "tabs": {
+    "gettingStarted": {
+      "label": "البدء",
+      "groups": {
+        "welcome": {
+          "label": "مرحبًا"
+        },
+        "coreConcepts": {
+          "label": "المفاهيم الأساسية"
+        }
+      }
+    },
     "userGuide": {
       "label": "دليل المستخدم",
       "groups": {
-        "gettingStarted": {
-          "label": "البدء"
+        "userGuideOverview": {
+          "label": "نظرة عامة"
         },
         "dataModel": {
-          "label": "نموذج البيانات"
+          "label": "نموذج البيانات",
+          "groups": {
+            "dataModelReference": {
+              "label": "مرجع"
+            },
+            "dataModelHowTos": {
+              "label": "الإرشادات"
+            }
+          }
         },
-        "crmEssentials": {
-          "label": "أساسيات CRM"
+        "dataMigration": {
+          "label": "ترحيل البيانات",
+          "groups": {
+            "dataMigrationReference": {
+              "label": "مرجع"
+            },
+            "dataMigrationHowTos": {
+              "label": "الإرشادات"
+            }
+          }
         },
-        "views": {
-          "label": "العروض"
+        "calendarEmails": {
+          "label": "التقويم والبريد الإلكتروني",
+          "groups": {
+            "calendarEmailsReference": {
+              "label": "مرجع"
+            },
+            "calendarEmailsHowTos": {
+              "label": "الإرشادات"
+            }
+          }
         },
         "workflows": {
-          "label": "سير العمل"
+          "label": "سير العمل",
+          "groups": {
+            "workflowsReference": {
+              "label": "مرجع"
+            },
+            "workflowsHowTos": {
+              "label": "الإرشادات",
+              "groups": {
+                "crmAutomations": {
+                  "label": "أتمتة إدارة علاقات العملاء"
+                },
+                "connectToOtherTools": {
+                  "label": "الاتصال بأدوات أخرى"
+                },
+                "advancedConfigurations": {
+                  "label": "التكوينات المتقدمة"
+                },
+                "needMoreHelp": {
+                  "label": "المزيد من المساعدة"
+                }
+              }
+            }
+          }
         },
-        "collaboration": {
-          "label": "التعاون"
+        "ai": {
+          "label": "الذكاء الاصطناعي",
+          "groups": {
+            "aiReference": {
+              "label": "مرجع"
+            },
+            "aiHowTos": {
+              "label": "الإرشادات"
+            }
+          }
         },
-        "integrationsApi": {
-          "label": "التكاملات & API"
+        "layout": {
+          "label": "التخطيط",
+          "groups": {
+            "layoutReference": {
+              "label": "مرجع",
+              "groups": {
+                "layoutViews": {
+                  "label": "العروض"
+                }
+              }
+            },
+            "layoutHowTos": {
+              "label": "الإرشادات"
+            }
+          }
         },
-        "reporting": {
-          "label": "التقارير"
+        "dashboards": {
+          "label": "لوحات القيادة",
+          "groups": {
+            "dashboardsReference": {
+              "label": "مرجع"
+            },
+            "dashboardsHowTos": {
+              "label": "الإرشادات"
+            }
+          }
+        },
+        "permissionsAccess": {
+          "label": "الصلاحيات والوصول",
+          "groups": {
+            "permissionsAccessReference": {
+              "label": "مرجع"
+            },
+            "permissionsAccessHowTos": {
+              "label": "الإرشادات"
+            }
+          }
+        },
+        "billing": {
+          "label": "الفوترة",
+          "groups": {
+            "billingReference": {
+              "label": "مرجع"
+            },
+            "billingHowTos": {
+              "label": "الإرشادات"
+            }
+          }
         },
         "settings": {
-          "label": "الإعدادات"
+          "label": "\\ا\\ل\\إ\\ع\\د\\ا\\د\\ا\\ت",
+          "groups": {
+            "settingsReference": {
+              "label": "مرجع"
+            },
+            "settingsHowTos": {
+              "label": "الإرشادات"
+            }
+          }
         },
-        "pricing": {
-          "label": "التسعير"
-        },
-        "resources": {
-          "label": "الموارد"
+        "legal": {
+          "label": "قانوني",
+          "groups": {
+            "legalHowTos": {
+              "label": "الإرشادات"
+            }
+          }
         }
       }
     },
     "developers": {
       "label": "المطورون",
       "groups": {
-        "developersGroup": {
-          "label": "المطورين"
+        "developersOverview": {
+          "label": "نظرة عامة"
         },
-        "devGettingStarted": {
-          "label": "بدء العمل",
+        "apps": {
+          "label": "التطبيقات",
           "groups": {
-            "selfHosting": {
-              "label": "الاستضافة الذاتية"
+            "appsGettingStarted": {
+              "label": "البدء"
             },
-            "apiAndWebhooks": {
-              "label": "API و Webhooks"
+            "appsTutorial": {
+              "label": "البرنامج التعليمي"
+            },
+            "appsConfig": {
+              "label": "التهيئة"
+            },
+            "appsData": {
+              "label": "بيانات"
+            },
+            "appsLogic": {
+              "label": "المنطق"
+            },
+            "appsLayout": {
+              "label": "التخطيط"
+            },
+            "appsOperations": {
+              "label": "العمليات"
+            },
+            "appsTranslations": {
+              "label": "الترجمات"
             }
           }
         },
-        "contributing": {
-          "label": "المساهمة",
-          "groups": {
-            "frontendDevelopment": {
-              "label": "تطوير الواجهة",
-              "groups": {
-                "twentyUi": {
-                  "label": "Twenty UI",
-                  "groups": {
-                    "display": {
-                      "label": "عرض"
-                    },
-                    "feedback": {
-                      "label": "الملاحظات"
-                    },
-                    "input": {
-                      "label": "Input"
-                    },
-                    "navigation": {
-                      "label": "Navigation"
-                    }
-                  }
-                }
-              }
-            },
-            "backendDevelopment": {
-              "label": "تطوير الخلفية"
-            }
-          }
+        "api": {
+          "label": "واجهة برمجة التطبيقات"
+        },
+        "selfHost": {
+          "label": "الاستضافة الذاتية"
+        },
+        "contribute": {
+          "label": "المساهمة"
         }
       }
     }

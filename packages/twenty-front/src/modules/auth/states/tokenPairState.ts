@@ -1,18 +1,13 @@
-import { createState } from 'twenty-ui/utilities';
-import { type AuthTokenPair } from '~/generated/graphql';
-import { cookieStorageEffect } from '~/utils/recoil-effects';
+import { isValidAuthTokenPair } from '@/apollo/utils/isValidAuthTokenPair';
+import { createAtomState } from '@/ui/utilities/state/jotai/utils/createAtomState';
+import { type AuthTokenPair } from '~/generated-metadata/graphql';
 
-export const tokenPairState = createState<AuthTokenPair | null>({
-  key: 'tokenPairState',
+export const TOKEN_PAIR_LOCAL_STORAGE_KEY = 'tokenPairState';
+
+export const tokenPairState = createAtomState<AuthTokenPair | null>({
+  key: TOKEN_PAIR_LOCAL_STORAGE_KEY,
   defaultValue: null,
-  effects: [
-    cookieStorageEffect(
-      'tokenPair',
-      {},
-      {
-        validateInitFn: (payload: AuthTokenPair) =>
-          Boolean(payload['accessOrWorkspaceAgnosticToken']),
-      },
-    ),
-  ],
+  useLocalStorage: true,
+  localStorageOptions: { getOnInit: true },
+  validateInitFn: (payload) => isValidAuthTokenPair(payload),
 });

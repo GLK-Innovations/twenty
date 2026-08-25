@@ -1,36 +1,19 @@
-import styled from '@emotion/styled';
+import { Collapsible } from '@base-ui/react/collapsible';
 import { isNonEmptyString } from '@sniptt/guards';
-import { type IconComponent } from '@ui/display';
-import { JsonArrow } from '@ui/json-visualizer/components/internal/JsonArrow';
-import { JsonList } from '@ui/json-visualizer/components/internal/JsonList';
-import { JsonNodeLabel } from '@ui/json-visualizer/components/internal/JsonNodeLabel';
-import { JsonNodeValue } from '@ui/json-visualizer/components/internal/JsonNodeValue';
-import { JsonNode } from '@ui/json-visualizer/components/JsonNode';
-import { useJsonTreeContextOrThrow } from '@ui/json-visualizer/hooks/useJsonTreeContextOrThrow';
-import { type JsonNodeHighlighting } from '@ui/json-visualizer/types/JsonNodeHighlighting';
-import { ANIMATION } from '@ui/theme';
-import { AnimatePresence, motion } from 'framer-motion';
+import { clsx } from 'clsx';
 import { useState } from 'react';
-import { isDefined } from 'twenty-shared/utils';
+import { isDefined } from '@ui/utilities/utils/isDefined';
 import { type JsonValue } from 'type-fest';
 
-const StyledContainer = styled.li`
-  display: grid;
-  list-style-type: none;
-`;
+import { type IconComponent } from '@ui/icon';
+import { JsonArrow } from '@ui/json-visualizer/components/internal/JsonArrow';
+import { JsonNodeLabel } from '@ui/json-visualizer/components/internal/JsonNodeLabel';
+import { JsonNode } from '@ui/json-visualizer/components/JsonNode';
+import { JsonValueNode } from '@ui/json-visualizer/components/JsonValueNode';
+import { useJsonTreeContextOrThrow } from '@ui/json-visualizer/hooks/useJsonTreeContextOrThrow';
+import { type JsonNodeHighlighting } from '@ui/json-visualizer/types/JsonNodeHighlighting';
 
-const StyledLabelContainer = styled.div`
-  display: flex;
-  align-items: center;
-  gap: ${({ theme }) => theme.spacing(2)};
-`;
-
-const StyledElementsCount = styled.span<{ variant?: 'red' }>`
-  color: ${({ theme, variant }) =>
-    variant === 'red' ? theme.font.color.danger : theme.font.color.tertiary};
-`;
-
-const StyledJsonList = styled(JsonList)``.withComponent(motion.ul);
+import styles from './JsonNestedNode.module.scss';
 
 export const JsonNestedNode = ({
   label,
@@ -60,27 +43,12 @@ export const JsonNestedNode = ({
   );
 
   const renderedChildren = (
-    <StyledJsonList
-      initial={{
-        height: 0,
-        opacity: 0,
-        overflowY: 'clip',
-      }}
-      animate={{
-        height: 'auto',
-        opacity: 1,
-        overflowY: 'clip',
-      }}
-      exit={{
-        height: 0,
-        opacity: 0,
-        overflowY: 'clip',
-      }}
-      transition={{ duration: ANIMATION.duration.normal }}
-      depth={depth}
-    >
+    <ul className={clsx(styles.list, depth > 0 && styles.nested)}>
       {elements.length === 0 ? (
-        <JsonNodeValue valueAsString={emptyElementsText} />
+        <JsonValueNode
+          valueAsString={emptyElementsText}
+          highlighting={undefined}
+        />
       ) : (
         elements.map(({ id, label, value }) => {
           const nextKeyPath = isNonEmptyString(keyPath)
@@ -98,7 +66,7 @@ export const JsonNestedNode = ({
           );
         })
       )}
-    </StyledJsonList>
+    </ul>
   );
 
   const handleArrowClick = () => {
@@ -106,16 +74,16 @@ export const JsonNestedNode = ({
   };
 
   if (hideRoot) {
-    return (
-      <StyledContainer>
-        <AnimatePresence initial={false}>{renderedChildren}</AnimatePresence>
-      </StyledContainer>
-    );
+    return <li className={styles.container}>{renderedChildren}</li>;
   }
 
   return (
-    <StyledContainer>
-      <StyledLabelContainer>
+    <Collapsible.Root
+      className={styles.container}
+      open={isOpen}
+      render={<li />}
+    >
+      <div className={styles.labelContainer}>
         <JsonArrow
           isOpen={isOpen}
           onClick={handleArrowClick}
@@ -135,17 +103,20 @@ export const JsonNestedNode = ({
         />
 
         {renderElementsCount && (
-          <StyledElementsCount
-            variant={highlighting === 'red' ? 'red' : undefined}
+          <span
+            className={clsx(
+              styles.elementsCount,
+              highlighting === 'red' && styles.elementsCountRed,
+            )}
           >
             {renderElementsCount(elements.length)}
-          </StyledElementsCount>
+          </span>
         )}
-      </StyledLabelContainer>
+      </div>
 
-      <AnimatePresence initial={false}>
-        {isOpen && renderedChildren}
-      </AnimatePresence>
-    </StyledContainer>
+      <Collapsible.Panel className={styles.panel}>
+        {renderedChildren}
+      </Collapsible.Panel>
+    </Collapsible.Root>
   );
 };

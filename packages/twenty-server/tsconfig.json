@@ -33,5 +33,9 @@
     "files": true,
     "require": ["tsconfig-paths/register"]
   },
-  "exclude": ["dist"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/engine/metadata-modules/front-component/constants/seed-project"
+  ]
 }

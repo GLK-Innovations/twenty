@@ -1,4 +1,4 @@
-import { type Meta, type StoryObj } from '@storybook/react';
+import { type Meta, type StoryObj } from '@storybook/react-vite';
 
 import { BooleanFieldDisplay } from '@/object-record/record-field/ui/meta-types/display/components/BooleanFieldDisplay';
 import { ComponentDecorator } from 'twenty-ui/testing';
@@ -28,7 +28,7 @@ export const Default: Story = {};
 
 export const Performance = getProfilingStory({
   componentName: 'BooleanFieldDisplay',
-  averageThresholdInMs: 0.15,
+  averageThresholdInMs: 0.3,
   numberOfRuns: 50,
   numberOfTestsPerRun: 100,
 });

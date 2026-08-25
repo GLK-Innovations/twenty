@@ -5,8 +5,6 @@ exports[`createOne FieldMetadataService name/label sync should return an error w
   "extensions": {
     "code": "METADATA_VALIDATION_FAILED",
     "errors": {
-      "cronTrigger": [],
-      "databaseEventTrigger": [],
       "fieldMetadata": [
         {
           "errors": [
@@ -18,39 +16,59 @@ exports[`createOne FieldMetadataService name/label sync should return an error w
             },
           ],
           "flatEntityMinimalInformation": {
-            "id": Any<String>,
             "name": "testField",
-            "objectMetadataId": Any<String>,
+            "objectMetadataUniversalIdentifier": Any<String>,
+            "universalIdentifier": Any<String>,
           },
+          "metadataName": "fieldMetadata",
           "status": "fail",
-          "type": "create_field",
+          "type": "create",
         },
       ],
-      "index": [],
-      "objectMetadata": [],
-      "routeTrigger": [],
-      "serverlessFunction": [],
-      "view": [],
-      "viewField": [],
-      "viewFilter": [],
-      "viewGroup": [],
+      "viewField": [
+        {
+          "errors": [
+            {
+              "code": "INVALID_VIEW_DATA",
+              "message": "Field metadata not found",
+              "userFriendlyMessage": "Field metadata not found",
+            },
+          ],
+          "flatEntityMinimalInformation": {
+            "fieldMetadataUniversalIdentifier": Any<String>,
+            "universalIdentifier": Any<String>,
+            "viewUniversalIdentifier": Any<String>,
+          },
+          "metadataName": "viewField",
+          "status": "fail",
+          "type": "create",
+        },
+        {
+          "errors": [
+            {
+              "code": "INVALID_VIEW_DATA",
+              "message": "Field metadata not found",
+              "userFriendlyMessage": "Field metadata not found",
+            },
+          ],
+          "flatEntityMinimalInformation": {
+            "fieldMetadataUniversalIdentifier": Any<String>,
+            "universalIdentifier": Any<String>,
+            "viewUniversalIdentifier": Any<String>,
+          },
+          "metadataName": "viewField",
+          "status": "fail",
+          "type": "create",
+        },
+      ],
     },
-    "message": "Validation failed for 0 object(s) and 0 field(s)",
+    "message": "Validation failed for 1 fieldMetadata, 2 viewFields",
     "summary": {
-      "invalidCronTrigger": 0,
-      "invalidDatabaseEventTrigger": 0,
-      "invalidFieldMetadata": 0,
-      "invalidIndex": 0,
-      "invalidObjectMetadata": 0,
-      "invalidRouteTrigger": 0,
-      "invalidServerlessFunction": 0,
-      "invalidView": 0,
-      "invalidViewField": 0,
-      "invalidViewFilter": 0,
-      "invalidViewGroup": 0,
-      "totalErrors": 0,
+      "fieldMetadata": 1,
+      "totalErrors": 3,
+      "viewField": 2,
     },
-    "userFriendlyMessage": "Validation failed for 0 object(s) and 0 field(s)",
+    "userFriendlyMessage": "Many validation errors",
   },
   "message": "Multiple validation errors occurred while creating fields",
   "name": "GraphQLError",

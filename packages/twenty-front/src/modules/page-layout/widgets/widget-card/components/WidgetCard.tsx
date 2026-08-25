@@ -1,182 +1,171 @@
-import { isPageLayoutInEditModeComponentState } from '@/page-layout/states/isPageLayoutInEditModeComponentState';
-import { type PageLayoutTabLayoutMode } from '@/page-layout/types/PageLayoutTabLayoutMode';
-import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
-import { css } from '@emotion/react';
-import styled from '@emotion/styled';
-import { type ReactNode } from 'react';
+import { styled } from '@linaria/react';
 import { isDefined } from 'twenty-shared/utils';
-import { PageLayoutType } from '~/generated/graphql';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
+import { type WidgetCardVariant } from '~/modules/page-layout/widgets/types/WidgetCardVariant';
+import { isWidgetCardFlushInViewMode } from '@/page-layout/widgets/utils/isWidgetCardFlushInViewMode';
 
-export type WidgetCardProps = {
-  children?: ReactNode;
-  pageLayoutType: PageLayoutType;
-  layoutMode: PageLayoutTabLayoutMode;
-  onClick?: () => void;
-  isEditing: boolean;
-  isDragging: boolean;
-  isInPinnedTab: boolean;
-  isResizing?: boolean;
-  className?: string;
-  onMouseEnter?: () => void;
-  onMouseLeave?: () => void;
-};
-
-const StyledWidgetCard = styled.div<{
-  onClick?: () => void;
-  pageLayoutType: PageLayoutType;
-  layoutMode: PageLayoutTabLayoutMode;
-  isInPinnedTab: boolean;
-  isPageLayoutInEditMode: boolean;
+type WidgetCardStyledProps = {
+  variant: WidgetCardVariant;
+  isEditable: boolean;
   isEditing: boolean;
   isDragging: boolean;
   isResizing: boolean;
-}>`
+  headerLess?: boolean;
+  hasClickHandler: boolean;
+};
+
+const computeBorderColor = (
+  props: Pick<
+    WidgetCardStyledProps,
+    'variant' | 'isEditable' | 'isEditing' | 'isDragging'
+  >,
+): string => {
+  if (props.isEditable && (props.isEditing || props.isDragging)) {
+    return themeCssVariables.color.blue;
+  }
+  if (props.variant === 'framed') {
+    return themeCssVariables.border.color.light;
+  }
+  return 'transparent';
+};
+
+const shouldUseSecondaryBackground = (
+  props: Pick<WidgetCardStyledProps, 'variant' | 'isEditable' | 'isDragging'>,
+) => (props.isEditable && props.isDragging) || props.variant === 'framed';
+
+// The card is the single owner of how far its header and body are inset:
+// WidgetCardHeader and WidgetCardContent both read these, widget bodies never
+// declare their own inline padding.
+// oxlint-disable-next-line twenty/sort-css-properties-alphabetically
+const StyledWidgetCard = styled.div<WidgetCardStyledProps>`
+  --widget-card-padding-inline: ${({ variant, isEditable }) =>
+    isWidgetCardFlushInViewMode({ variant, isEditable })
+      ? themeCssVariables.spacing[4]
+      : themeCssVariables.spacing[2]};
+  --widget-card-title-padding-top: ${({ variant, isEditable }) =>
+    isWidgetCardFlushInViewMode({ variant, isEditable })
+      ? themeCssVariables.spacing[3]
+      : themeCssVariables.spacing[2]};
+
+  background: ${(props) => {
+    if (props.isEditable && props.isDragging) {
+      return `linear-gradient(0deg, ${themeCssVariables.background.transparent.lighter} 0%, ${themeCssVariables.background.transparent.lighter} 100%), ${themeCssVariables.background.secondary}`;
+    }
+    return shouldUseSecondaryBackground(props)
+      ? themeCssVariables.background.secondary
+      : 'transparent';
+  }};
+
+  // Declared only when the card actually paints a surface, so a transparent
+  // card leaves the layout container's value in place for its content to read.
+  &[data-secondary-background='true'] {
+    --record-card-background-color: ${themeCssVariables.background.secondary};
+  }
+
+  border: ${(props) =>
+    props.variant === 'framed' || props.isEditable
+      ? `1px solid ${computeBorderColor(props)}`
+      : 'none'};
+
+  border-radius: ${({ variant, isEditable }) =>
+    variant === 'framed' || isEditable
+      ? themeCssVariables.border.radius.md
+      : '0'};
+
   box-sizing: border-box;
+
+  cursor: ${({
+    isEditable,
+    isDragging,
+    isEditing,
+    isResizing,
+    hasClickHandler,
+  }) =>
+    isEditable && !isDragging && !isEditing && !isResizing && hasClickHandler
+      ? 'pointer'
+      : 'default'};
+
   display: flex;
+
   flex-direction: column;
+
+  height: var(--widget-height, 100%);
+
+  padding: ${({ variant, headerLess }) =>
+    variant === 'framed' && headerLess !== true
+      ? themeCssVariables.spacing[2]
+      : '0'};
+
   position: relative;
-  height: 100%;
+
   width: 100%;
 
-  ${({
-    theme,
-    pageLayoutType,
-    layoutMode,
-    isPageLayoutInEditMode,
-    isEditing,
-    isDragging,
-    isInPinnedTab,
-    isResizing,
-    onClick,
-  }) => {
-    if (layoutMode === 'canvas') {
-      return css`
-        height: 100%;
-      `;
-    }
-
-    switch (pageLayoutType) {
-      case PageLayoutType.DASHBOARD: {
-        return css`
-          background: ${theme.background.secondary};
-          border: 1px solid ${theme.border.color.light};
-          border-radius: ${theme.border.radius.md};
-          padding: ${theme.spacing(2)};
-          gap: ${theme.spacing(2)};
-
-          ${isPageLayoutInEditMode &&
-          !isDragging &&
-          !isEditing &&
-          !isResizing &&
-          css`
-            &:hover {
-              border: 1px solid ${theme.border.color.strong};
-              cursor: ${isDefined(onClick) ? 'pointer' : 'default'};
-            }
-          `}
-
-          ${isEditing &&
-          !isDragging &&
-          css`
-            border: 1px solid ${theme.color.blue} !important;
-          `}
-
-          ${isDragging &&
-          css`
-            background: linear-gradient(
-                0deg,
-                ${theme.background.transparent.lighter} 0%,
-                ${theme.background.transparent.lighter} 100%
-              ),
-              ${theme.background.secondary};
-            border: 1px solid ${theme.color.blue} !important;
-          `}
-        `;
+  &:hover {
+    border-color: ${(props) => {
+      if (
+        props.isEditable &&
+        !props.isDragging &&
+        !props.isEditing &&
+        !props.isResizing
+      ) {
+        return themeCssVariables.border.color.strong;
       }
-
-      case PageLayoutType.RECORD_PAGE: {
-        return css`
-          background: ${theme.background.primary};
-          border: 1px solid transparent;
-          border-radius: ${theme.border.radius.md};
-          gap: ${theme.spacing(2)};
-          padding: ${theme.spacing(2)};
-
-          ${isPageLayoutInEditMode &&
-          !isDragging &&
-          !isEditing &&
-          !isResizing &&
-          css`
-            &:hover {
-              border: 1px solid ${theme.border.color.strong};
-              cursor: ${isDefined(onClick) ? 'pointer' : 'default'};
-            }
-          `}
-
-          ${isEditing &&
-          !isDragging &&
-          css`
-            border: 1px solid ${theme.color.blue} !important;
-          `}
-
-          ${isDragging &&
-          css`
-            background: linear-gradient(
-                0deg,
-                ${theme.background.transparent.lighter} 0%,
-                ${theme.background.transparent.lighter} 100%
-              ),
-              ${theme.background.secondary};
-            border: 1px solid ${theme.color.blue} !important;
-          `}
-
-          ${isInPinnedTab &&
-          !isPageLayoutInEditMode &&
-          css`
-            border: none;
-            padding: 0;
-            border-radius: 0;
-            background: ${theme.background.secondary};
-          `}
-        `;
-      }
-
-      default:
-        return undefined;
-    }
-  }}
+      return computeBorderColor(props);
+    }};
+  }
 `;
 
+export type WidgetCardProps = {
+  variant: WidgetCardVariant;
+  isEditable: boolean;
+  isEditing: boolean;
+  isDragging: boolean;
+  isResizing: boolean;
+  headerLess?: boolean;
+  onClick?: React.MouseEventHandler<HTMLDivElement>;
+  className?: string;
+  children?: React.ReactNode;
+  onMouseEnter?: React.MouseEventHandler<HTMLDivElement>;
+  onMouseLeave?: React.MouseEventHandler<HTMLDivElement>;
+  'data-testid'?: string;
+  'data-widget-id'?: string;
+};
+
 export const WidgetCard = ({
-  children,
-  pageLayoutType,
-  layoutMode,
-  onClick,
+  variant,
+  isEditable,
   isEditing,
   isDragging,
-  isInPinnedTab,
-  isResizing = false,
+  isResizing,
+  headerLess,
+  onClick,
   className,
+  children,
   onMouseEnter,
   onMouseLeave,
+  'data-testid': dataTestId,
+  'data-widget-id': dataWidgetId,
 }: WidgetCardProps) => {
-  const isPageLayoutInEditMode = useRecoilComponentValue(
-    isPageLayoutInEditModeComponentState,
-  );
-
   return (
     <StyledWidgetCard
-      onClick={onClick}
-      pageLayoutType={pageLayoutType}
-      layoutMode={layoutMode}
-      isPageLayoutInEditMode={isPageLayoutInEditMode}
+      variant={variant}
+      isEditable={isEditable}
       isEditing={isEditing}
       isDragging={isDragging}
-      isInPinnedTab={isInPinnedTab}
       isResizing={isResizing}
+      headerLess={headerLess}
+      hasClickHandler={isDefined(onClick)}
+      data-secondary-background={shouldUseSecondaryBackground({
+        variant,
+        isEditable,
+        isDragging,
+      })}
+      onClick={onClick}
       className={className}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
+      data-testid={dataTestId}
+      data-widget-id={dataWidgetId}
     >
       {children}
     </StyledWidgetCard>

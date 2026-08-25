@@ -1,32 +1,27 @@
 import { type ReactNode } from 'react';
 
-import { useIsSettingsDrawer } from '@/navigation/hooks/useIsSettingsDrawer';
 import { NavigationDrawerSection } from '@/ui/navigation/navigation-drawer/components/NavigationDrawerSection';
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
 import { useIsMobile } from 'twenty-ui/utilities';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
 
-const StyledFixedContainer = styled.div<{
-  isSettings?: boolean;
-  isMobile?: boolean;
-}>`
-  ${({ isSettings, theme, isMobile }) =>
-    isSettings
-      ? `
-  padding-left: ${theme.spacing(5)};
-  padding-right: ${isMobile ? theme.spacing(5) : theme.spacing(8)};
-`
-      : ''}
+const StyledFixedContainer = styled.div<{ isMobile?: boolean }>`
+  flex-shrink: 0;
+  padding-left: ${({ isMobile }) =>
+    isMobile ? themeCssVariables.spacing[5] : '0'};
+  padding-right: ${({ isMobile }) =>
+    isMobile ? themeCssVariables.spacing[5] : '0'};
 `;
+
 export const NavigationDrawerFixedContent = ({
   children,
 }: {
   children: ReactNode;
 }) => {
-  const isSettingsDrawer = useIsSettingsDrawer();
   const isMobile = useIsMobile();
 
   return (
-    <StyledFixedContainer isSettings={isSettingsDrawer} isMobile={isMobile}>
+    <StyledFixedContainer isMobile={isMobile}>
       <NavigationDrawerSection>{children}</NavigationDrawerSection>
     </StyledFixedContainer>
   );

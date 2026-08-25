@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { isDefined } from 'twenty-shared/utils';
 import { type z } from 'zod';
-import { settingsAIAgentFormSchema } from '../validation-schemas/settingsAIAgentFormSchema';
+import { settingsAiAgentFormSchema } from '~/pages/settings/ai/validation-schemas/settingsAiAgentFormSchema';
 
-export type SettingsAIAgentFormValues = z.infer<
-  typeof settingsAIAgentFormSchema
+export type SettingsAiAgentFormValues = z.infer<
+  typeof settingsAiAgentFormSchema
 >;
 
 export const useSettingsAgentFormState = (mode: 'create' | 'edit') => {
-  const [formValues, setFormValues] = useState<SettingsAIAgentFormValues>({
+  const [formValues, setFormValues] = useState<SettingsAiAgentFormValues>({
     name: '',
     label: '',
     description: '',
@@ -18,13 +18,18 @@ export const useSettingsAgentFormState = (mode: 'create' | 'edit') => {
     prompt: '',
     isCustom: true,
     modelConfiguration: {},
+    responseFormat: {
+      // TODO: Keep text default until legacy text agents are migrated in production.
+      type: 'text',
+    },
+    evaluationInputs: [],
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const validateForm = (): boolean => {
     try {
-      settingsAIAgentFormSchema.parse(formValues);
+      settingsAiAgentFormSchema.parse(formValues);
       return true;
     } catch {
       return false;
@@ -32,13 +37,13 @@ export const useSettingsAgentFormState = (mode: 'create' | 'edit') => {
   };
 
   const handleFieldChange = (
-    field: keyof SettingsAIAgentFormValues,
-    value: SettingsAIAgentFormValues[keyof SettingsAIAgentFormValues],
+    field: keyof SettingsAiAgentFormValues,
+    value: SettingsAiAgentFormValues[keyof SettingsAiAgentFormValues],
   ) => {
     setFormValues((prev) => ({ ...prev, [field]: value }));
   };
 
-  const resetForm = (values?: Partial<SettingsAIAgentFormValues>) => {
+  const resetForm = (values?: Partial<SettingsAiAgentFormValues>) => {
     if (isDefined(values)) {
       setFormValues((prev) => ({ ...prev, ...values }));
     } else {
@@ -52,6 +57,11 @@ export const useSettingsAgentFormState = (mode: 'create' | 'edit') => {
         prompt: '',
         isCustom: true,
         modelConfiguration: {},
+        responseFormat: {
+          // TODO: Keep text default until legacy text agents are migrated in production.
+          type: 'text',
+        },
+        evaluationInputs: [],
       });
     }
   };

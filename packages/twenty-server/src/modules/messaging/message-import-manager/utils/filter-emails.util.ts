@@ -1,8 +1,14 @@
+import { MessageParticipantRole } from 'twenty-shared/types';
+import { isDefined } from 'twenty-shared/utils';
+
 import { type MessageWithParticipants } from 'src/modules/messaging/message-import-manager/types/message';
 import { filterOutBlocklistedMessages } from 'src/modules/messaging/message-import-manager/utils/filter-out-blocklisted-messages.util';
-import { filterOutGroupEmails } from 'src/modules/messaging/message-import-manager/utils/filter-out-group-emails.util';
 import { filterOutIcsAttachments } from 'src/modules/messaging/message-import-manager/utils/filter-out-ics-attachments.util';
 import { filterOutInternals } from 'src/modules/messaging/message-import-manager/utils/filter-out-internals.util';
+import { filterOutUnsubscribeRequests } from 'src/modules/messaging/message-import-manager/utils/filter-out-unsubscribe-requests.util';
+import { isBulkMail } from 'src/modules/messaging/message-import-manager/utils/is-bulk-mail.util';
+import { isGroupEmail } from 'src/modules/messaging/message-import-manager/utils/is-group-email';
+import { isMessageSenderMatchingHandles } from 'src/modules/messaging/message-import-manager/utils/is-message-sender-matching-handles.util';
 import { isWorkEmail } from 'src/utils/is-work-email';
 
 export const filterEmails = (
@@ -11,22 +17,59 @@ export const filterEmails = (
   messages: MessageWithParticipants[],
   blocklist: string[],
   excludeGroupEmails: boolean = true,
+  isInternalMessagesImportEnabled: boolean = false,
 ) => {
   const messagesWithoutIcsAttachments = filterOutIcsAttachments(messages);
 
-  const messagesWithoutBlocklisted = filterOutBlocklistedMessages(
+  const messagesWithoutUnsubscribeRequests = filterOutUnsubscribeRequests(
     [primaryHandle, ...handleAliases],
     messagesWithoutIcsAttachments,
+  );
+
+  const messagesWithoutBlocklisted = filterOutBlocklistedMessages(
+    [primaryHandle, ...handleAliases],
+    messagesWithoutUnsubscribeRequests,
     blocklist,
   );
 
-  const messagesWithoutInternals = isWorkEmail(primaryHandle)
+  const shouldFilterOutInternals =
+    isWorkEmail(primaryHandle) && !isInternalMessagesImportEnabled;
+
+  const messagesWithoutInternals = shouldFilterOutInternals
     ? filterOutInternals(primaryHandle, messagesWithoutBlocklisted)
     : messagesWithoutBlocklisted;
 
-  const messagesWithoutInternalsAndGroupEmails = excludeGroupEmails
-    ? filterOutGroupEmails(messagesWithoutInternals)
-    : messagesWithoutInternals;
+  if (!excludeGroupEmails) {
+    return messagesWithoutInternals;
+  }
 
-  return messagesWithoutInternalsAndGroupEmails;
+  const userHandles = [primaryHandle, ...handleAliases];
+
+  return messagesWithoutInternals.filter((message) => {
+    const isSentByUser = isMessageSenderMatchingHandles(message, userHandles);
+
+    if (isSentByUser) {
+      return true;
+    }
+
+    if (isBulkMail(message.messageHeaders ?? [])) {
+      return false;
+    }
+
+    const senderHandle = message.participants?.find(
+      (participant) => participant.role === MessageParticipantRole.FROM,
+    )?.handle;
+
+    if (!isDefined(senderHandle)) {
+      return true;
+    }
+
+    const isSenderGroupEmail = isGroupEmail(senderHandle);
+
+    if (!isSenderGroupEmail) {
+      return true;
+    }
+
+    return false;
+  });
 };

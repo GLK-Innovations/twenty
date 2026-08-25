@@ -1,13 +1,12 @@
-import { css, useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
-import { forwardRef } from 'react';
+import { styled } from '@linaria/react';
+import { forwardRef, useContext } from 'react';
 import {
   IconRadiusBottomLeft,
   IconRadiusBottomRight,
   IconRadiusTopLeft,
   IconRadiusTopRight,
-} from 'twenty-ui/display';
-
+} from 'twenty-ui/icon';
+import { ThemeContext, themeCssVariables } from 'twenty-ui/theme-constants';
 type WidgetHandleAxis = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 type WidgetHorizontalHandleAxis = 'n' | 's';
 type WidgetVerticalHandleAxis = 'e' | 'w';
@@ -21,82 +20,84 @@ type PageLayoutGridResizeHandleProps = {
   style?: React.CSSProperties;
 };
 
-const StyledBottomRightIcon = styled(IconRadiusBottomRight)`
-  color: transparent;
-  cursor: nwse-resize;
+const StyledCornerIconWrapper = styled.div<{
+  cursor: 'nwse-resize' | 'nesw-resize';
+  position: 'ne' | 'nw' | 'se' | 'sw';
+}>`
+  align-items: center;
+  cursor: ${({ cursor }) => cursor};
+  display: flex;
+  height: ${themeCssVariables.spacing[4]};
+  justify-content: center;
+  width: ${themeCssVariables.spacing[4]};
 
-  :hover {
-    color: ${({ theme }) => theme.font.color.tertiary};
+  & > svg {
+    color: transparent;
+    flex-shrink: 0;
+    pointer-events: none;
+    transform: ${({ position }) => {
+      if (position === 'se') {
+        return `translate(calc(-1 * ${themeCssVariables.spacing[2]}), calc(-1 * ${themeCssVariables.spacing[2]}))`;
+      }
+      if (position === 'sw') {
+        return `translate(${themeCssVariables.spacing[2]}, calc(-1 * ${themeCssVariables.spacing[2]}))`;
+      }
+      if (position === 'ne') {
+        return `translate(calc(-1 * ${themeCssVariables.spacing[2]}), ${themeCssVariables.spacing[2]})`;
+      }
+      if (position === 'nw') {
+        return `translate( ${themeCssVariables.spacing[2]}, ${themeCssVariables.spacing[2]})`;
+      }
+      return '';
+    }};
   }
-`;
 
-const StyledBottomLeftIcon = styled(IconRadiusBottomLeft)`
-  color: transparent;
-  cursor: nesw-resize;
-
-  :hover {
-    color: ${({ theme }) => theme.font.color.tertiary};
-  }
-`;
-
-const StyledTopLeftIcon = styled(IconRadiusTopLeft)`
-  color: transparent;
-  cursor: nwse-resize;
-
-  :hover {
-    color: ${({ theme }) => theme.font.color.tertiary};
-  }
-`;
-
-const StyledTopRightIcon = styled(IconRadiusTopRight)`
-  color: transparent;
-  cursor: nesw-resize;
-
-  :hover {
-    color: ${({ theme }) => theme.font.color.tertiary};
+  &:hover {
+    svg {
+      color: ${themeCssVariables.font.color.tertiary};
+    }
   }
 `;
 
 const StyledVerticalHandle = styled.div`
-  border-radius: ${({ theme }) => theme.border.radius.sm};
-  height: ${({ theme }) => theme.spacing(5)};
-  width: ${({ theme }) => theme.icon.stroke.lg}px;
-`;
-
-const StyledHorizontalHandle = styled.div`
-  border-radius: ${({ theme }) => theme.border.radius.sm};
-  height: ${({ theme }) => theme.icon.stroke.lg}px;
-  width: ${({ theme }) => theme.spacing(5)};
-`;
-
-const StyledHorizontalHandleWrapper = styled.div<{
-  widgetHandleAxis: WidgetHorizontalHandleAxis;
-}>`
-  border-radius: ${({ theme }) => theme.border.radius.sm};
-  cursor: row-resize;
-  transform: ${({ widgetHandleAxis }) =>
-    widgetHandleAxis === 'n' ? 'translateY(-50%)' : 'translateY(50%)'};
-  padding: ${({ theme }) => theme.spacing(2)} ${({ theme }) => theme.spacing(2)};
-
-  :hover {
-    & > div {
-      background-color: ${({ theme }) => theme.font.color.tertiary};
-    }
-  }
+  border-radius: ${themeCssVariables.border.radius.sm};
+  height: ${themeCssVariables.spacing[5]};
+  width: calc(${themeCssVariables.icon.stroke.lg} * 1px);
 `;
 
 const StyledVerticalHandleWrapper = styled.div<{
   widgetHandleAxis: WidgetVerticalHandleAxis;
 }>`
+  border-radius: ${themeCssVariables.border.radius.sm};
   cursor: col-resize;
-  border-radius: ${({ theme }) => theme.border.radius.sm};
+  padding: ${themeCssVariables.spacing[2]} ${themeCssVariables.spacing[2]};
   transform: ${({ widgetHandleAxis }) =>
     widgetHandleAxis === 'w' ? 'translateX(-50%)' : 'translateX(50%)'};
-  padding: ${({ theme }) => theme.spacing(2)} ${({ theme }) => theme.spacing(2)};
 
-  :hover {
+  &:hover {
     & > div {
-      background-color: ${({ theme }) => theme.font.color.tertiary};
+      background-color: ${themeCssVariables.font.color.tertiary};
+    }
+  }
+`;
+
+const StyledHorizontalHandle = styled.div`
+  border-radius: ${themeCssVariables.border.radius.sm};
+  height: calc(${themeCssVariables.icon.stroke.lg} * 1px);
+  width: ${themeCssVariables.spacing[5]};
+`;
+
+const StyledHorizontalHandleWrapper = styled.div<{
+  widgetHandleAxis: WidgetHorizontalHandleAxis;
+}>`
+  border-radius: ${themeCssVariables.border.radius.sm};
+  cursor: row-resize;
+  padding: ${themeCssVariables.spacing[2]} ${themeCssVariables.spacing[2]};
+  transform: ${({ widgetHandleAxis }) =>
+    widgetHandleAxis === 'n' ? 'translateY(-50%)' : 'translateY(50%)'};
+  &:hover {
+    & div {
+      background-color: ${themeCssVariables.font.color.tertiary};
     }
   }
 `;
@@ -104,61 +105,54 @@ const StyledVerticalHandleWrapper = styled.div<{
 const StyledResizeHandleWrapper = styled.div<{
   widgetHandleAxis?: WidgetHandleAxis;
 }>`
+  bottom: ${({ widgetHandleAxis }) => {
+    if (widgetHandleAxis === 's') return themeCssVariables.spacing[1.5];
+    if (widgetHandleAxis === 'se' || widgetHandleAxis === 'sw') return '0';
+    return 'auto';
+  }};
+
+  left: ${({ widgetHandleAxis }) => {
+    if (widgetHandleAxis === 'w') return themeCssVariables.spacing[1.5];
+    if (widgetHandleAxis === 'n' || widgetHandleAxis === 's') return '50%';
+    if (widgetHandleAxis === 'sw' || widgetHandleAxis === 'nw') return '0';
+    return 'auto';
+  }};
+
   position: absolute;
-  ${({ theme, widgetHandleAxis }) => {
-    if (widgetHandleAxis === 'w') {
-      return css`
-        left: ${theme.spacing(2)};
-        top: 50%;
-        transform: translateY(-50%);
-      `;
+
+  right: ${({ widgetHandleAxis }) => {
+    if (widgetHandleAxis === 'e') return themeCssVariables.spacing[1.5];
+    if (widgetHandleAxis === 'se' || widgetHandleAxis === 'ne') return '0';
+    return 'auto';
+  }};
+
+  top: ${({ widgetHandleAxis }) => {
+    if (widgetHandleAxis === 'w' || widgetHandleAxis === 'e') return '50%';
+    if (widgetHandleAxis === 'n') return themeCssVariables.spacing[1.5];
+    if (widgetHandleAxis === 'ne' || widgetHandleAxis === 'nw') return '0';
+    return 'auto';
+  }};
+
+  transform: ${({ widgetHandleAxis }) => {
+    switch (widgetHandleAxis) {
+      case 'w':
+      case 'e':
+        return 'translateY(-50%)';
+      case 'n':
+      case 's':
+        return 'translateX(-50%)';
+      case 'se':
+        return `translate(${themeCssVariables.spacing[1]}, ${themeCssVariables.spacing[1]})`;
+      case 'sw':
+        return `translate(calc(-1 * ${themeCssVariables.spacing[1]}), ${themeCssVariables.spacing[1]})`;
+      case 'ne':
+        return `translate(${themeCssVariables.spacing[1]}, calc(-1 * ${themeCssVariables.spacing[1]}))`;
+      case 'nw':
+        return `translate(calc(-1 * ${themeCssVariables.spacing[1]}), calc(-1 * ${themeCssVariables.spacing[1]}))`;
+      default:
+        return 'none';
     }
-    if (widgetHandleAxis === 'e') {
-      return css`
-        right: ${theme.spacing(2)};
-        top: 50%;
-        transform: translateY(-50%);
-      `;
-    }
-    if (widgetHandleAxis === 'n') {
-      return css`
-        top: ${theme.spacing(2)};
-        left: 50%;
-        transform: translateX(-50%);
-      `;
-    }
-    if (widgetHandleAxis === 's') {
-      return css`
-        bottom: ${theme.spacing(2)};
-        left: 50%;
-        transform: translateX(-50%);
-      `;
-    }
-    if (widgetHandleAxis === 'se') {
-      return css`
-        bottom: ${theme.spacing(0.5)};
-        right: ${theme.spacing(0.5)};
-      `;
-    }
-    if (widgetHandleAxis === 'sw') {
-      return css`
-        bottom: ${theme.spacing(0.5)};
-        left: ${theme.spacing(0.5)};
-      `;
-    }
-    if (widgetHandleAxis === 'ne') {
-      return css`
-        right: ${theme.spacing(0.5)};
-        top: ${theme.spacing(0.5)};
-      `;
-    }
-    if (widgetHandleAxis === 'nw') {
-      return css`
-        left: ${theme.spacing(0.5)};
-        top: ${theme.spacing(0.5)};
-      `;
-    }
-  }}
+  }};
 `;
 
 const isVerticalHandle = (
@@ -186,7 +180,7 @@ export const PageLayoutGridResizeHandle = forwardRef<
     },
     ref,
   ) => {
-    const theme = useTheme();
+    const { theme } = useContext(ThemeContext);
 
     return (
       <StyledResizeHandleWrapper
@@ -209,28 +203,36 @@ export const PageLayoutGridResizeHandle = forwardRef<
           </StyledHorizontalHandleWrapper>
         )}
         {widgetHandleAxis === 'ne' && (
-          <StyledTopRightIcon
-            size={theme.icon.size.lg}
-            stroke={theme.icon.stroke.lg}
-          />
+          <StyledCornerIconWrapper cursor="nesw-resize" position="ne">
+            <IconRadiusTopRight
+              size={theme.icon.size.lg}
+              stroke={theme.icon.stroke.lg}
+            />
+          </StyledCornerIconWrapper>
         )}
         {widgetHandleAxis === 'nw' && (
-          <StyledTopLeftIcon
-            size={theme.icon.size.lg}
-            stroke={theme.icon.stroke.lg}
-          />
+          <StyledCornerIconWrapper cursor="nwse-resize" position="nw">
+            <IconRadiusTopLeft
+              size={theme.icon.size.lg}
+              stroke={theme.icon.stroke.lg}
+            />
+          </StyledCornerIconWrapper>
         )}
         {widgetHandleAxis === 'se' && (
-          <StyledBottomRightIcon
-            size={theme.icon.size.lg}
-            stroke={theme.icon.stroke.lg}
-          />
+          <StyledCornerIconWrapper cursor="nwse-resize" position="se">
+            <IconRadiusBottomRight
+              size={theme.icon.size.lg}
+              stroke={theme.icon.stroke.lg}
+            />
+          </StyledCornerIconWrapper>
         )}
         {widgetHandleAxis === 'sw' && (
-          <StyledBottomLeftIcon
-            size={theme.icon.size.lg}
-            stroke={theme.icon.stroke.lg}
-          />
+          <StyledCornerIconWrapper cursor="nesw-resize" position="sw">
+            <IconRadiusBottomLeft
+              size={theme.icon.size.lg}
+              stroke={theme.icon.stroke.lg}
+            />
+          </StyledCornerIconWrapper>
         )}
       </StyledResizeHandleWrapper>
     );

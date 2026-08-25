@@ -1,46 +1,59 @@
 import { currentWorkspaceState } from '@/auth/states/currentWorkspaceState';
 import { authProvidersState } from '@/client-config/states/authProvidersState';
+import { isMultiWorkspaceEnabledState } from '@/client-config/states/isMultiWorkspaceEnabledState';
+import { useReadDefaultDomainFromConfiguration } from '@/domain-manager/hooks/useReadDefaultDomainFromConfiguration';
+import { SettingsOptionCardContentSelect } from '@/settings/components/SettingsOptions/SettingsOptionCardContentSelect';
 import { SettingsOptionCardContentToggle } from '@/settings/components/SettingsOptions/SettingsOptionCardContentToggle';
 import { SSOIdentitiesProvidersState } from '@/settings/security/states/SSOIdentitiesProvidersState';
+import { Select } from '@/ui/input/components/Select';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
-import { ApolloError } from '@apollo/client';
-import styled from '@emotion/styled';
+import { CombinedGraphQLErrors } from '@apollo/client/errors';
+import { styled } from '@linaria/react';
 import { useLingui } from '@lingui/react/macro';
-import { useRecoilState, useRecoilValue } from 'recoil';
+import { useAtomState } from '@/ui/utilities/state/jotai/hooks/useAtomState';
 import { ConnectedAccountProvider } from 'twenty-shared/types';
 import { capitalize } from 'twenty-shared/utils';
 import {
   IconGoogle,
   IconLink,
+  IconList,
   IconMicrosoft,
   IconPassword,
-} from 'twenty-ui/display';
-import { Card } from 'twenty-ui/layout';
+} from 'twenty-ui/icon';
+import { Card } from 'twenty-ui/surfaces';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
+import { useMutation } from '@apollo/client/react';
 import {
   type AuthProviders,
-  useUpdateWorkspaceMutation,
+  UpdateWorkspaceDocument,
+  WorkspaceDiscoverability,
 } from '~/generated-metadata/graphql';
 
 import { Toggle2FA } from './Toggle2FA';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 
 const StyledSettingsSecurityOptionsList = styled.div`
   display: flex;
   flex-direction: column;
-  gap: ${({ theme }) => theme.spacing(4)};
+  gap: ${themeCssVariables.spacing[4]};
 `;
 
 export const SettingsSecurityAuthProvidersOptionsList = () => {
   const { t } = useLingui();
 
   const { enqueueErrorSnackBar } = useSnackBar();
-  const SSOIdentitiesProviders = useRecoilValue(SSOIdentitiesProvidersState);
-  const authProviders = useRecoilValue(authProvidersState);
+  const SSOIdentitiesProviders = useAtomStateValue(SSOIdentitiesProvidersState);
+  const authProviders = useAtomStateValue(authProvidersState);
+  const isMultiWorkspaceEnabled = useAtomStateValue(
+    isMultiWorkspaceEnabledState,
+  );
+  const { defaultDomain } = useReadDefaultDomainFromConfiguration();
 
-  const [currentWorkspace, setCurrentWorkspace] = useRecoilState(
+  const [currentWorkspace, setCurrentWorkspace] = useAtomState(
     currentWorkspaceState,
   );
 
-  const [updateWorkspace] = useUpdateWorkspaceMutation();
+  const [updateWorkspace] = useMutation(UpdateWorkspaceDocument);
 
   const isValidAuthProvider = (
     key: string,
@@ -91,13 +104,12 @@ export const SettingsSecurityAuthProvidersOptionsList = () => {
         },
       },
     }).catch((err) => {
-      // rollback optimistic update if err
       setCurrentWorkspace({
         ...currentWorkspace,
         [key]: !currentWorkspace[key],
       });
       enqueueErrorSnackBar({
-        apolloError: err instanceof ApolloError ? err : undefined,
+        apolloError: CombinedGraphQLErrors.is(err) ? err : undefined,
       });
     });
   };
@@ -120,9 +132,70 @@ export const SettingsSecurityAuthProvidersOptionsList = () => {
       });
     } catch (err: any) {
       enqueueErrorSnackBar({
-        apolloError: err instanceof ApolloError ? err : undefined,
+        apolloError: CombinedGraphQLErrors.is(err) ? err : undefined,
       });
     }
+  };
+
+  const discoverabilityOptions = [
+    {
+      value: WorkspaceDiscoverability.PUBLIC,
+      label: t`Discoverable`,
+    },
+    {
+      value: WorkspaceDiscoverability.MEMBERS_AND_INVITEES,
+      label: t`Members & invitees`,
+    },
+    {
+      value: WorkspaceDiscoverability.HIDDEN,
+      label: t`Hidden`,
+    },
+  ];
+
+  const getDiscoverabilityDescription = (value: WorkspaceDiscoverability) => {
+    switch (value) {
+      case WorkspaceDiscoverability.MEMBERS_AND_INVITEES:
+        return t`Hidden from email-domain discovery. Members and invitees still see it.`;
+      case WorkspaceDiscoverability.HIDDEN:
+        return t`Never shown at sign-in. Members use the workspace URL.`;
+      case WorkspaceDiscoverability.PUBLIC:
+      default:
+        return t`Anyone with an approved email domain can find and join.`;
+    }
+  };
+
+  const handleDiscoverabilityChange = (value: WorkspaceDiscoverability) => {
+    if (!currentWorkspace) {
+      return;
+    }
+
+    const previousValue = currentWorkspace.workspaceDiscoverability;
+
+    setCurrentWorkspace((currentWorkspaceValue) =>
+      currentWorkspaceValue
+        ? { ...currentWorkspaceValue, workspaceDiscoverability: value }
+        : currentWorkspaceValue,
+    );
+
+    updateWorkspace({
+      variables: {
+        input: {
+          workspaceDiscoverability: value,
+        },
+      },
+    }).catch((err) => {
+      setCurrentWorkspace((currentWorkspaceValue) =>
+        currentWorkspaceValue
+          ? {
+              ...currentWorkspaceValue,
+              workspaceDiscoverability: previousValue,
+            }
+          : currentWorkspaceValue,
+      );
+      enqueueErrorSnackBar({
+        apolloError: CombinedGraphQLErrors.is(err) ? err : undefined,
+      });
+    });
   };
 
   return (
@@ -174,12 +247,31 @@ export const SettingsSecurityAuthProvidersOptionsList = () => {
               description={t`Allow the invitation of new users by sharing an invite link.`}
               checked={currentWorkspace.isPublicInviteLinkEnabled}
               advancedMode
+              divider
               onChange={() =>
                 handleChange(!currentWorkspace.isPublicInviteLinkEnabled)
               }
             />
-          </Card>
-          <Card rounded>
+            {isMultiWorkspaceEnabled && (
+              <SettingsOptionCardContentSelect
+                Icon={IconList}
+                title={t`Discovery on ${defaultDomain}`}
+                description={getDiscoverabilityDescription(
+                  currentWorkspace.workspaceDiscoverability,
+                )}
+                divider
+              >
+                <Select<WorkspaceDiscoverability>
+                  dropdownId="workspace-discoverability-select"
+                  dropdownWidth={220}
+                  value={currentWorkspace.workspaceDiscoverability}
+                  onChange={handleDiscoverabilityChange}
+                  options={discoverabilityOptions}
+                  selectSizeVariant="small"
+                  withSearchInput={false}
+                />
+              </SettingsOptionCardContentSelect>
+            )}
             <Toggle2FA />
           </Card>
         </>

@@ -7,10 +7,10 @@ import { useCloseAnyOpenDropdown } from '@/ui/layout/dropdown/hooks/useCloseAnyO
 import { useGoBackToPreviousDropdownFocusId } from '@/ui/layout/dropdown/hooks/useGoBackToPreviousDropdownFocusId';
 import { useSetActiveDropdownFocusIdAndMemorizePrevious } from '@/ui/layout/dropdown/hooks/useSetFocusedDropdownIdAndMemorizePrevious';
 import { useModal } from '@/ui/layout/modal/hooks/useModal';
-import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
-import { useSetRecoilComponentState } from '@/ui/utilities/state/component-state/hooks/useSetRecoilComponentState';
+import { useAtomComponentState } from '@/ui/utilities/state/jotai/hooks/useAtomComponentState';
+import { useAtomComponentSelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentSelectorValue';
 import { type ViewType } from '@/views/types/ViewType';
-import { type OnDragEndResponder } from '@hello-pangea/dnd';
+import { type DraggableListDropResult } from '@/ui/layout/draggable-list/types/DraggableListDropResult';
 import { useState } from 'react';
 
 type UseRecordGroupReorderConfirmationModalParams = {
@@ -30,14 +30,14 @@ export const useRecordGroupReorderConfirmationModal = ({
   const { openModal } = useModal();
 
   const [pendingDragEndHandlerParams, setPendingDragEndHandlerParams] =
-    useState<Parameters<OnDragEndResponder> | null>(null);
+    useState<DraggableListDropResult | null>(null);
 
   const { reorderRecordGroups } = useReorderRecordGroups({
     recordIndexId,
     viewType,
   });
 
-  const handleDragEnd: OnDragEndResponder = (result) => {
+  const handleDragEnd = (result: DraggableListDropResult) => {
     if (!result.destination) {
       return;
     }
@@ -47,23 +47,24 @@ export const useRecordGroupReorderConfirmationModal = ({
       toIndex: result.destination.index - 1,
     });
   };
-  const isDragableSortRecordGroup = useRecoilComponentValue(
+  const isDragableSortRecordGroup = useAtomComponentSelectorValue(
     recordIndexRecordGroupIsDraggableSortComponentSelector,
+    recordIndexId,
   );
 
-  const setRecordGroupSort = useSetRecoilComponentState(
+  const [, setRecordIndexRecordGroupSort] = useAtomComponentState(
     recordIndexRecordGroupSortComponentState,
   );
   const { closeAnyOpenDropdown } = useCloseAnyOpenDropdown();
 
-  const handleDragEndWithModal: OnDragEndResponder = (result, provided) => {
+  const handleDragEndWithModal = (result: DraggableListDropResult) => {
     if (!isDragableSortRecordGroup) {
       closeAnyOpenDropdown();
       openModal(RECORD_GROUP_REORDER_CONFIRMATION_MODAL_ID);
       setActiveDropdownFocusIdAndMemorizePrevious(null);
-      setPendingDragEndHandlerParams([result, provided]);
+      setPendingDragEndHandlerParams(result);
     } else {
-      handleDragEnd(result, provided);
+      handleDragEnd(result);
     }
   };
 
@@ -72,9 +73,9 @@ export const useRecordGroupReorderConfirmationModal = ({
       throw new Error('pendingDragEndReorder is not set');
     }
 
-    setRecordGroupSort(RecordGroupSort.Manual);
+    setRecordIndexRecordGroupSort(RecordGroupSort.Manual);
     setPendingDragEndHandlerParams(null);
-    handleDragEnd(...pendingDragEndHandlerParams);
+    handleDragEnd(pendingDragEndHandlerParams);
     goBackToPreviousDropdownFocusId();
   };
 

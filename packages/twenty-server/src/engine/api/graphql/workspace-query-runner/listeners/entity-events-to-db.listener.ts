@@ -1,24 +1,29 @@
 import { Injectable } from '@nestjs/common';
 
+import {
+  type ObjectRecordCreateEvent,
+  type ObjectRecordDeleteEvent,
+  type ObjectRecordDestroyEvent,
+  type ObjectRecordEvent,
+  type ObjectRecordNonDestructiveEvent,
+  type ObjectRecordRestoreEvent,
+  type ObjectRecordUpdateEvent,
+} from 'twenty-shared/database-events';
+import { STANDARD_OBJECTS } from 'twenty-shared/metadata';
+
 import { OnDatabaseBatchEvent } from 'src/engine/api/graphql/graphql-query-runner/decorators/on-database-batch-event.decorator';
 import { DatabaseEventAction } from 'src/engine/api/graphql/graphql-query-runner/enums/database-event-action';
-import { CreateAuditLogFromInternalEvent } from 'src/engine/core-modules/audit/jobs/create-audit-log-from-internal-event';
-import { type ObjectRecordCreateEvent } from 'src/engine/core-modules/event-emitter/types/object-record-create.event';
-import { type ObjectRecordDeleteEvent } from 'src/engine/core-modules/event-emitter/types/object-record-delete.event';
-import { type ObjectRecordDestroyEvent } from 'src/engine/core-modules/event-emitter/types/object-record-destroy.event';
-import { type ObjectRecordEvent } from 'src/engine/core-modules/event-emitter/types/object-record-event.event';
-import { type ObjectRecordNonDestructiveEvent } from 'src/engine/core-modules/event-emitter/types/object-record-non-destructive-event';
-import { type ObjectRecordRestoreEvent } from 'src/engine/core-modules/event-emitter/types/object-record-restore.event';
-import { type ObjectRecordUpdateEvent } from 'src/engine/core-modules/event-emitter/types/object-record-update.event';
+import { CreateEventLogFromInternalEvent } from 'src/engine/core-modules/event-logs/ingest/create-event-log-from-internal-event';
 import { InjectMessageQueue } from 'src/engine/core-modules/message-queue/decorators/message-queue.decorator';
 import { MessageQueue } from 'src/engine/core-modules/message-queue/message-queue.constants';
 import { MessageQueueService } from 'src/engine/core-modules/message-queue/services/message-queue.service';
-import { CallWebhookJobsJob } from 'src/engine/core-modules/webhook/jobs/call-webhook-jobs.job';
-import { CallDatabaseEventTriggerJobsJob } from 'src/engine/metadata-modules/database-event-trigger/jobs/call-database-event-trigger-jobs.job';
-import { SubscriptionsService } from 'src/engine/subscriptions/subscriptions.service';
+import { CallWebhookJobsJob } from 'src/engine/metadata-modules/webhook/jobs/call-webhook-jobs.job';
+import { WorkspaceEventBatchForWebhook } from 'src/engine/metadata-modules/webhook/types/workspace-event-batch-for-webhook.type';
+import { CallDatabaseEventTriggerJobsJob } from 'src/engine/core-modules/logic-function/logic-function-trigger/triggers/database-event/call-database-event-trigger-jobs.job';
 import { WorkspaceEventBatch } from 'src/engine/workspace-event-emitter/types/workspace-event-batch.type';
+import { ObjectRecordEventPublisher } from 'src/engine/subscriptions/object-record-event/object-record-event-publisher';
 import { UpsertTimelineActivityFromInternalEvent } from 'src/modules/timeline/jobs/upsert-timeline-activity-from-internal-event.job';
-import { WorkspaceEventBatchForWebhook } from 'src/engine/core-modules/webhook/types/workspace-event-batch-for-webhook.type';
+import { TimelineActivityRoutingPlanService } from 'src/modules/timeline/services/timeline-activity-routing-plan.service';
 
 @Injectable()
 export class EntityEventsToDbListener {
@@ -29,7 +34,8 @@ export class EntityEventsToDbListener {
     private readonly webhookQueueService: MessageQueueService,
     @InjectMessageQueue(MessageQueue.triggerQueue)
     private readonly triggerQueueService: MessageQueueService,
-    private readonly subscriptionsService: SubscriptionsService,
+    private readonly objectRecordEventPublisher: ObjectRecordEventPublisher,
+    private readonly timelineActivityRoutingPlanService: TimelineActivityRoutingPlanService,
   ) {}
 
   @OnDatabaseBatchEvent('*', DatabaseEventAction.CREATED)
@@ -65,7 +71,22 @@ export class EntityEventsToDbListener {
     batchEvent: WorkspaceEventBatch<T>,
     action: DatabaseEventAction,
   ) {
+    if (
+      batchEvent.objectMetadata.universalIdentifier ===
+      STANDARD_OBJECTS.timelineActivity.universalIdentifier
+    ) {
+      await this.objectRecordEventPublisher.publish(batchEvent);
+
+      return;
+    }
+
     const isAuditLogBatchEvent = batchEvent.objectMetadata?.isAuditLogged;
+    const shouldCreateTimelineActivity =
+      action !== DatabaseEventAction.DESTROYED &&
+      (await this.timelineActivityRoutingPlanService.shouldProcessEvent({
+        flatObjectMetadata: batchEvent.objectMetadata,
+        workspaceId: batchEvent.workspaceId,
+      }));
 
     const batchEventForWebhook = {
       ...batchEvent,
@@ -76,7 +97,7 @@ export class EntityEventsToDbListener {
     };
 
     const promises = [
-      this.subscriptionsService.publish(batchEvent),
+      this.objectRecordEventPublisher.publish(batchEvent),
       this.webhookQueueService.add<WorkspaceEventBatchForWebhook<T>>(
         CallWebhookJobsJob.name,
         batchEventForWebhook,
@@ -94,21 +115,26 @@ export class EntityEventsToDbListener {
       ),
     );
 
-    if (isAuditLogBatchEvent) {
+    if (shouldCreateTimelineActivity) {
       promises.push(
-        this.entityEventsToDbQueueService.add<WorkspaceEventBatch<T>>(
-          CreateAuditLogFromInternalEvent.name,
-          batchEvent,
+        this.entityEventsToDbQueueService.add<
+          WorkspaceEventBatch<ObjectRecordNonDestructiveEvent>
+        >(
+          UpsertTimelineActivityFromInternalEvent.name,
+          batchEvent as WorkspaceEventBatch<ObjectRecordNonDestructiveEvent>,
+          { retryLimit: 1 },
         ),
       );
+    }
 
-      if (action !== DatabaseEventAction.DESTROYED) {
-        promises.push(
-          this.entityEventsToDbQueueService.add<
-            WorkspaceEventBatch<ObjectRecordNonDestructiveEvent>
-          >(UpsertTimelineActivityFromInternalEvent.name, batchEvent),
-        );
-      }
+    if (isAuditLogBatchEvent && action !== DatabaseEventAction.DESTROYED) {
+      promises.push(
+        this.entityEventsToDbQueueService.add<WorkspaceEventBatch<T>>(
+          CreateEventLogFromInternalEvent.name,
+          batchEvent,
+          { retryLimit: 1 },
+        ),
+      );
     }
 
     await Promise.all(promises);

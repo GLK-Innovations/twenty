@@ -1,27 +1,24 @@
-import { useCallback } from 'react';
-import { useRecoilState, useSetRecoilState } from 'recoil';
-
 import { currentWorkspaceMemberState } from '@/auth/states/currentWorkspaceMemberState';
-import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
-import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
+import { useUpdateWorkspaceMemberSettings } from '@/settings/profile/hooks/useUpdateWorkspaceMemberSettings';
+import { useAtomState } from '@/ui/utilities/state/jotai/hooks/useAtomState';
+import { useCallback } from 'react';
 import { persistedColorSchemeState } from '@/ui/theme/states/persistedColorSchemeState';
+import { useSetAtomState } from '@/ui/utilities/state/jotai/hooks/useSetAtomState';
 import { type ColorScheme } from '@/workspace-member/types/WorkspaceMember';
 import {
   type IconComponent,
   IconMoon,
   IconSun,
   IconSunMoon,
-} from 'twenty-ui/display';
+} from 'twenty-ui/icon';
 
 export const useColorScheme = () => {
-  const [currentWorkspaceMember, setCurrentWorkspaceMember] = useRecoilState(
+  const [currentWorkspaceMember, setCurrentWorkspaceMember] = useAtomState(
     currentWorkspaceMemberState,
   );
 
-  const { updateOneRecord: updateOneWorkspaceMember } = useUpdateOneRecord({
-    objectNameSingular: CoreObjectNameSingular.WorkspaceMember,
-  });
-  const setPersistedColorScheme = useSetRecoilState(persistedColorSchemeState);
+  const { updateWorkspaceMemberSettings } = useUpdateWorkspaceMemberSettings();
+  const setPersistedColorScheme = useSetAtomState(persistedColorSchemeState);
 
   const colorScheme = currentWorkspaceMember?.colorScheme ?? 'System';
 
@@ -40,9 +37,9 @@ export const useColorScheme = () => {
           colorScheme: value,
         };
       });
-      await updateOneWorkspaceMember?.({
-        idToUpdate: currentWorkspaceMember?.id,
-        updateOneRecordInput: {
+      await updateWorkspaceMemberSettings({
+        workspaceMemberId: currentWorkspaceMember.id,
+        update: {
           colorScheme: value,
         },
       });
@@ -51,7 +48,7 @@ export const useColorScheme = () => {
       currentWorkspaceMember,
       setCurrentWorkspaceMember,
       setPersistedColorScheme,
-      updateOneWorkspaceMember,
+      updateWorkspaceMemberSettings,
     ],
   );
 

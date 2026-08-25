@@ -3,17 +3,19 @@ import { gql } from '@apollo/client';
 export const OBJECT_METADATA_FRAGMENT = gql`
   fragment ObjectMetadataFields on Object {
     id
+    universalIdentifier
     nameSingular
     namePlural
     labelSingular
     labelPlural
+    color
     description
     icon
-    isCustom
     isRemote
     isActive
     isSystem
-    isUIReadOnly
+    isUIEditable
+    isUICreatable
     createdAt
     updatedAt
     labelIdentifierFieldMetadataId
@@ -22,7 +24,16 @@ export const OBJECT_METADATA_FRAGMENT = gql`
     shortcut
     isLabelSyncedWithName
     isSearchable
+    openRecordIn
     duplicateCriteria
+    searchFieldMetadataList {
+      id
+      fieldMetadataId
+      tsVectorFieldMetadataId
+      position
+      createdAt
+      updatedAt
+    }
     indexMetadataList {
       id
       createdAt
@@ -35,6 +46,7 @@ export const OBJECT_METADATA_FRAGMENT = gql`
       indexFieldMetadataList {
         id
         fieldMetadataId
+        subFieldName
         createdAt
         updatedAt
         order
@@ -42,15 +54,15 @@ export const OBJECT_METADATA_FRAGMENT = gql`
     }
     fieldsList {
       id
+      universalIdentifier
       type
       name
       label
       description
       icon
-      isCustom
       isActive
       isSystem
-      isUIReadOnly
+      isUIEditable
       isNullable
       isUnique
       createdAt
@@ -59,6 +71,8 @@ export const OBJECT_METADATA_FRAGMENT = gql`
       options
       settings
       isLabelSyncedWithName
+      morphId
+      applicationId
       relation {
         type
         sourceObjectMetadata {

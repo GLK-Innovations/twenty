@@ -1,12 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common';
 
-import chunk from 'lodash.chunk';
 import { isDefined } from 'twenty-shared/utils';
+import { In } from 'typeorm';
 
-import { type MessageChannelWorkspaceEntity } from 'src/modules/messaging/common/standard-objects/message-channel.workspace-entity';
-import { type MessageFolderWorkspaceEntity } from 'src/modules/messaging/common/standard-objects/message-folder.workspace-entity';
+import { type MessageChannelEntity } from 'src/engine/metadata-modules/message-channel/entities/message-channel.entity';
+import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
+import { buildSystemAuthContext } from 'src/engine/twenty-orm/utils/build-system-auth-context.util';
+import { type MessageChannelMessageAssociationMessageFolderWorkspaceEntity } from 'src/modules/messaging/common/standard-objects/message-channel-message-association-message-folder.workspace-entity';
+import { type MessageChannelMessageAssociationWorkspaceEntity } from 'src/modules/messaging/common/standard-objects/message-channel-message-association.workspace-entity';
+import { type MessageFolderEntity } from 'src/engine/metadata-modules/message-folder/entities/message-folder.entity';
 import { MessagingMessageCleanerService } from 'src/modules/messaging/message-cleaner/services/messaging-message-cleaner.service';
-import { MessagingGetMessageListService } from 'src/modules/messaging/message-import-manager/services/messaging-get-message-list.service';
+
+const BATCH_SIZE = 200;
 
 @Injectable()
 export class MessagingDeleteFolderMessagesService {
@@ -16,57 +21,95 @@ export class MessagingDeleteFolderMessagesService {
 
   constructor(
     private readonly messagingMessageCleanerService: MessagingMessageCleanerService,
-    private readonly messagingGetMessageListService: MessagingGetMessageListService,
+    private readonly workspaceOrmManager: WorkspaceOrmManager,
   ) {}
 
   async deleteFolderMessages(
     workspaceId: string,
-    messageChannel: MessageChannelWorkspaceEntity,
-    messageFolder: MessageFolderWorkspaceEntity,
+    messageChannel: MessageChannelEntity,
+    messageFolder: MessageFolderEntity,
   ): Promise<number> {
     this.logger.log(
       `WorkspaceId: ${workspaceId}, MessageChannelId: ${messageChannel.id}, FolderId: ${messageFolder.id} - Deleting messages from folder: ${messageFolder.name}`,
     );
 
-    const messageLists =
-      await this.messagingGetMessageListService.getMessageLists(
-        messageChannel,
-        [messageFolder],
-      );
+    const authContext = buildSystemAuthContext(workspaceId);
 
     let totalDeletedCount = 0;
 
-    for (const messageList of messageLists) {
-      const { messageExternalIds } = messageList;
+    await this.workspaceOrmManager.executeInWorkspaceContext(
+      async () => {
+        const messageFolderAssociationRepository =
+          this.workspaceOrmManager.getRepository<MessageChannelMessageAssociationMessageFolderWorkspaceEntity>(
+            'messageChannelMessageAssociationMessageFolder',
+          );
 
-      if (messageExternalIds.length === 0) {
-        continue;
-      }
+        const messageChannelMessageAssociationRepository =
+          this.workspaceOrmManager.getRepository<MessageChannelMessageAssociationWorkspaceEntity>(
+            'messageChannelMessageAssociation',
+          );
 
-      const messageExternalIdsChunks = chunk(messageExternalIds, 200);
+        let hasMoreData = true;
 
-      for (const messageExternalIdsChunk of messageExternalIdsChunks) {
-        const validExternalIds = messageExternalIdsChunk.filter(isDefined);
+        while (hasMoreData) {
+          const folderAssociations =
+            await messageFolderAssociationRepository.find({
+              where: {
+                messageFolderId: messageFolder.id,
+              },
+              take: BATCH_SIZE,
+            });
 
-        if (validExternalIds.length === 0) {
-          continue;
+          if (folderAssociations.length === 0) {
+            hasMoreData = false;
+            continue;
+          }
+
+          const folderAssociationIds = folderAssociations.map(
+            (folderAssociation) => folderAssociation.id,
+          );
+
+          const messageChannelMessageAssociationIds = folderAssociations.map(
+            (folderAssociation) =>
+              folderAssociation.messageChannelMessageAssociationId,
+          );
+
+          const associations =
+            await messageChannelMessageAssociationRepository.find({
+              where: {
+                id: In(messageChannelMessageAssociationIds),
+                messageChannelId: messageChannel.id,
+              },
+            });
+
+          const messageExternalIds = associations
+            .map((association) => association.messageExternalId)
+            .filter(isDefined);
+
+          this.logger.log(
+            `WorkspaceId: ${workspaceId}, MessageChannelId: ${messageChannel.id}, FolderId: ${messageFolder.id} - Deleting ${messageExternalIds.length} messages`,
+          );
+
+          if (messageExternalIds.length > 0) {
+            await this.messagingMessageCleanerService.deleteMessagesChannelMessageAssociationsAndRelatedOrphans(
+              {
+                workspaceId,
+                messageExternalIds,
+                messageChannelId: messageChannel.id,
+              },
+            );
+
+            totalDeletedCount += messageExternalIds.length;
+          }
+
+          await messageFolderAssociationRepository.delete({
+            id: In(folderAssociationIds),
+          });
         }
-
-        await this.messagingMessageCleanerService.deleteMessagesChannelMessageAssociationsAndRelatedOrphans(
-          {
-            workspaceId,
-            messageExternalIds: validExternalIds,
-            messageChannelId: messageChannel.id,
-          },
-        );
-
-        totalDeletedCount += validExternalIds.length;
-
-        this.logger.log(
-          `WorkspaceId: ${workspaceId}, MessageChannelId: ${messageChannel.id}, FolderId: ${messageFolder.id} - Processed ${validExternalIds.length} message deletions`,
-        );
-      }
-    }
+      },
+      authContext,
+      { lite: true },
+    );
 
     this.logger.log(
       `WorkspaceId: ${workspaceId}, MessageChannelId: ${messageChannel.id}, FolderId: ${messageFolder.id} - Completed deleting ${totalDeletedCount} messages from folder: ${messageFolder.name}`,

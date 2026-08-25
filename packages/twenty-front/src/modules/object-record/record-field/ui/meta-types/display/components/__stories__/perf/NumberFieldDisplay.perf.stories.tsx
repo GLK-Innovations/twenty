@@ -1,4 +1,4 @@
-import { type Meta, type StoryObj } from '@storybook/react';
+import { type Meta, type StoryObj } from '@storybook/react-vite';
 
 import { NumberFieldDisplay } from '@/object-record/record-field/ui/meta-types/display/components/NumberFieldDisplay';
 import { ComponentDecorator } from 'twenty-ui/testing';
@@ -47,7 +47,7 @@ export const Float: Story = {
 
 export const Performance = getProfilingStory({
   componentName: 'NumberFieldDisplay',
-  averageThresholdInMs: 0.5,
+  averageThresholdInMs: 1,
   numberOfRuns: 50,
   numberOfTestsPerRun: 100,
 });

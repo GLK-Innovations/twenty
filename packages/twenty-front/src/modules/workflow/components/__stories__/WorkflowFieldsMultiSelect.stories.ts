@@ -1,8 +1,9 @@
-import { type ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
-import type { Meta, StoryObj } from '@storybook/react';
-import { expect, within } from '@storybook/test';
+import { ObjectOpenRecordIn } from 'twenty-shared/types';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
+import { WorkflowFieldsMultiSelect } from '@/workflow/components/WorkflowEditUpdateEventFieldsMultiSelect';
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, within } from 'storybook/test';
 import { FieldMetadataType } from '~/generated-metadata/graphql';
-import { WorkflowFieldsMultiSelect } from '../WorkflowEditUpdateEventFieldsMultiSelect';
 
 const meta: Meta<typeof WorkflowFieldsMultiSelect> = {
   title: 'Modules/Workflow/WorkflowFieldsMultiSelect',
@@ -18,50 +19,51 @@ type Story = StoryObj<typeof WorkflowFieldsMultiSelect>;
 const fields = [
   {
     id: '1',
+    universalIdentifier: '1',
     name: 'name',
     label: 'Name',
     type: FieldMetadataType.TEXT,
     description: 'Company name',
-    isCustom: false,
     isActive: true,
     isSystem: false,
-    isUIReadOnly: false,
+    isUIEditable: true,
     isNullable: false,
     createdAt: '',
     updatedAt: '',
   },
   {
     id: '2',
+    universalIdentifier: '2',
     name: 'domainName',
     label: 'Domain Name',
     type: FieldMetadataType.TEXT,
     description: 'Company domain name',
-    isCustom: false,
     isActive: true,
     isSystem: false,
-    isUIReadOnly: false,
+    isUIEditable: true,
     isNullable: true,
     createdAt: '',
     updatedAt: '',
   },
   {
     id: '3',
+    universalIdentifier: '3',
     name: 'employees',
     label: 'Employees',
     type: FieldMetadataType.NUMBER,
     description: 'Number of employees',
-    isCustom: false,
     isActive: true,
     isSystem: false,
-    isUIReadOnly: false,
+    isUIEditable: true,
     isNullable: true,
     createdAt: '',
     updatedAt: '',
   },
 ];
 
-const mockObjectMetadataItem: ObjectMetadataItem = {
+const mockObjectMetadataItem: EnrichedObjectMetadataItem = {
   id: '1',
+  universalIdentifier: '1',
   nameSingular: 'company',
   namePlural: 'companies',
   labelSingular: 'Company',
@@ -69,8 +71,9 @@ const mockObjectMetadataItem: ObjectMetadataItem = {
   description: 'A company',
   icon: 'IconBuilding',
   isSystem: false,
-  isUIReadOnly: false,
-  isCustom: false,
+  isUIEditable: true,
+  isUICreatable: true,
+  openRecordIn: ObjectOpenRecordIn.USER_CHOICE,
   isActive: true,
   createdAt: '',
   updatedAt: '',
@@ -79,6 +82,7 @@ const mockObjectMetadataItem: ObjectMetadataItem = {
   isSearchable: true,
   labelIdentifierFieldMetadataId: '1',
   indexMetadatas: [],
+  searchFieldMetadatas: [],
   fields: fields,
   readableFields: fields,
   updatableFields: fields,
@@ -92,6 +96,7 @@ export const Default: Story = {
     handleFieldsChange: () => {},
     readonly: false,
     defaultFields: [],
+    actionType: 'UPDATE_RECORD',
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -105,6 +110,7 @@ export const WithDefaultValues: Story = {
   args: {
     ...Default.args,
     defaultFields: ['name', 'domainName'],
+    actionType: 'UPDATE_RECORD',
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -118,6 +124,7 @@ export const ReadOnly: Story = {
     ...Default.args,
     readonly: true,
     defaultFields: ['name', 'domainName'],
+    actionType: 'UPDATE_RECORD',
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

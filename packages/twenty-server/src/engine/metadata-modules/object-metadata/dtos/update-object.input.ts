@@ -1,9 +1,10 @@
 import { Field, InputType } from '@nestjs/graphql';
 
-import { BeforeUpdateOne } from '@ptc-org/nestjs-query-graphql';
 import { Type } from 'class-transformer';
+import { ObjectOpenRecordIn } from 'twenty-shared/types';
 import {
   IsBoolean,
+  IsEnum,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -13,7 +14,7 @@ import {
 
 import { UUIDScalarType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/scalars';
 import { IsValidMetadataName } from 'src/engine/decorators/metadata/is-valid-metadata-name.decorator';
-import { BeforeUpdateOneObject } from 'src/engine/metadata-modules/object-metadata/hooks/before-update-one-object.hook';
+import { MetadataTranslationOverrideInput } from 'src/engine/metadata-modules/metadata-translation/dtos/metadata-translation-override.input';
 
 @InputType()
 export class UpdateObjectPayload {
@@ -54,6 +55,11 @@ export class UpdateObjectPayload {
   @Field({ nullable: true })
   shortcut?: string;
 
+  @IsString()
+  @IsOptional()
+  @Field({ nullable: true })
+  color?: string;
+
   @IsBoolean()
   @IsOptional()
   @Field({ nullable: true })
@@ -67,16 +73,31 @@ export class UpdateObjectPayload {
   @IsUUID()
   @IsOptional()
   @Field(() => UUIDScalarType, { nullable: true })
-  imageIdentifierFieldMetadataId?: string;
+  imageIdentifierFieldMetadataId?: string | null;
 
   @IsBoolean()
   @IsOptional()
   @Field({ nullable: true })
   isLabelSyncedWithName?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  @Field({ nullable: true })
+  isSearchable?: boolean;
+
+  @IsEnum(ObjectOpenRecordIn)
+  @IsOptional()
+  @Field(() => ObjectOpenRecordIn, { nullable: true })
+  openRecordIn?: ObjectOpenRecordIn;
+
+  @Type(() => MetadataTranslationOverrideInput)
+  @ValidateNested({ each: true })
+  @IsOptional()
+  @Field(() => [MetadataTranslationOverrideInput], { nullable: true })
+  translations?: MetadataTranslationOverrideInput[];
 }
 
 @InputType()
-@BeforeUpdateOne(BeforeUpdateOneObject)
 export class UpdateOneObjectInput {
   @Type(() => UpdateObjectPayload)
   @ValidateNested()

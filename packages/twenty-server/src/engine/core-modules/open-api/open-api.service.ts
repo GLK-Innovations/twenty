@@ -10,8 +10,6 @@ import {
 
 import { DatabaseEventAction } from 'src/engine/api/graphql/graphql-query-runner/enums/database-event-action';
 import { AccessTokenService } from 'src/engine/core-modules/auth/token/services/access-token.service';
-import { FeatureFlagKey } from 'src/engine/core-modules/feature-flag/enums/feature-flag-key.enum';
-import { FeatureFlagService } from 'src/engine/core-modules/feature-flag/services/feature-flag.service';
 import { baseSchema } from 'src/engine/core-modules/open-api/utils/base-schema.utils';
 import {
   computeMetadataSchemaComponents,
@@ -27,6 +25,7 @@ import {
 import {
   computeBatchPath,
   computeDuplicatesResultPath,
+  computeGroupByResultPath,
   computeManyResultPath,
   computeMergeManyResultPath,
   computeRestoreManyResultPath,
@@ -45,12 +44,9 @@ import {
   getUpdateOneResponse200,
 } from 'src/engine/core-modules/open-api/utils/responses.utils';
 import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
-import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
 import { WorkspaceNotFoundDefaultError } from 'src/engine/core-modules/workspace/workspace.exception';
-import { type ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
-import { ObjectMetadataService } from 'src/engine/metadata-modules/object-metadata/object-metadata.service';
-import { standardObjectMetadataDefinitions } from 'src/engine/workspace-manager/workspace-sync-metadata/standard-objects';
-import { shouldExcludeFromWorkspaceApi } from 'src/engine/workspace-manager/workspace-sync-metadata/utils/should-exclude-from-workspace-api.util';
+import { WorkspaceManyOrAllFlatEntityMapsCacheService } from 'src/engine/metadata-modules/flat-entity/services/workspace-many-or-all-flat-entity-maps-cache.service';
+import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
 import { getServerUrl } from 'src/utils/get-server-url';
 
 @Injectable()
@@ -58,8 +54,7 @@ export class OpenApiService {
   constructor(
     private readonly accessTokenService: AccessTokenService,
     private readonly twentyConfigService: TwentyConfigService,
-    private readonly objectMetadataService: ObjectMetadataService,
-    private readonly featureFlagService: FeatureFlagService,
+    private readonly flatEntityMapsCacheService: WorkspaceManyOrAllFlatEntityMapsCacheService,
   ) {}
 
   private async getWorkspaceFromRequest(request: Request) {
@@ -75,29 +70,37 @@ export class OpenApiService {
     }
   }
 
-  private async getObjectMetadataItems(workspace: WorkspaceEntity) {
-    return await this.objectMetadataService.findManyWithinWorkspace(
-      workspace.id,
-      {
-        order: {
-          namePlural: 'ASC',
+  private async getFlatObjectMetadataArray(workspaceId: string) {
+    const { flatObjectMetadataMaps, flatFieldMetadataMaps } =
+      await this.flatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+        {
+          workspaceId,
+          flatMapsKeys: ['flatObjectMetadataMaps', 'flatFieldMetadataMaps'],
         },
-      },
+      );
+
+    const flatObjectMetadataArray = Object.values(
+      flatObjectMetadataMaps.byUniversalIdentifier,
+    ).filter(isDefined);
+
+    flatObjectMetadataArray.sort((a, b) =>
+      a.namePlural.localeCompare(b.namePlural),
     );
+
+    return {
+      flatObjectMetadataArray,
+      flatObjectMetadataMaps,
+      flatFieldMetadataMaps,
+    };
   }
 
   async generateCoreSchema(request: Request): Promise<OpenAPIV3_1.Document> {
-    const baseUrl = getServerUrl(
-      this.twentyConfigService.get('SERVER_URL'),
-      `${request.protocol}://${request.get('host')}`,
-    );
+    const baseUrl = getServerUrl({
+      serverUrlEnv: this.twentyConfigService.get('SERVER_URL'),
+      serverUrlFallback: `${request.protocol}://${request.get('host')}`,
+    });
 
-    const tokenFromQuery = request.query.token;
-    const schema = baseSchema(
-      'core',
-      baseUrl,
-      typeof tokenFromQuery === 'string' ? tokenFromQuery : undefined,
-    );
+    const schema = baseSchema('core', baseUrl);
 
     const workspace = await this.getWorkspaceFromRequest(request);
 
@@ -105,38 +108,56 @@ export class OpenApiService {
       return schema;
     }
 
-    const objectMetadataItems = await this.getObjectMetadataItems(workspace);
+    const {
+      flatObjectMetadataArray,
+      flatObjectMetadataMaps,
+      flatFieldMetadataMaps,
+    } = await this.getFlatObjectMetadataArray(workspace.id);
 
-    if (!objectMetadataItems.length) {
+    if (!flatObjectMetadataArray.length) {
       return schema;
     }
 
-    const workspaceFeatureFlagsMap =
-      await this.featureFlagService.getWorkspaceFeatureFlagsMap(workspace.id);
-
-    const filteredObjectMetadataItems = objectMetadataItems.filter((item) => {
-      return !shouldExcludeFromWorkspaceApi(
-        item,
-        standardObjectMetadataDefinitions,
-        workspaceFeatureFlagsMap,
-      );
-    });
-
-    schema.paths = filteredObjectMetadataItems.reduce((paths, item) => {
+    schema.paths = flatObjectMetadataArray.reduce((paths, item) => {
       paths[`/${item.namePlural}`] = computeManyResultPath(item);
       paths[`/batch/${item.namePlural}`] = computeBatchPath(item);
       paths[`/${item.namePlural}/{id}`] = computeSingleResultPath(item);
       paths[`/${item.namePlural}/duplicates`] =
         computeDuplicatesResultPath(item);
-      paths[`/restore/${item.namePlural}/{id}`] =
+      paths[`/${item.namePlural}/{id}/restore`] =
         computeRestoreOneResultPath(item);
-      paths[`/restore/${item.namePlural}`] = computeRestoreManyResultPath(item);
+      paths[`/${item.namePlural}/restore`] = computeRestoreManyResultPath(item);
       paths[`/${item.namePlural}/merge`] = computeMergeManyResultPath(item);
+      paths[`/${item.namePlural}/groupBy`] = computeGroupByResultPath(item);
 
       return paths;
     }, schema.paths as OpenAPIV3_1.PathsObject);
 
-    schema.webhooks = filteredObjectMetadataItems.reduce(
+    schema.paths['/dashboards/{id}/duplicate'] = {
+      post: {
+        tags: ['dashboards'],
+        summary: 'Duplicate a dashboard',
+        description: 'Creates a duplicate of an existing dashboard',
+        operationId: 'duplicateDashboard',
+        parameters: [{ $ref: '#/components/parameters/idPath' }],
+        responses: {
+          '201': {
+            description: 'Dashboard duplicated successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/DashboardForResponse',
+                },
+              },
+            },
+          },
+          '400': { $ref: '#/components/responses/400' },
+          '401': { $ref: '#/components/responses/401' },
+        },
+      },
+    } as OpenAPIV3_1.PathItemObject;
+
+    schema.webhooks = flatObjectMetadataArray.reduce(
       (paths, item) => {
         paths[
           this.createWebhookEventName(
@@ -167,7 +188,11 @@ export class OpenApiService {
 
     schema.components = {
       ...schema.components, // components.securitySchemes is defined in base Schema
-      schemas: computeSchemaComponents(filteredObjectMetadataItems),
+      schemas: computeSchemaComponents(
+        flatObjectMetadataArray,
+        flatObjectMetadataMaps,
+        flatFieldMetadataMaps,
+      ),
       parameters: computeParameterComponents(),
       responses: {
         '400': get400ErrorResponses(),
@@ -175,7 +200,7 @@ export class OpenApiService {
       },
     };
 
-    schema.tags = computeSchemaTags(filteredObjectMetadataItems);
+    schema.tags = computeSchemaTags(flatObjectMetadataArray);
 
     return schema;
   }
@@ -183,29 +208,18 @@ export class OpenApiService {
   async generateMetaDataSchema(
     request: Request,
   ): Promise<OpenAPIV3_1.Document> {
-    const baseUrl = getServerUrl(
-      this.twentyConfigService.get('SERVER_URL'),
-      `${request.protocol}://${request.get('host')}`,
-    );
+    const baseUrl = getServerUrl({
+      serverUrlEnv: this.twentyConfigService.get('SERVER_URL'),
+      serverUrlFallback: `${request.protocol}://${request.get('host')}`,
+    });
 
-    const tokenFromQuery = request.query.token;
-    const schema = baseSchema(
-      'metadata',
-      baseUrl,
-      typeof tokenFromQuery === 'string' ? tokenFromQuery : undefined,
-    );
+    const schema = baseSchema('metadata', baseUrl);
 
     const workspace = await this.getWorkspaceFromRequest(request);
 
     if (!isDefined(workspace)) {
       return schema;
     }
-
-    const workspaceFeatureFlagsMap =
-      await this.featureFlagService.getWorkspaceFeatureFlagsMap(workspace.id);
-
-    const isPageLayoutEnabled =
-      workspaceFeatureFlagsMap[FeatureFlagKey.IS_PAGE_LAYOUT_ENABLED];
 
     const metadata = [
       {
@@ -248,22 +262,18 @@ export class OpenApiService {
         nameSingular: 'viewFilterGroup',
         namePlural: 'viewFilterGroups',
       },
-      ...(isPageLayoutEnabled
-        ? [
-            {
-              nameSingular: 'pageLayout',
-              namePlural: 'pageLayouts',
-            },
-            {
-              nameSingular: 'pageLayoutTab',
-              namePlural: 'pageLayoutTabs',
-            },
-            {
-              nameSingular: 'pageLayoutWidget',
-              namePlural: 'pageLayoutWidgets',
-            },
-          ]
-        : []),
+      {
+        nameSingular: 'pageLayout',
+        namePlural: 'pageLayouts',
+      },
+      {
+        nameSingular: 'pageLayoutTab',
+        namePlural: 'pageLayoutTabs',
+      },
+      {
+        nameSingular: 'pageLayoutWidget',
+        namePlural: 'pageLayoutWidgets',
+      },
     ];
 
     schema.paths = metadata.reduce((path, item) => {
@@ -277,7 +287,10 @@ export class OpenApiService {
             { $ref: '#/components/parameters/endingBefore' },
           ],
           responses: {
-            '200': getFindManyResponse200(item, true),
+            '200': getFindManyResponse200({
+              item,
+              isDirectDataFeatureFlagged: true,
+            }),
             '400': { $ref: '#/components/responses/400' },
             '401': { $ref: '#/components/responses/401' },
           },
@@ -288,7 +301,7 @@ export class OpenApiService {
           operationId: `createOne${capitalize(item.nameSingular)}`,
           requestBody: getRequestBody(capitalize(item.nameSingular)),
           responses: {
-            '200': getCreateOneResponse201(item, true),
+            '201': getCreateOneResponse201(item, true),
             '400': { $ref: '#/components/responses/400' },
             '401': { $ref: '#/components/responses/401' },
           },
@@ -336,7 +349,7 @@ export class OpenApiService {
     schema.components = {
       ...schema.components, // components.securitySchemes is defined in base Schema
       schemas: computeMetadataSchemaComponents(metadata),
-      parameters: computeParameterComponents(true),
+      parameters: computeParameterComponents(),
       responses: {
         '400': get400ErrorResponses(),
         '401': get401ErrorResponses(),
@@ -347,7 +360,7 @@ export class OpenApiService {
       metadata.map((item) => ({
         nameSingular: item.nameSingular,
         namePlural: item.namePlural,
-      })) as ObjectMetadataEntity[],
+      })) as FlatObjectMetadata[],
     );
 
     return schema;

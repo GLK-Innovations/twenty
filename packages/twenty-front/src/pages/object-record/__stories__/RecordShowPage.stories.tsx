@@ -1,17 +1,20 @@
-import { type Meta, type StoryObj } from '@storybook/react';
+import { type Meta, type StoryObj } from '@storybook/react-vite';
 import { HttpResponse, graphql } from 'msw';
 
 import { type PageDecoratorArgs } from '~/testing/decorators/PageDecorator';
+import { getRecordFromRecordNode } from '@/object-record/cache/utils/getRecordFromRecordNode';
 import { graphqlMocks } from '~/testing/graphqlMocks';
-import {
-  allMockPersonRecords,
-  peopleQueryResult,
-} from '~/testing/mock-data/people';
+import { mockedPersonRecords } from '~/testing/mock-data/generated/data/people/mock-people-data';
 import { mockedWorkspaceMemberData } from '~/testing/mock-data/users';
+import { generateMockRecordConnection } from '~/testing/utils/generateMockRecordConnection';
 
-import { RecordShowPage } from '../RecordShowPage';
+import { RecordShowPage } from '~/pages/object-record/RecordShowPage';
 
-const personRecord = allMockPersonRecords[0];
+const flatPersonRecords = mockedPersonRecords.map((record) =>
+  getRecordFromRecordNode({ recordNode: record }),
+);
+
+const personRecord = flatPersonRecords[0];
 const meta: Meta<PageDecoratorArgs> = {
   title: 'Pages/ObjectRecord/RecordShowPage',
   component: RecordShowPage,
@@ -27,7 +30,12 @@ const meta: Meta<PageDecoratorArgs> = {
       handlers: [
         graphql.query('FindManyPeople', () => {
           return HttpResponse.json({
-            data: peopleQueryResult,
+            data: {
+              people: generateMockRecordConnection({
+                objectNameSingular: 'person',
+                records: flatPersonRecords,
+              }),
+            },
           });
         }),
         graphql.query('FindOnePerson', () => {
@@ -56,22 +64,8 @@ export type Story = StoryObj<typeof RecordShowPage>;
 
 // TEMP_DISABLED_TEST: Temporarily commented out due to test failure
 // export const Default: Story = {
-//   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+//   // oxlint-disable-next-line typescript/ban-ts-comment
 //   // @ts-ignore
 //   decorators: [PageDecorator, ContextStoreDecorator],
 //   play: async ({ canvasElement }) => {
 //     const canvas = within(canvasElement);
-
-//     // await canvas.findAllByText(peopleMock[0].name.firstName);
-//     expect(
-//       await canvas.findByText('Twenty', undefined, {
-//         timeout: 5000,
-//       }),
-//     ).toBeInTheDocument();
-//     expect(
-//       await canvas.findByText('No activity yet', undefined, {
-//         timeout: 5000,
-//       }),
-//     ).toBeInTheDocument();
-//   },
-// };

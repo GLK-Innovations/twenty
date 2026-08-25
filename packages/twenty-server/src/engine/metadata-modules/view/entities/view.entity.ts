@@ -9,27 +9,52 @@ import {
   ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
-  Relation,
+  type Relation,
   UpdateDateColumn,
 } from 'typeorm';
+import {
+  AggregateOperations,
+  type SerializedRelation,
+  ViewCalendarLayout,
+  ViewKey,
+  ViewOpenRecordIn,
+  ViewType,
+  ViewVisibility,
+} from 'twenty-shared/types';
 
-import { SyncableEntity } from 'src/engine/workspace-manager/workspace-sync/interfaces/syncable-entity.interface';
-
-import { AggregateOperations } from 'src/engine/api/graphql/graphql-query-runner/constants/aggregate-operations.constant';
+import { WasIntroducedInUpgrade } from 'src/engine/core-modules/upgrade/decorators/was-introduced-in-upgrade.decorator';
 import { UserWorkspaceEntity } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
-import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
+import { ADD_IS_SYSTEM_SIDE_EFFECT_UPGRADE_COMMAND_NAME } from 'src/database/commands/upgrade-version-command/2-15/is-system-side-effect-upgrade-command-name.constant';
+import { ADD_VIEW_KANBAN_COLUMN_WIDTH_UPGRADE_COMMAND_NAME } from 'src/database/commands/upgrade-version-command/2-15/add-view-kanban-column-width-upgrade-command-name.constant';
+import { ADD_CALENDAR_END_FIELD_METADATA_ID_TO_VIEW_UPGRADE_COMMAND_NAME } from 'src/database/commands/upgrade-version-command/2-22/add-calendar-end-field-metadata-id-to-view-upgrade-command-name.constant';
 import { FieldMetadataEntity } from 'src/engine/metadata-modules/field-metadata/field-metadata.entity';
 import { ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
+import { ViewFieldGroupEntity } from 'src/engine/metadata-modules/view-field-group/entities/view-field-group.entity';
 import { ViewFieldEntity } from 'src/engine/metadata-modules/view-field/entities/view-field.entity';
 import { ViewFilterGroupEntity } from 'src/engine/metadata-modules/view-filter-group/entities/view-filter-group.entity';
 import { ViewFilterEntity } from 'src/engine/metadata-modules/view-filter/entities/view-filter.entity';
 import { ViewGroupEntity } from 'src/engine/metadata-modules/view-group/entities/view-group.entity';
 import { ViewSortEntity } from 'src/engine/metadata-modules/view-sort/entities/view-sort.entity';
-import { ViewCalendarLayout } from 'src/engine/metadata-modules/view/enums/view-calendar-layout.enum';
-import { ViewKey } from 'src/engine/metadata-modules/view/enums/view-key.enum';
-import { ViewOpenRecordIn } from 'src/engine/metadata-modules/view/enums/view-open-record-in';
-import { ViewType } from 'src/engine/metadata-modules/view/enums/view-type.enum';
-import { ViewVisibility } from 'src/engine/metadata-modules/view/enums/view-visibility.enum';
+import { OverridableEntity } from 'src/engine/workspace-manager/types/overridable-entity';
+
+export type ViewOverrides = {
+  name?: string;
+  type?: ViewType;
+  icon?: string;
+  position?: number;
+  isCompact?: boolean;
+  openRecordIn?: ViewOpenRecordIn;
+  kanbanAggregateOperation?: AggregateOperations | null;
+  kanbanAggregateOperationFieldMetadataId?: SerializedRelation | null;
+  anyFieldFilterValue?: string | null;
+  calendarLayout?: ViewCalendarLayout | null;
+  calendarFieldMetadataId?: SerializedRelation | null;
+  calendarEndFieldMetadataId?: SerializedRelation | null;
+  visibility?: ViewVisibility;
+  mainGroupByFieldMetadataId?: SerializedRelation | null;
+  shouldHideEmptyGroups?: boolean;
+  kanbanColumnWidth?: number | null;
+};
 
 // We could refactor this type to be dynamic to view type
 @Entity({ name: 'view', schema: 'core' })
@@ -38,11 +63,21 @@ import { ViewVisibility } from 'src/engine/metadata-modules/view/enums/view-visi
   'objectMetadataId',
 ])
 @Index('IDX_VIEW_VISIBILITY', ['visibility'])
+@Index('IDX_VIEW_CALENDAR_FIELD_METADATA', ['calendarFieldMetadataId'])
+@Index('IDX_VIEW_CALENDAR_END_FIELD_METADATA', ['calendarEndFieldMetadataId'])
+@Index('IDX_VIEW_KANBAN_FIELD_METADATA', [
+  'kanbanAggregateOperationFieldMetadataId',
+])
+@Index('IDX_VIEW_MAIN_GROUP_BY_FIELD_METADATA', ['mainGroupByFieldMetadataId'])
+@Index('IDX_VIEW_CREATED_BY_USER_WORKSPACE', ['createdByUserWorkspaceId'])
 @Check(
   'CHK_VIEW_CALENDAR_INTEGRITY',
-  `("type" != 'CALENDAR' OR ("calendarLayout" IS NOT NULL AND "calendarFieldMetadataId" IS NOT NULL))`,
+  `("type" NOT IN ('CALENDAR', 'CALENDAR_WIDGET') OR ("calendarLayout" IS NOT NULL AND "calendarFieldMetadataId" IS NOT NULL))`,
 )
-export class ViewEntity extends SyncableEntity implements Required<ViewEntity> {
+export class ViewEntity
+  extends OverridableEntity<ViewOverrides>
+  implements Required<ViewEntity>
+{
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -86,6 +121,7 @@ export class ViewEntity extends SyncableEntity implements Required<ViewEntity> {
   @Column({ nullable: false, default: false, type: 'boolean' })
   isCustom: boolean;
 
+  // Deprecated: superseded by objectMetadata.openRecordIn and the member preference.
   @Column({
     type: 'enum',
     enum: Object.values(ViewOpenRecordIn),
@@ -114,7 +150,7 @@ export class ViewEntity extends SyncableEntity implements Required<ViewEntity> {
     },
   )
   @JoinColumn({ name: 'kanbanAggregateOperationFieldMetadataId' })
-  kanbanAggregateOperationFieldMetadata: Relation<FieldMetadataEntity>;
+  kanbanAggregateOperationFieldMetadata: Relation<FieldMetadataEntity> | null;
 
   @Column({
     type: 'enum',
@@ -136,10 +172,48 @@ export class ViewEntity extends SyncableEntity implements Required<ViewEntity> {
     },
   )
   @JoinColumn({ name: 'calendarFieldMetadataId' })
-  calendarFieldMetadata: Relation<FieldMetadataEntity>;
+  calendarFieldMetadata: Relation<FieldMetadataEntity> | null;
 
-  @Column({ nullable: false, type: 'uuid' })
-  workspaceId: string;
+  @WasIntroducedInUpgrade({
+    upgradeCommandName:
+      ADD_CALENDAR_END_FIELD_METADATA_ID_TO_VIEW_UPGRADE_COMMAND_NAME,
+  })
+  @Column({ nullable: true, type: 'uuid' })
+  calendarEndFieldMetadataId: string | null;
+
+  @ManyToOne(
+    () => FieldMetadataEntity,
+    (fieldMetadata) => fieldMetadata.calendarEndViews,
+    {
+      onDelete: 'SET NULL',
+      nullable: true,
+    },
+  )
+  @JoinColumn({ name: 'calendarEndFieldMetadataId' })
+  calendarEndFieldMetadata: Relation<FieldMetadataEntity> | null;
+
+  @Column({ nullable: true, type: 'uuid' })
+  mainGroupByFieldMetadataId: string | null;
+
+  @ManyToOne(
+    () => FieldMetadataEntity,
+    (fieldMetadata) => fieldMetadata.mainGroupByFieldMetadataViews,
+    {
+      onDelete: 'CASCADE',
+      nullable: true,
+    },
+  )
+  @JoinColumn({ name: 'mainGroupByFieldMetadataId' })
+  mainGroupByFieldMetadata: Relation<FieldMetadataEntity> | null;
+
+  @Column({ nullable: false, default: false, type: 'boolean' })
+  shouldHideEmptyGroups: boolean;
+
+  @WasIntroducedInUpgrade({
+    upgradeCommandName: ADD_VIEW_KANBAN_COLUMN_WIDTH_UPGRADE_COMMAND_NAME,
+  })
+  @Column({ nullable: true, type: 'int', default: null })
+  kanbanColumnWidth: number | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
@@ -161,6 +235,12 @@ export class ViewEntity extends SyncableEntity implements Required<ViewEntity> {
   })
   visibility: ViewVisibility;
 
+  @WasIntroducedInUpgrade({
+    upgradeCommandName: ADD_IS_SYSTEM_SIDE_EFFECT_UPGRADE_COMMAND_NAME,
+  })
+  @Column({ nullable: false, default: false, type: 'boolean' })
+  isSystemSideEffect: boolean;
+
   @Column({ nullable: true, type: 'uuid' })
   createdByUserWorkspaceId: string | null;
 
@@ -170,14 +250,14 @@ export class ViewEntity extends SyncableEntity implements Required<ViewEntity> {
   @JoinColumn({ name: 'createdByUserWorkspaceId' })
   createdBy: Relation<UserWorkspaceEntity>;
 
-  @ManyToOne(() => WorkspaceEntity, {
-    onDelete: 'CASCADE',
-  })
-  @JoinColumn({ name: 'workspaceId' })
-  workspace: Relation<WorkspaceEntity>;
-
   @OneToMany(() => ViewFieldEntity, (viewField) => viewField.view)
   viewFields: Relation<ViewFieldEntity[]>;
+
+  @OneToMany(
+    () => ViewFieldGroupEntity,
+    (viewFieldGroup) => viewFieldGroup.view,
+  )
+  viewFieldGroups: Relation<ViewFieldGroupEntity[]>;
 
   @OneToMany(() => ViewFilterEntity, (viewFilter) => viewFilter.view)
   viewFilters: Relation<ViewFilterEntity[]>;
@@ -194,3 +274,13 @@ export class ViewEntity extends SyncableEntity implements Required<ViewEntity> {
   )
   viewFilterGroups: Relation<ViewFilterGroupEntity[]>;
 }
+
+const VIEW_OVERRIDABLE_COLUMNS_UPGRADE_COMMAND_NAME =
+  '2.12.0_ViewOverridableEntityFastInstanceCommand_1781114009075';
+
+WasIntroducedInUpgrade({
+  upgradeCommandName: VIEW_OVERRIDABLE_COLUMNS_UPGRADE_COMMAND_NAME,
+})(ViewEntity.prototype, 'overrides');
+WasIntroducedInUpgrade({
+  upgradeCommandName: VIEW_OVERRIDABLE_COLUMNS_UPGRADE_COMMAND_NAME,
+})(ViewEntity.prototype, 'isActive');

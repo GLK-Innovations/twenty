@@ -13,12 +13,13 @@ export interface MicrosoftGraphBatchResponse {
       createdDateTime?: string;
       lastModifiedDateTime?: string;
       changeKey?: string;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // oxlint-disable-next-line typescript/no-explicit-any
       categories?: any[];
       receivedDateTime?: string;
       sentDateTime?: string;
       hasAttachments?: boolean;
       internetMessageId?: string;
+      internetMessageHeaders?: { name: string; value: string }[];
       subject?: string;
       bodyPreview?: string;
       importance?: string;

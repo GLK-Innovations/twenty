@@ -1,89 +1,204 @@
 {
   "tabs": {
+    "gettingStarted": {
+      "label": "开始使用",
+      "groups": {
+        "welcome": {
+          "label": "欢迎"
+        },
+        "coreConcepts": {
+          "label": "核心概念"
+        }
+      }
+    },
     "userGuide": {
       "label": "用户指南",
       "groups": {
-        "gettingStarted": {
-          "label": "正在开始"
+        "userGuideOverview": {
+          "label": "概览"
         },
         "dataModel": {
-          "label": "数据模型"
+          "label": "数据模型",
+          "groups": {
+            "dataModelReference": {
+              "label": "参考"
+            },
+            "dataModelHowTos": {
+              "label": "操作指南"
+            }
+          }
         },
-        "crmEssentials": {
-          "label": "CRM要点"
+        "dataMigration": {
+          "label": "数据迁移",
+          "groups": {
+            "dataMigrationReference": {
+              "label": "参考"
+            },
+            "dataMigrationHowTos": {
+              "label": "操作指南"
+            }
+          }
         },
-        "views": {
-          "label": "视图"
+        "calendarEmails": {
+          "label": "日历与电子邮件",
+          "groups": {
+            "calendarEmailsReference": {
+              "label": "参考"
+            },
+            "calendarEmailsHowTos": {
+              "label": "操作指南"
+            }
+          }
         },
         "workflows": {
-          "label": "工作流"
+          "label": "工作流",
+          "groups": {
+            "workflowsReference": {
+              "label": "参考"
+            },
+            "workflowsHowTos": {
+              "label": "操作指南",
+              "groups": {
+                "crmAutomations": {
+                  "label": "CRM 自动化"
+                },
+                "connectToOtherTools": {
+                  "label": "连接到其他工具"
+                },
+                "advancedConfigurations": {
+                  "label": "高级配置"
+                },
+                "needMoreHelp": {
+                  "label": "需要更多帮助"
+                }
+              }
+            }
+          }
         },
-        "collaboration": {
-          "label": "协作"
+        "ai": {
+          "label": "AI",
+          "groups": {
+            "aiReference": {
+              "label": "参考"
+            },
+            "aiHowTos": {
+              "label": "操作指南"
+            }
+          }
         },
-        "integrationsApi": {
-          "label": "集成和 API"
+        "layout": {
+          "label": "布局",
+          "groups": {
+            "layoutReference": {
+              "label": "参考",
+              "groups": {
+                "layoutViews": {
+                  "label": "视图"
+                }
+              }
+            },
+            "layoutHowTos": {
+              "label": "操作指南"
+            }
+          }
         },
-        "reporting": {
-          "label": "报告"
+        "dashboards": {
+          "label": "仪表板",
+          "groups": {
+            "dashboardsReference": {
+              "label": "参考"
+            },
+            "dashboardsHowTos": {
+              "label": "操作指南"
+            }
+          }
+        },
+        "permissionsAccess": {
+          "label": "权限与访问",
+          "groups": {
+            "permissionsAccessReference": {
+              "label": "参考"
+            },
+            "permissionsAccessHowTos": {
+              "label": "操作指南"
+            }
+          }
+        },
+        "billing": {
+          "label": "账单",
+          "groups": {
+            "billingReference": {
+              "label": "参考"
+            },
+            "billingHowTos": {
+              "label": "操作指南"
+            }
+          }
         },
         "settings": {
-          "label": "设置"
+          "label": "设置",
+          "groups": {
+            "settingsReference": {
+              "label": "参考"
+            },
+            "settingsHowTos": {
+              "label": "操作指南"
+            }
+          }
         },
-        "pricing": {
-          "label": "定价"
-        },
-        "resources": {
-          "label": "资源"
+        "legal": {
+          "label": "法律",
+          "groups": {
+            "legalHowTos": {
+              "label": "操作指南"
+            }
+          }
         }
       }
     },
     "developers": {
       "label": "开发者",
       "groups": {
-        "developersGroup": {
-          "label": "开发者"
+        "developersOverview": {
+          "label": "概览"
         },
-        "devGettingStarted": {
-          "label": "正在开始",
+        "apps": {
+          "label": "应用",
           "groups": {
-            "selfHosting": {
-              "label": "自我主机"
+            "appsGettingStarted": {
+              "label": "开始使用"
             },
-            "apiAndWebhooks": {
-              "label": "API 和 Webhooks"
+            "appsTutorial": {
+              "label": "教程"
+            },
+            "appsConfig": {
+              "label": "配置"
+            },
+            "appsData": {
+              "label": "数据"
+            },
+            "appsLogic": {
+              "label": "逻辑"
+            },
+            "appsLayout": {
+              "label": "布局"
+            },
+            "appsOperations": {
+              "label": "操作"
+            },
+            "appsTranslations": {
+              "label": "翻译"
             }
           }
         },
-        "contributing": {
-          "label": "贡献中",
-          "groups": {
-            "frontendDevelopment": {
-              "label": "前端开发",
-              "groups": {
-                "twentyUi": {
-                  "label": "Twenty UI",
-                  "groups": {
-                    "display": {
-                      "label": "显示"
-                    },
-                    "feedback": {
-                      "label": "反馈"
-                    },
-                    "input": {
-                      "label": "Input"
-                    },
-                    "navigation": {
-                      "label": "Navigation"
-                    }
-                  }
-                }
-              }
-            },
-            "backendDevelopment": {
-              "label": "后端开发"
-            }
-          }
+        "api": {
+          "label": "接口"
+        },
+        "selfHost": {
+          "label": "自托管"
+        },
+        "contribute": {
+          "label": "贡献"
         }
       }
     }

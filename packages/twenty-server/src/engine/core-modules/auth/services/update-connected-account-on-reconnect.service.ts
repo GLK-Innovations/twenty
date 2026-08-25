@@ -1,23 +1,27 @@
 import { Injectable } from '@nestjs/common';
 
-import { type WorkspaceEntityManager } from 'src/engine/twenty-orm/entity-manager/workspace-entity-manager';
-import { TwentyORMGlobalManager } from 'src/engine/twenty-orm/twenty-orm-global.manager';
-import { type ConnectedAccountWorkspaceEntity } from 'src/modules/connected-account/standard-objects/connected-account.workspace-entity';
+import { EntityManager } from 'typeorm';
+
+import { PlaintextString } from 'src/engine/core-modules/secret-encryption/branded-strings';
+import { ConnectedAccountEntity } from 'src/engine/metadata-modules/connected-account/entities/connected-account.entity';
+import { ConnectedAccountTokenEncryptionService } from 'src/engine/metadata-modules/connected-account/services/connected-account-token-encryption.service';
+import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
+import { buildSystemAuthContext } from 'src/engine/twenty-orm/utils/build-system-auth-context.util';
 
 export type UpdateConnectedAccountOnReconnectInput = {
   workspaceId: string;
   connectedAccountId: string;
-  accessToken: string;
-  refreshToken: string;
+  accessToken: PlaintextString;
+  refreshToken: PlaintextString;
   scopes: string[];
-  connectedAccount: ConnectedAccountWorkspaceEntity;
-  manager: WorkspaceEntityManager;
+  transactionManager: EntityManager;
 };
 
 @Injectable()
 export class UpdateConnectedAccountOnReconnectService {
   constructor(
-    private readonly twentyORMGlobalManager: TwentyORMGlobalManager,
+    private readonly workspaceOrmManager: WorkspaceOrmManager,
+    private readonly connectedAccountTokenEncryptionService: ConnectedAccountTokenEncryptionService,
   ) {}
 
   async updateConnectedAccountOnReconnect(
@@ -29,26 +33,36 @@ export class UpdateConnectedAccountOnReconnectService {
       accessToken,
       refreshToken,
       scopes,
-      manager,
     } = input;
 
-    const connectedAccountRepository =
-      await this.twentyORMGlobalManager.getRepositoryForWorkspace<ConnectedAccountWorkspaceEntity>(
-        workspaceId,
-        'connectedAccount',
-      );
-
-    await connectedAccountRepository.update(
-      {
-        id: connectedAccountId,
-      },
-      {
+    // Boundary: tokens entering here were just re-issued by the external
+    // OAuth provider on reconnect, so we brand them as plaintext before
+    // handing them to the encryption service.
+    const { encryptedAccessToken, encryptedRefreshToken } =
+      this.connectedAccountTokenEncryptionService.encryptTokenPair({
         accessToken,
         refreshToken,
-        scopes,
-        authFailedAt: null,
-      },
-      manager,
-    );
+        workspaceId,
+      });
+
+    const authContext = buildSystemAuthContext(workspaceId);
+
+    await this.workspaceOrmManager.executeInWorkspaceContext(async () => {
+      await input.transactionManager
+        .getRepository(ConnectedAccountEntity)
+        .update(
+          {
+            id: connectedAccountId,
+            workspaceId,
+          },
+          {
+            accessToken: encryptedAccessToken,
+            refreshToken: encryptedRefreshToken,
+            scopes,
+            authFailedAt: null,
+            archivedAt: null,
+          },
+        );
+    }, authContext);
   }
 }

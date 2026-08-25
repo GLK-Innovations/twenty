@@ -1,16 +1,14 @@
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
 import { type FieldMetadataItem } from '@/object-metadata/types/FieldMetadataItem';
-import { type ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
-import { isImageIdentifierField } from '@/object-metadata/utils/isImageIdentifierField';
 
 export const getImageIdentifierFieldMetadataItem = (
   objectMetadataItem: Pick<
-    ObjectMetadataItem,
-    'fields' | 'imageIdentifierFieldMetadataId' | 'nameSingular'
+    EnrichedObjectMetadataItem,
+    'fields' | 'imageIdentifierFieldMetadataId'
   >,
 ): FieldMetadataItem | undefined =>
-  objectMetadataItem.fields.find((fieldMetadataItem) =>
-    isImageIdentifierField({
-      fieldMetadataItem,
-      objectMetadataItem,
-    }),
+  objectMetadataItem.fields.find(
+    (fieldMetadataItem) =>
+      fieldMetadataItem.id ===
+      objectMetadataItem.imageIdentifierFieldMetadataId,
   );

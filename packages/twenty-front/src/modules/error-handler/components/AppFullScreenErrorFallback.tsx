@@ -1,34 +1,31 @@
 import { AppErrorDisplay } from '@/error-handler/components/internal/AppErrorDisplay';
 import { type AppErrorDisplayProps } from '@/error-handler/types/AppErrorDisplayProps';
-import { PageBody } from '@/ui/layout/page/components/PageBody';
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
+import { t } from '@lingui/core/macro';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 type AppFullScreenErrorFallbackProps = AppErrorDisplayProps;
 
 const StyledContainer = styled.div`
-  background: ${({ theme }) => theme.background.noisy};
+  background: ${themeCssVariables.background.primary};
   box-sizing: border-box;
   display: flex;
-  height: 100vh;
-  width: 100vw;
-  padding-top: ${({ theme }) => theme.spacing(3)};
-  padding-left: ${({ theme }) => theme.spacing(3)};
+  height: calc(100dvh / var(--t-zoom, 1));
+  width: calc(100vw / var(--t-zoom, 1));
 `;
 
 export const AppFullScreenErrorFallback = ({
   error,
   resetErrorBoundary,
-  title = 'Sorry, something went wrong',
+  title = t`Sorry, something went wrong`,
 }: AppFullScreenErrorFallbackProps) => {
   return (
     <StyledContainer>
-      <PageBody>
-        <AppErrorDisplay
-          error={error}
-          resetErrorBoundary={resetErrorBoundary}
-          title={title}
-        />
-      </PageBody>
+      <AppErrorDisplay
+        error={error}
+        resetErrorBoundary={resetErrorBoundary}
+        title={title}
+      />
     </StyledContainer>
   );
 };

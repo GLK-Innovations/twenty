@@ -1,16 +1,15 @@
-import { type Meta, type StoryObj } from '@storybook/react';
-import { expect, userEvent, within } from '@storybook/test';
+import { type Meta, type StoryObj } from '@storybook/react-vite';
+import { expect, userEvent, within } from 'storybook/test';
 
-import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
+import { CoreObjectNameSingular } from 'twenty-shared/types';
 import { ObjectMetadataItemsDecorator } from '~/testing/decorators/ObjectMetadataItemsDecorator';
 import { SnackBarDecorator } from '~/testing/decorators/SnackBarDecorator';
 import { graphqlMocks } from '~/testing/graphqlMocks';
 import { sleep } from '~/utils/sleep';
 
 import { SingleRecordPicker } from '@/object-record/record-picker/single-record-picker/components/SingleRecordPicker';
-import { IconUserCircle } from 'twenty-ui/display';
+import { IconUserCircle } from 'twenty-ui/icon';
 import { ComponentDecorator } from 'twenty-ui/testing';
-import { I18nFrontDecorator } from '~/testing/decorators/I18nFrontDecorator';
 
 // const records = allMockPersonRecords.map<SearchRecord>((person) => ({
 //   id: person.id,
@@ -38,7 +37,6 @@ const meta: Meta<typeof SingleRecordPicker> = {
     ComponentDecorator,
     ObjectMetadataItemsDecorator,
     SnackBarDecorator,
-    I18nFrontDecorator,
   ],
   args: {
     objectNameSingulars: [CoreObjectNameSingular.WorkspaceMember],

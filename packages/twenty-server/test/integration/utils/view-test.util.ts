@@ -1,14 +1,17 @@
-import { type ViewFieldEntity } from 'src/engine/metadata-modules/view-field/entities/view-field.entity';
-import { type ViewFilterGroupEntity } from 'src/engine/metadata-modules/view-filter-group/entities/view-filter-group.entity';
-import { ViewFilterGroupLogicalOperator } from 'src/engine/metadata-modules/view-filter-group/enums/view-filter-group-logical-operator';
-import { type ViewFilterEntity } from 'src/engine/metadata-modules/view-filter/entities/view-filter.entity';
-import { type ViewGroupEntity } from 'src/engine/metadata-modules/view-group/entities/view-group.entity';
-import { type ViewSortEntity } from 'src/engine/metadata-modules/view-sort/entities/view-sort.entity';
+import { ViewFilterGroupLogicalOperator } from 'twenty-shared/types';
+
+import { type ViewFieldGroupDTO } from 'src/engine/metadata-modules/view-field-group/dtos/view-field-group.dto';
+import { type ViewFieldDTO } from 'src/engine/metadata-modules/view-field/dtos/view-field.dto';
+import { type ViewFilterGroupDTO } from 'src/engine/metadata-modules/view-filter-group/dtos/view-filter-group.dto';
+import { type ViewFilterDTO } from 'src/engine/metadata-modules/view-filter/dtos/view-filter.dto';
+import { type ViewGroupDTO } from 'src/engine/metadata-modules/view-group/dtos/view-group.dto';
+import { type ViewSortDTO } from 'src/engine/metadata-modules/view-sort/dtos/view-sort.dto';
+import { type ViewDTO } from 'src/engine/metadata-modules/view/dtos/view.dto';
 import { type ViewEntity } from 'src/engine/metadata-modules/view/entities/view.entity';
 
 export const assertViewStructure = (
-  view: ViewEntity,
-  expectedFields?: Partial<ViewEntity>,
+  view: ViewDTO | ViewEntity,
+  expectedFields?: Partial<ViewDTO | ViewEntity>,
 ) => {
   expect(view).toBeDefined();
   expect(view.id).toBeDefined();
@@ -23,9 +26,25 @@ export const assertViewStructure = (
   }
 };
 
+export const assertViewFieldGroupStructure = (
+  viewFieldGroup: ViewFieldGroupDTO,
+  expectedFields?: Partial<ViewFieldGroupDTO>,
+) => {
+  expect(viewFieldGroup).toBeDefined();
+  expect(viewFieldGroup.id).toBeDefined();
+  expect(viewFieldGroup.name).toBeDefined();
+  expect(viewFieldGroup.viewId).toBeDefined();
+  expect(typeof viewFieldGroup.position).toBe('number');
+  expect(typeof viewFieldGroup.isVisible).toBe('boolean');
+
+  if (expectedFields) {
+    expect(viewFieldGroup).toMatchObject(expectedFields);
+  }
+};
+
 export const assertViewFieldStructure = (
-  viewField: ViewFieldEntity,
-  expectedFields?: Partial<ViewFieldEntity>,
+  viewField: ViewFieldDTO,
+  expectedFields?: Partial<ViewFieldDTO>,
 ) => {
   expect(viewField).toBeDefined();
   expect(viewField.id).toBeDefined();
@@ -41,8 +60,8 @@ export const assertViewFieldStructure = (
 };
 
 export const assertViewSortStructure = (
-  viewSort: ViewSortEntity,
-  expectedFields?: Partial<ViewSortEntity>,
+  viewSort: ViewSortDTO,
+  expectedFields?: Partial<ViewSortDTO>,
 ) => {
   expect(viewSort).toBeDefined();
   expect(viewSort.id).toBeDefined();
@@ -57,8 +76,8 @@ export const assertViewSortStructure = (
 };
 
 export const assertViewFilterStructure = (
-  viewFilter: ViewFilterEntity,
-  expectedFields?: Partial<ViewFilterEntity>,
+  viewFilter: ViewFilterDTO,
+  expectedFields?: Partial<ViewFilterDTO>,
 ) => {
   expect(viewFilter).toBeDefined();
   expect(viewFilter.id).toBeDefined();
@@ -73,12 +92,11 @@ export const assertViewFilterStructure = (
 };
 
 export const assertViewGroupStructure = (
-  viewGroup: ViewGroupEntity,
-  expectedFields?: Partial<ViewGroupEntity>,
+  viewGroup: ViewGroupDTO,
+  expectedFields?: Partial<ViewGroupDTO>,
 ) => {
   expect(viewGroup).toBeDefined();
   expect(viewGroup.id).toBeDefined();
-  expect(viewGroup.fieldMetadataId).toBeDefined();
   expect(viewGroup.viewId).toBeDefined();
   expect(viewGroup.fieldValue).toBeDefined();
   expect(typeof viewGroup.isVisible).toBe('boolean');
@@ -90,8 +108,8 @@ export const assertViewGroupStructure = (
 };
 
 export const assertViewFilterGroupStructure = (
-  viewFilterGroup: ViewFilterGroupEntity,
-  expectedFields?: Partial<ViewFilterGroupEntity>,
+  viewFilterGroup: ViewFilterGroupDTO,
+  expectedFields?: Partial<ViewFilterGroupDTO>,
   validLogicalOperators: string[] = [
     ViewFilterGroupLogicalOperator.AND,
     ViewFilterGroupLogicalOperator.OR,

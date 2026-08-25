@@ -10,7 +10,7 @@ import { type WorkspaceQueryHookKey } from 'src/engine/api/graphql/workspace-que
 import { WorkspaceQueryHookStorage } from 'src/engine/api/graphql/workspace-query-runner/workspace-query-hook/storage/workspace-query-hook.storage';
 import { type WorkspacePreQueryHookPayload } from 'src/engine/api/graphql/workspace-query-runner/workspace-query-hook/types/workspace-query-hook.type';
 import { WorkspaceQueryHookExplorer } from 'src/engine/api/graphql/workspace-query-runner/workspace-query-hook/workspace-query-hook.explorer';
-import { type AuthContext } from 'src/engine/core-modules/auth/types/auth-context.type';
+import { type WorkspaceAuthContext } from 'src/engine/core-modules/auth/types/workspace-auth-context.type';
 
 @Injectable()
 export class WorkspaceQueryHookService {
@@ -23,7 +23,7 @@ export class WorkspaceQueryHookService {
   public async executePreQueryHooks<
     T extends WorkspaceResolverBuilderMethodNames | CommonQueryNames,
   >(
-    authContext: AuthContext,
+    authContext: WorkspaceAuthContext,
     // TODO: We should allow wildcard for object name
     objectName: string,
     methodName: T,
@@ -38,7 +38,6 @@ export class WorkspaceQueryHookService {
     }
 
     for (const preHookInstance of preHookInstances) {
-      // Deep merge all return of handleHook into payload before returning it
       const hookPayload = await this.workspaceQueryHookExplorer.handlePreHook(
         [authContext, objectName, payload],
         preHookInstance.instance,
@@ -56,7 +55,7 @@ export class WorkspaceQueryHookService {
   public async executePostQueryHooks<
     T extends WorkspaceResolverBuilderMethodNames,
   >(
-    authContext: AuthContext,
+    authContext: WorkspaceAuthContext,
     // TODO: We should allow wildcard for object name
     objectName: string,
     methodName: T,

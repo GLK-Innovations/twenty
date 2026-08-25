@@ -1,73 +1,94 @@
-import styled from '@emotion/styled';
 import { useState } from 'react';
 
 import { EmailThreadMessageBody } from '@/activities/emails/components/EmailThreadMessageBody';
 import { EmailThreadMessageBodyPreview } from '@/activities/emails/components/EmailThreadMessageBodyPreview';
+import { EmailThreadMessageLayout } from '@/activities/emails/components/EmailThreadMessageLayout';
 import { EmailThreadMessageReceivers } from '@/activities/emails/components/EmailThreadMessageReceivers';
 import { EmailThreadMessageSender } from '@/activities/emails/components/EmailThreadMessageSender';
-import { type EmailThreadMessageParticipant } from '@/activities/emails/types/EmailThreadMessageParticipant';
-
-const StyledThreadMessage = styled.div`
-  border-bottom: 1px solid ${({ theme }) => theme.border.color.light};
-  display: flex;
-  flex-direction: column;
-  padding: ${({ theme }) => theme.spacing(4, 0)};
-`;
-
-const StyledThreadMessageHeader = styled.div`
-  display: flex;
-  cursor: pointer;
-  flex-direction: column;
-  justify-content: space-between;
-  margin-bottom: ${({ theme }) => theme.spacing(2)};
-  padding: ${({ theme }) => theme.spacing(0, 6)};
-`;
-
-const StyledThreadMessageBody = styled.div`
-  padding: ${({ theme }) => theme.spacing(0, 6)};
-`;
+import { EmailThreadNotShared } from '@/activities/emails/components/EmailThreadNotShared';
+import { type EmailThreadMessageWithSender } from '@/activities/emails/types/EmailThreadMessageWithSender';
+import { MessageParticipantRole } from 'twenty-shared/types';
+import { isDefined, isFieldValueRestricted } from 'twenty-shared/utils';
+import { MessageChannelVisibility } from '~/generated/graphql';
 
 type EmailThreadMessageProps = {
-  body: string;
-  sentAt: string;
-  sender: EmailThreadMessageParticipant;
-  participants: EmailThreadMessageParticipant[];
+  message: EmailThreadMessageWithSender;
   isExpanded?: boolean;
+  hideBottomBorder?: boolean;
+  onDraftClick: (message: EmailThreadMessageWithSender) => void;
 };
 
 export const EmailThreadMessage = ({
-  body,
-  sentAt,
-  sender,
-  participants,
+  message,
   isExpanded = false,
+  hideBottomBorder = false,
+  onDraftClick,
 }: EmailThreadMessageProps) => {
   const [isOpen, setIsOpen] = useState(isExpanded);
 
-  const receivers = participants.filter(
-    (participant) => participant.role !== 'from',
+  const receivers = message.messageParticipants.filter(
+    (participant) => participant.role !== MessageParticipantRole.FROM,
   );
 
-  if (!sender || receivers.length === 0) {
+  if (
+    !isDefined(message.sender) ||
+    (!message.isDraft && receivers.length === 0)
+  ) {
     return null;
   }
 
+  const { isDraft } = message;
+
+  const isRestricted = isFieldValueRestricted(message.text);
+
+  const handleRowClick = () => {
+    if (isRestricted) {
+      return;
+    }
+
+    if (isDraft) {
+      onDraftClick(message);
+
+      return;
+    }
+
+    if (!isOpen) {
+      setIsOpen(true);
+    }
+  };
+
+  const handleHeaderClick = () => {
+    if (!isDraft && isOpen) {
+      setIsOpen(false);
+    }
+  };
+
   return (
-    <StyledThreadMessage
-      onClick={() => !isOpen && setIsOpen(true)}
-      style={{ cursor: isOpen ? 'auto' : 'pointer' }}
+    <EmailThreadMessageLayout
+      hideBottomBorder={hideBottomBorder}
+      isRowClickable={!isRestricted && (isDraft || !isOpen)}
+      isHeaderClickable={!isDraft && isOpen}
+      onRowClick={handleRowClick}
+      onHeaderClick={handleHeaderClick}
+      header={
+        <>
+          <EmailThreadMessageSender
+            sender={message.sender}
+            sentAt={message.receivedAt}
+          />
+          {!isDraft && isOpen && (
+            <EmailThreadMessageReceivers receivers={receivers} />
+          )}
+        </>
+      }
     >
-      <StyledThreadMessageHeader onClick={() => isOpen && setIsOpen(false)}>
-        <EmailThreadMessageSender sender={sender} sentAt={sentAt} />
-        {isOpen && <EmailThreadMessageReceivers receivers={receivers} />}
-      </StyledThreadMessageHeader>
-      <StyledThreadMessageBody>
-        {isOpen ? (
-          <EmailThreadMessageBody body={body} isDisplayed />
-        ) : (
-          <EmailThreadMessageBodyPreview body={body} />
-        )}
-      </StyledThreadMessageBody>
-    </StyledThreadMessage>
+      {isRestricted ? (
+        <EmailThreadNotShared visibility={MessageChannelVisibility.METADATA} />
+      ) : isDraft || !isOpen ? (
+        <EmailThreadMessageBodyPreview body={message.text} />
+      ) : (
+        <EmailThreadMessageBody body={message.text} isDisplayed />
+      )}
+    </EmailThreadMessageLayout>
   );
 };

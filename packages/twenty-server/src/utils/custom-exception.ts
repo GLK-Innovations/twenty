@@ -18,24 +18,24 @@ export const appendCommonExceptionCode = <
 
 export abstract class CustomException<
   ExceptionCode extends string = string,
-  ForceFriendlyMessage = false,
   ExceptionMessage extends string = string,
 > extends CustomError {
   code: ExceptionCode;
-  userFriendlyMessage?: MessageDescriptor;
+  userFriendlyMessage: MessageDescriptor;
+  statusCode?: number;
 
   constructor(
     message: ExceptionMessage,
     code: ExceptionCode,
-    ...userFriendlyMessage: ForceFriendlyMessage extends true
-      ? [{ userFriendlyMessage: MessageDescriptor }]
-      : [{ userFriendlyMessage?: MessageDescriptor }?]
+    {
+      userFriendlyMessage,
+      statusCode,
+    }: { userFriendlyMessage: MessageDescriptor; statusCode?: number },
   ) {
     super(message);
     this.code = code;
-    this.userFriendlyMessage = userFriendlyMessage
-      ? userFriendlyMessage?.[0]?.userFriendlyMessage
-      : undefined;
+    this.userFriendlyMessage = userFriendlyMessage;
+    this.statusCode = statusCode;
   }
 }
 

@@ -3,8 +3,9 @@ import { type CreateOneObjectFactoryInput } from 'test/integration/metadata/suit
 import { createOneObjectMetadata } from 'test/integration/metadata/suites/object-metadata/utils/create-one-object-metadata.util';
 import { deleteOneObjectMetadata } from 'test/integration/metadata/suites/object-metadata/utils/delete-one-object-metadata.util';
 import { updateOneObjectMetadata } from 'test/integration/metadata/suites/object-metadata/utils/update-one-object-metadata.util';
-import { findCoreViewFields } from 'test/integration/metadata/suites/view-field/utils/find-core-view-fields.util';
-import { findCoreViews } from 'test/integration/metadata/suites/view/utils/find-core-views.util';
+import { findViewFields } from 'test/integration/metadata/suites/view-field/utils/find-view-fields.util';
+import { findViews } from 'test/integration/metadata/suites/view/utils/find-views.util';
+import { ViewType } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 
 import { type FlatView } from 'src/engine/metadata-modules/flat-view/types/flat-view.type';
@@ -33,7 +34,18 @@ describe('View side effect on object creation', () => {
 
     createdObjectMetadataId = undefined;
   });
-  it('should create a view and view field for default custom objects standard fields on object metadata creation', async () => {
+  const objectCreationGqlFields = `
+    id
+    labelPlural
+    description
+    labelSingular
+    namePlural
+    nameSingular
+    icon
+    isLabelSyncedWithName
+  `;
+
+  const createDishesObject = async () => {
     const {
       labelPlural,
       description,
@@ -50,16 +62,6 @@ describe('View side effect on object creation', () => {
       icon: 'IconBuildingSkyscraper',
       isLabelSyncedWithName: false,
     };
-    const objectCreationGqlFields = `
-      id
-      labelPlural
-      description
-      labelSingular
-      namePlural
-      nameSingular
-      icon
-      isLabelSyncedWithName
-    `;
 
     const {
       data: { createOneObject },
@@ -69,30 +71,118 @@ describe('View side effect on object creation', () => {
       gqlFields: objectCreationGqlFields,
     });
 
+    return createOneObject;
+  };
+
+  const findIndexView = async (objectMetadataId: string) => {
+    const {
+      data: { getViews },
+    } = await findViews({ objectMetadataId, expectToFail: false });
+
+    return getViews.find((view) => view.key === 'INDEX');
+  };
+
+  it('should engine-provision the INDEX view and its view fields on object metadata creation', async () => {
+    const createOneObject = await createDishesObject();
+
     createdObjectMetadataId = createOneObject.id;
 
     const {
-      data: { getCoreViews: createdViews },
-    } = await findCoreViews({
+      data: { getViews: createdViews },
+    } = await findViews({
       objectMetadataId: createdObjectMetadataId,
       expectToFail: false,
     });
 
     expect(createdViews).toBeDefined();
-    expect(createdViews.length).toBe(1);
-    const [firstView] = createdViews;
+    expect(createdViews.length).toBe(2);
 
-    expect(firstView).toMatchObject<Partial<FlatView>>({
+    const indexView = createdViews.find((view) => view.key === 'INDEX');
+
+    if (!isDefined(indexView)) {
+      throw new Error('expected an INDEX view to be provisioned');
+    }
+
+    expect(indexView).toMatchObject<Partial<FlatView>>({
       objectMetadataId: createdObjectMetadataId,
+      type: ViewType.TABLE,
     });
 
     const {
-      data: { getCoreViewFields: createdViewFields },
-    } = await findCoreViewFields({
-      viewId: firstView.id,
+      data: { getViewFields: indexViewFields },
+    } = await findViewFields({
+      viewId: indexView.id,
       expectToFail: false,
     });
 
-    expect(createdViewFields.length).toBe(11);
+    expect(indexViewFields.length).toBe(5);
+  });
+
+  it('should keep the same INDEX view when the object is renamed (lossless, deterministic identifier)', async () => {
+    const createOneObject = await createDishesObject();
+
+    createdObjectMetadataId = createOneObject.id;
+
+    const indexViewBeforeRename = await findIndexView(createdObjectMetadataId);
+
+    if (!isDefined(indexViewBeforeRename)) {
+      throw new Error('expected an INDEX view to be provisioned');
+    }
+
+    await updateOneObjectMetadata({
+      expectToFail: false,
+      input: {
+        idToUpdate: createdObjectMetadataId,
+        updatePayload: {
+          labelPlural: 'Renamed dishes',
+          labelSingular: 'Renamed dish',
+        },
+      },
+    });
+
+    const indexViewAfterRename = await findIndexView(createdObjectMetadataId);
+
+    if (!isDefined(indexViewAfterRename)) {
+      throw new Error('expected the INDEX view to survive the rename');
+    }
+
+    expect(indexViewAfterRename.id).toBe(indexViewBeforeRename.id);
+
+    const {
+      data: { getViewFields: indexViewFieldsAfterRename },
+    } = await findViewFields({
+      viewId: indexViewAfterRename.id,
+      expectToFail: false,
+    });
+
+    expect(indexViewFieldsAfterRename.length).toBe(5);
+  });
+
+  it('should cascade-delete the INDEX view and its view fields when the object is deleted', async () => {
+    const createOneObject = await createDishesObject();
+    const objectMetadataId = createOneObject.id;
+
+    const indexView = await findIndexView(objectMetadataId);
+
+    expect(isDefined(indexView)).toBe(true);
+
+    await updateOneObjectMetadata({
+      expectToFail: false,
+      input: {
+        idToUpdate: objectMetadataId,
+        updatePayload: { isActive: false },
+      },
+    });
+
+    await deleteOneObjectMetadata({
+      input: { idToDelete: objectMetadataId },
+      expectToFail: false,
+    });
+
+    const {
+      data: { getViews: viewsAfterDelete },
+    } = await findViews({ objectMetadataId, expectToFail: false });
+
+    expect(viewsAfterDelete.length).toBe(0);
   });
 });

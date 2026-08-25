@@ -1,18 +1,14 @@
-import { FormFieldInputContainer } from '@/object-record/record-field/ui/form-types/components/FormFieldInputContainer';
+import { FormFieldInputContainer } from '@/ui/input/components/FormFieldInputContainer';
 import { FormFieldInputInnerContainer } from '@/object-record/record-field/ui/form-types/components/FormFieldInputInnerContainer';
 import { FormFieldInputRowContainer } from '@/object-record/record-field/ui/form-types/components/FormFieldInputRowContainer';
 import { VariableChipStandalone } from '@/object-record/record-field/ui/form-types/components/VariableChipStandalone';
 import { type VariablePickerComponent } from '@/object-record/record-field/ui/form-types/types/VariablePickerComponent';
 import { TextInput } from '@/ui/field/input/components/TextInput';
-import { InputLabel } from '@/ui/input/components/InputLabel';
-import { isStandaloneVariableString } from '@/workflow/utils/isStandaloneVariableString';
-import styled from '@emotion/styled';
+import { Field } from 'twenty-ui/input';
+import { isStandaloneVariableString } from 'twenty-shared/workflow';
+import { t } from '@lingui/core/macro';
 import { useId, useState } from 'react';
 import { isDefined } from 'twenty-shared/utils';
-
-const StyledInput = styled(TextInput)`
-  padding: ${({ theme }) => `${theme.spacing(1)} ${theme.spacing(2)}`};
-`;
 
 type FormUuidFieldInputProps = {
   label?: string;
@@ -91,7 +87,7 @@ export const FormUuidFieldInput = ({
 
   return (
     <FormFieldInputContainer>
-      {label ? <InputLabel htmlFor={instanceId}>{label}</InputLabel> : null}
+      {label ? <Field.Label htmlFor={instanceId}>{label}</Field.Label> : null}
 
       <FormFieldInputRowContainer>
         <FormFieldInputInnerContainer
@@ -99,9 +95,9 @@ export const FormUuidFieldInput = ({
           hasRightElement={isDefined(VariablePicker) && !readonly}
         >
           {draftValue.type === 'static' ? (
-            <StyledInput
+            <TextInput
               instanceId={instanceId}
-              placeholder={placeholder ?? 'Enter a UUID'}
+              placeholder={placeholder ?? t`Enter a UUID`}
               value={draftValue.value}
               copyButton={false}
               disabled={readonly}

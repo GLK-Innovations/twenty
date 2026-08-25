@@ -1,29 +1,25 @@
-import { InjectRepository } from '@nestjs/typeorm';
-
 import { Command, Option } from 'nest-commander';
-import { LessThan, Repository } from 'typeorm';
+import { LessThan } from 'typeorm';
 
-import { TwentyORMGlobalManager } from 'src/engine/twenty-orm/twenty-orm-global.manager';
-import {
-  ActiveOrSuspendedWorkspacesMigrationCommandRunner,
-  type RunOnWorkspaceArgs,
-} from 'src/database/commands/command-runners/active-or-suspended-workspaces-migration.command-runner';
-import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
+import { ProvisionedWorkspaceCommandRunner } from 'src/database/commands/command-runners/provisioned-workspace.command-runner';
+import { WorkspaceIteratorService } from 'src/database/commands/command-runners/workspace-iterator.service';
+import { type RunOnWorkspaceArgs } from 'src/database/commands/command-runners/workspace.command-runner';
+import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
+import { buildSystemAuthContext } from 'src/engine/twenty-orm/utils/build-system-auth-context.util';
 import { type WorkflowRunWorkspaceEntity } from 'src/modules/workflow/common/standard-objects/workflow-run.workspace-entity';
 
 @Command({
   name: 'workflow:delete-workflow-runs',
   description: 'Delete all workflow runs',
 })
-export class DeleteWorkflowRunsCommand extends ActiveOrSuspendedWorkspacesMigrationCommandRunner {
+export class DeleteWorkflowRunsCommand extends ProvisionedWorkspaceCommandRunner {
   private createdBeforeDate: string | undefined;
 
   constructor(
-    @InjectRepository(WorkspaceEntity)
-    protected readonly workspaceRepository: Repository<WorkspaceEntity>,
-    protected readonly twentyORMGlobalManager: TwentyORMGlobalManager,
+    private readonly workspaceOrmManager: WorkspaceOrmManager,
+    protected readonly workspaceIteratorService: WorkspaceIteratorService,
   ) {
-    super(workspaceRepository, twentyORMGlobalManager);
+    super(workspaceIteratorService);
   }
 
   @Option({
@@ -50,31 +46,36 @@ export class DeleteWorkflowRunsCommand extends ActiveOrSuspendedWorkspacesMigrat
     workspaceId,
     options,
   }: RunOnWorkspaceArgs): Promise<void> {
-    try {
-      const workflowRunRepository =
-        await this.twentyORMGlobalManager.getRepositoryForWorkspace<WorkflowRunWorkspaceEntity>(
-          workspaceId,
-          'workflowRun',
-          { shouldBypassPermissionChecks: true },
+    const authContext = buildSystemAuthContext(workspaceId);
+
+    await this.workspaceOrmManager.executeInWorkspaceContext(async () => {
+      try {
+        const workflowRunRepository =
+          this.workspaceOrmManager.getRepository<WorkflowRunWorkspaceEntity>(
+            'workflowRun',
+            { shouldBypassPermissionChecks: true },
+          );
+
+        const createdAtCondition = {
+          createdAt: LessThan(
+            this.createdBeforeDate || new Date().toISOString(),
+          ),
+        };
+
+        const workflowRunCount = await workflowRunRepository.count({
+          where: createdAtCondition,
+        });
+
+        if (!options.dryRun && workflowRunCount > 0) {
+          await workflowRunRepository.delete(createdAtCondition);
+        }
+
+        this.logger.log(
+          `${options.dryRun ? ' (DRY RUN): ' : ''}Deleted ${workflowRunCount} workflow runs`,
         );
-
-      const createdAtCondition = {
-        createdAt: LessThan(this.createdBeforeDate || new Date().toISOString()),
-      };
-
-      const workflowRunCount = await workflowRunRepository.count({
-        where: createdAtCondition,
-      });
-
-      if (!options.dryRun && workflowRunCount > 0) {
-        await workflowRunRepository.delete(createdAtCondition);
+      } catch (error) {
+        this.logger.error('Error while deleting workflowRun', error);
       }
-
-      this.logger.log(
-        `${options.dryRun ? ' (DRY RUN): ' : ''}Deleted ${workflowRunCount} workflow runs`,
-      );
-    } catch (error) {
-      this.logger.error('Error while deleting workflowRun', error);
-    }
+    }, authContext);
   }
 }

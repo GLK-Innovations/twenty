@@ -1,32 +1,10 @@
-import { useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
 import { VisibilityHidden } from '@ui/accessibility';
-import { IconChevronDown } from '@ui/display';
+import { IconChevronDown } from '@ui/icon';
 import { useJsonTreeContextOrThrow } from '@ui/json-visualizer/hooks/useJsonTreeContextOrThrow';
-import { ANIMATION } from '@ui/theme';
-import { motion } from 'framer-motion';
+import { themeCssVariables, useTheme } from '@ui/theme-constants';
+import { clsx } from 'clsx';
 
-const StyledButton = styled(motion.button)<{ variant?: 'blue' | 'red' }>`
-  align-items: center;
-  background-color: ${({ theme, variant }) =>
-    variant === 'red'
-      ? theme.background.danger
-      : theme.background.transparent.lighter};
-  border-color: ${({ theme, variant }) =>
-    variant === 'red' ? theme.border.color.danger : theme.border.color.medium};
-  border-radius: ${({ theme }) => theme.border.radius.sm};
-  border-style: solid;
-  border-width: 1px;
-  display: flex;
-  justify-content: center;
-  padding-inline: ${({ theme }) => theme.spacing(1)};
-  height: 24px;
-  width: 24px;
-  box-sizing: border-box;
-  cursor: pointer;
-`;
-
-const MotionIconChevronDown = motion.create(IconChevronDown);
+import styles from './JsonArrow.module.scss';
 
 export const JsonArrow = ({
   isOpen,
@@ -38,29 +16,28 @@ export const JsonArrow = ({
   variant?: 'blue' | 'red';
 }) => {
   const theme = useTheme();
-
   const { arrowButtonCollapsedLabel, arrowButtonExpandedLabel } =
     useJsonTreeContextOrThrow();
 
+  const iconColor =
+    variant === 'blue'
+      ? themeCssVariables.color.blue
+      : variant === 'red'
+        ? themeCssVariables.font.color.danger
+        : themeCssVariables.font.color.secondary;
+
   return (
-    <StyledButton variant={variant} onClick={onClick}>
+    <button
+      className={clsx(styles.button, variant === 'red' && styles.red)}
+      onClick={onClick}
+    >
       <VisibilityHidden>
         {isOpen ? arrowButtonExpandedLabel : arrowButtonCollapsedLabel}
       </VisibilityHidden>
 
-      <MotionIconChevronDown
-        size={theme.icon.size.md}
-        color={
-          variant === 'blue'
-            ? theme.color.blue
-            : variant === 'red'
-              ? theme.font.color.danger
-              : theme.font.color.secondary
-        }
-        initial={false}
-        animate={{ rotate: isOpen ? 0 : -90 }}
-        transition={{ duration: ANIMATION.duration.normal }}
-      />
-    </StyledButton>
+      <div className={styles.chevron} data-open={isOpen || undefined}>
+        <IconChevronDown size={theme.icon.size.md} color={iconColor} />
+      </div>
+    </button>
   );
 };

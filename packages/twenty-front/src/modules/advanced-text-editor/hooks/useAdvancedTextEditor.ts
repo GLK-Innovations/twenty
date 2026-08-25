@@ -1,39 +1,29 @@
-import { ResizableImage } from '@/advanced-text-editor/extensions/resizable-image/ResizableImage';
-import { UploadImageExtension } from '@/advanced-text-editor/extensions/resizable-image/UploadImageExtension';
-import { SlashCommand } from '@/advanced-text-editor/extensions/slash-command/SlashCommand';
-import { getInitialAdvancedTextEditorContent } from '@/workflow/workflow-variables/utils/getInitialAdvancedTextEditorContent';
-import { VariableTag } from '@/workflow/workflow-variables/utils/variableTag';
-import { t } from '@lingui/core/macro';
-import { Bold } from '@tiptap/extension-bold';
-import { Document } from '@tiptap/extension-document';
-import { HardBreak } from '@tiptap/extension-hard-break';
-import { Heading } from '@tiptap/extension-heading';
-import { Italic } from '@tiptap/extension-italic';
-import { Link } from '@tiptap/extension-link';
-import { ListKit } from '@tiptap/extension-list';
-import { Paragraph } from '@tiptap/extension-paragraph';
-import { Strike } from '@tiptap/extension-strike';
-import { Text } from '@tiptap/extension-text';
-import { Underline } from '@tiptap/extension-underline';
-import { Dropcursor, Placeholder, UndoRedo } from '@tiptap/extensions';
-import { type Editor, useEditor } from '@tiptap/react';
+import { type AdvancedTextEditorProfile } from '@/advanced-text-editor/types/AdvancedTextEditorProfile';
+import { type UploadedImage } from '@/advanced-text-editor/types/UploadedImage';
+import { buildAdvancedTextEditorExtensions } from '@/advanced-text-editor/utils/buildAdvancedTextEditorExtensions';
+import { deserializeAdvancedTextEditorDocument } from '@/advanced-text-editor/utils/deserializeAdvancedTextEditorDocument';
+import { type Content } from '@tiptap/core';
+import { type Editor, type EditorOptions, useEditor } from '@tiptap/react';
 import { type DependencyList, useMemo } from 'react';
 import { isDefined } from 'twenty-shared/utils';
 
 type UseAdvancedTextEditorProps = {
+  profile: AdvancedTextEditorProfile;
   placeholder: string | undefined;
   readonly: boolean | undefined;
   defaultValue: string | undefined | null;
   onUpdate: (editor: Editor) => void;
   onFocus?: (editor: Editor) => void;
   onBlur?: (editor: Editor) => void;
-  onImageUpload?: (file: File) => Promise<string>;
+  onImageUpload?: (file: File) => Promise<UploadedImage>;
   onImageUploadError?: (error: Error, file: File) => void;
-  enableSlashCommand?: boolean;
+  content?: Content;
+  editorProps?: EditorOptions['editorProps'];
 };
 
 export const useAdvancedTextEditor = (
   {
+    profile,
     placeholder,
     readonly,
     defaultValue,
@@ -42,57 +32,44 @@ export const useAdvancedTextEditor = (
     onBlur,
     onImageUpload,
     onImageUploadError,
-    enableSlashCommand,
+    content,
+    editorProps,
   }: UseAdvancedTextEditorProps,
   dependencies?: DependencyList,
 ) => {
   const extensions = useMemo(
-    () => [
-      Document,
-      Paragraph,
-      Text,
-      Placeholder.configure({
-        placeholder: placeholder ?? t`Enter text or Type '/' for commands`,
+    () =>
+      buildAdvancedTextEditorExtensions({
+        profile,
+        context: {
+          onImageUpload,
+          onImageUploadError,
+        },
+        placeholder,
+        readonly,
       }),
-      VariableTag,
-      HardBreak.configure({
-        keepMarks: false,
-      }),
-      UndoRedo,
-      Bold,
-      Italic,
-      Strike,
-      Underline,
-      Heading.configure({
-        levels: [1, 2, 3],
-      }),
-      Link.configure({
-        openOnClick: false,
-      }),
-      ResizableImage,
-      Dropcursor,
-      ListKit,
-      UploadImageExtension.configure({
-        onImageUpload,
-        onImageUploadError,
-      }),
-      ...(!readonly && enableSlashCommand !== false ? [SlashCommand] : []),
-    ],
-    [
-      placeholder,
-      onImageUpload,
-      onImageUploadError,
-      readonly,
-      enableSlashCommand,
-    ],
+    [profile, placeholder, onImageUpload, onImageUploadError, readonly],
   );
+
+  const getEditorContent = (): Content | undefined => {
+    if (isDefined(content)) {
+      return content;
+    }
+
+    if (!isDefined(defaultValue)) {
+      return undefined;
+    }
+
+    return deserializeAdvancedTextEditorDocument({
+      serializedDocument: defaultValue,
+      parseLegacyDocument: profile.parseLegacyDocument,
+    });
+  };
 
   const editor = useEditor(
     {
       extensions,
-      content: isDefined(defaultValue)
-        ? getInitialAdvancedTextEditorContent(defaultValue)
-        : undefined,
+      content: getEditorContent(),
       editable: !readonly,
       onUpdate: ({ editor }) => {
         onUpdate(editor);
@@ -106,6 +83,7 @@ export const useAdvancedTextEditor = (
       editorProps: {
         scrollThreshold: 60,
         scrollMargin: 60,
+        ...editorProps,
       },
       injectCSS: false,
     },

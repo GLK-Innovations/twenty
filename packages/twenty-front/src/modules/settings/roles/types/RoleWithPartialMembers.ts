@@ -3,6 +3,8 @@ import { type Role, type WorkspaceMember } from '~/generated-metadata/graphql';
 export type PartialWorkspaceMember = Omit<
   WorkspaceMember,
   | 'colorScheme'
+  | 'uiScale'
+  | 'openRecordIn'
   | 'locale'
   | 'timeZone'
   | 'dateFormat'
@@ -10,7 +12,6 @@ export type PartialWorkspaceMember = Omit<
   | 'calendarStartDay'
   | 'createdAt'
   | 'updatedAt'
-  | 'userId'
 >;
 
 export type RoleWithPartialMembers = Omit<Role, 'workspaceMembers'> & {

@@ -1,25 +1,69 @@
+import { type MetadataEntity } from 'src/engine/metadata-modules/flat-entity/types/metadata-entity.type';
+import { fromEntityToScalarEntity } from 'src/engine/metadata-modules/flat-entity/utils/from-entity-to-scalar-entity.util';
 import { type FlatRole } from 'src/engine/metadata-modules/flat-role/types/flat-role.type';
-import { type RoleEntity } from 'src/engine/metadata-modules/role/role.entity';
+import { type EntityManyToOneIdByUniversalIdentifierMaps } from 'src/engine/workspace-cache/types/entity-many-to-one-id-by-universal-identifier-maps.type';
+import { type EntityWithRegroupedOneToManyRelations } from 'src/engine/workspace-cache/types/entity-with-regrouped-one-to-many-relations.type';
+import { type RegroupedEntity } from 'src/engine/workspace-cache/utils/regroup-entities-by-related-entity-id';
+import { resolveManyToOneRelationIdsToUniversalIdentifiers } from 'src/engine/workspace-manager/workspace-migration/universal-flat-entity/utils/resolve-many-to-one-relation-ids-to-universal-identifiers.util';
 
-export const fromRoleEntityToFlatRole = (role: RoleEntity): FlatRole => {
+type FromRoleEntityToFlatRoleArgs = {
+  entity: Omit<
+    EntityWithRegroupedOneToManyRelations<MetadataEntity<'role'>>,
+    'objectPermissions' | 'rolePermissionFlags' | 'fieldPermissions'
+  > & {
+    objectPermissions: RegroupedEntity[];
+    rolePermissionFlags: RegroupedEntity[];
+    fieldPermissions: RegroupedEntity[];
+  };
+} & EntityManyToOneIdByUniversalIdentifierMaps<'role'>;
+
+export const fromRoleEntityToFlatRole = (
+  args: FromRoleEntityToFlatRoleArgs,
+): FlatRole => {
+  const { entity: roleEntity } = args;
+
+  const roleScalarEntity = fromEntityToScalarEntity({
+    metadataName: 'role',
+    entity: roleEntity,
+  });
+
+  const relationUniversalIdentifiers =
+    resolveManyToOneRelationIdsToUniversalIdentifiers({
+      metadataName: 'role',
+      ...args,
+    });
+
   return {
-    id: role.id,
-    standardId: role.standardId,
-    label: role.label,
-    description: role.description,
-    icon: role.icon,
-    isEditable: role.isEditable,
-    canUpdateAllSettings: role.canUpdateAllSettings,
-    canAccessAllTools: role.canAccessAllTools,
-    canReadAllObjectRecords: role.canReadAllObjectRecords,
-    canUpdateAllObjectRecords: role.canUpdateAllObjectRecords,
-    canSoftDeleteAllObjectRecords: role.canSoftDeleteAllObjectRecords,
-    canDestroyAllObjectRecords: role.canDestroyAllObjectRecords,
-    canBeAssignedToUsers: role.canBeAssignedToUsers,
-    canBeAssignedToAgents: role.canBeAssignedToAgents,
-    canBeAssignedToApiKeys: role.canBeAssignedToApiKeys,
-    workspaceId: role.workspaceId,
-    universalIdentifier: role.standardId || role.id,
-    applicationId: role.applicationId ?? null,
+    ...roleScalarEntity,
+    ...relationUniversalIdentifiers,
+    roleTargetIds: roleEntity.roleTargets.map(({ id }) => id),
+    objectPermissionIds: roleEntity.objectPermissions.map(({ id }) => id),
+    rolePermissionFlagIds: roleEntity.rolePermissionFlags.map(({ id }) => id),
+    fieldPermissionIds: roleEntity.fieldPermissions.map(({ id }) => id),
+    rowLevelPermissionPredicateIds: roleEntity.rowLevelPermissionPredicates.map(
+      ({ id }) => id,
+    ),
+    rowLevelPermissionPredicateGroupIds:
+      roleEntity.rowLevelPermissionPredicateGroups.map(({ id }) => id),
+    roleTargetUniversalIdentifiers: roleEntity.roleTargets.map(
+      ({ universalIdentifier }) => universalIdentifier,
+    ),
+    objectPermissionUniversalIdentifiers: roleEntity.objectPermissions.map(
+      ({ universalIdentifier }) => universalIdentifier,
+    ),
+    rolePermissionFlagUniversalIdentifiers: roleEntity.rolePermissionFlags.map(
+      ({ universalIdentifier }) => universalIdentifier,
+    ),
+    fieldPermissionUniversalIdentifiers: roleEntity.fieldPermissions.map(
+      ({ universalIdentifier }) => universalIdentifier,
+    ),
+    rowLevelPermissionPredicateUniversalIdentifiers:
+      roleEntity.rowLevelPermissionPredicates.map(
+        ({ universalIdentifier }) => universalIdentifier,
+      ),
+    rowLevelPermissionPredicateGroupUniversalIdentifiers:
+      roleEntity.rowLevelPermissionPredicateGroups.map(
+        ({ universalIdentifier }) => universalIdentifier,
+      ),
   };
 };

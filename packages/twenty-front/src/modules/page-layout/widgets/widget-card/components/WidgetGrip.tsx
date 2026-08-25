@@ -1,42 +1,80 @@
-import { useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
 import { motion } from 'framer-motion';
-import { IconGripVertical } from 'twenty-ui/display';
+import { isDefined } from 'twenty-shared/utils';
+import { IconGripVertical } from 'twenty-ui/icon';
+import { themeCssVariables, ThemeContext } from 'twenty-ui/theme-constants';
+import {
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  useContext,
+  useState,
+} from 'react';
 
-const StyledGripContainer = styled(motion.div)`
-  width: 20px;
-  height: 20px;
-  display: flex;
+const DRAG_CLICK_SUPPRESSION_DISTANCE = 5;
+
+const StyledGripContainerBase = styled.div`
   align-items: center;
-  justify-content: center;
-  cursor: grab;
-  user-select: none;
-  border-radius: ${({ theme }) => theme.border.radius.sm};
+  border-radius: ${themeCssVariables.border.radius.sm};
   box-sizing: border-box;
+  cursor: grab;
+  display: flex;
+  height: 20px;
+  justify-content: center;
+  user-select: none;
+  width: 20px;
 
   &:active {
+    background: ${themeCssVariables.background.tertiary};
     cursor: grabbing;
-    background: ${({ theme }) => theme.background.tertiary};
   }
 
   &:hover {
-    background: ${({ theme }) => theme.background.tertiary};
+    background: ${themeCssVariables.background.tertiary};
   }
 `;
+const StyledGripContainer = motion.create(StyledGripContainerBase);
 
 type WidgetGripProps = {
   className?: string;
-  onClick?: (e: React.MouseEvent) => void;
 };
 
-export const WidgetGrip = ({ className, onClick }: WidgetGripProps) => {
-  const theme = useTheme();
+export const WidgetGrip = ({ className }: WidgetGripProps) => {
+  const { theme } = useContext(ThemeContext);
+  // Only pointerdown is tracked: the compatibility mousedown that touch fires
+  // afterwards reports the release point, which would hide every drag.
+  const [pointerDownPosition, setPointerDownPosition] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+
+  const handlePointerDown = (event: ReactPointerEvent) => {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setPointerDownPosition({
+      x: event.clientX,
+      y: event.clientY,
+    });
+  };
+
+  const handleClick = (event: ReactMouseEvent) => {
+    setPointerDownPosition(null);
+
+    if (
+      isDefined(pointerDownPosition) &&
+      Math.hypot(
+        event.clientX - pointerDownPosition.x,
+        event.clientY - pointerDownPosition.y,
+      ) > DRAG_CLICK_SUPPRESSION_DISTANCE
+    ) {
+      event.stopPropagation();
+    }
+  };
 
   return (
     <StyledGripContainer
       layout
       className={className}
-      onClick={onClick}
+      onPointerDown={handlePointerDown}
+      onClick={handleClick}
       initial={{ width: 0, opacity: 0 }}
       animate={{ width: 20, opacity: 1 }}
       exit={{ width: 0, opacity: 0 }}

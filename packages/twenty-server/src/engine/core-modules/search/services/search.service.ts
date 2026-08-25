@@ -1,10 +1,22 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
 import { isNonEmptyString } from '@sniptt/guards';
 import chunk from 'lodash.chunk';
-import { FieldMetadataType, ObjectRecord } from 'twenty-shared/types';
-import { getLogoUrlFromDomainName } from 'twenty-shared/utils';
+import { OBJECTS_WITH_CHANNEL_VISIBILITY_CONSTRAINTS } from 'twenty-shared/constants';
+import {
+  compositeTypeDefinitions,
+  FieldMetadataType,
+  FileFolder,
+  ObjectRecord,
+} from 'twenty-shared/types';
+import {
+  escapeForIlike,
+  getLinkFaviconUrl,
+  isDefined,
+} from 'twenty-shared/utils';
 import { Brackets, type ObjectLiteral } from 'typeorm';
+
+import { type APP_LOCALES } from 'twenty-shared/translations';
 
 import { type ObjectRecordFilter } from 'src/engine/api/graphql/workspace-query-builder/interfaces/object-record.interface';
 
@@ -13,7 +25,9 @@ import {
   decodeCursor,
   encodeCursorData,
 } from 'src/engine/api/graphql/graphql-query-runner/utils/cursors.util';
-import { FileService } from 'src/engine/core-modules/file/services/file.service';
+import { isQueryCanceledError } from 'src/engine/api/graphql/workspace-query-runner/utils/is-query-canceled-error.util';
+import { FileUrlService } from 'src/engine/core-modules/file/file-url/file-url.service';
+import { extractFileIdFromUrl } from 'src/engine/core-modules/file/files-field/utils/extract-file-id-from-url.util';
 import { STANDARD_OBJECTS_BY_PRIORITY_RANK } from 'src/engine/core-modules/search/constants/standard-objects-by-priority-rank';
 import { type ObjectRecordFilterInput } from 'src/engine/core-modules/search/dtos/object-record-filter-input';
 import { type SearchArgs } from 'src/engine/core-modules/search/dtos/search-args';
@@ -26,11 +40,23 @@ import {
 } from 'src/engine/core-modules/search/exceptions/search.exception';
 import { type RecordsWithObjectMetadataItem } from 'src/engine/core-modules/search/types/records-with-object-metadata-item';
 import { formatSearchTerms } from 'src/engine/core-modules/search/utils/format-search-terms';
-import { SEARCH_VECTOR_FIELD } from 'src/engine/metadata-modules/constants/search-vector-field.constants';
-import { type ObjectMetadataItemWithFieldMaps } from 'src/engine/metadata-modules/types/object-metadata-item-with-field-maps';
-import { generateObjectMetadataMaps } from 'src/engine/metadata-modules/utils/generate-object-metadata-maps.util';
-import { type WorkspaceRepository } from 'src/engine/twenty-orm/repository/workspace.repository';
-import { TwentyORMManager } from 'src/engine/twenty-orm/twenty-orm.manager';
+import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
+import { type IDataloaders } from 'src/engine/dataloaders/dataloader.interface';
+import { computeCompositeColumnName } from 'src/engine/metadata-modules/field-metadata/utils/compute-column-name.util';
+import { isCompositeFieldMetadataType } from 'src/engine/metadata-modules/field-metadata/utils/is-composite-field-metadata-type.util';
+import { type FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/flat-entity-maps.type';
+import { findFlatEntityByIdInFlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/utils/find-flat-entity-by-id-in-flat-entity-maps.util';
+import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
+import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
+import { getEffectiveImageIdentifierFieldMetadataId } from 'src/engine/metadata-modules/object-metadata/utils/get-effective-image-identifier-field-metadata-id.util';
+import { SEARCH_VECTOR_FIELD } from 'src/engine/metadata-modules/search-field-metadata/constants/search-vector-field.constants';
+import { resolveEffectiveEntityProperty } from 'src/engine/metadata-modules/utils/resolve-effective-entity-property.util';
+import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
+import { type WorkspaceRepository } from 'src/engine/twenty-orm/repository/workspace-repository';
+import { getWorkspaceContext } from 'src/engine/twenty-orm/storage/orm-workspace-context.storage';
+import { resolveRolePermissionConfig } from 'src/engine/twenty-orm/utils/resolve-role-permission-config.util';
+import { type RolePermissionConfig } from 'src/engine/twenty-orm/types/role-permission-config';
+import { ApplicationTranslationCatalogService } from 'src/engine/metadata-modules/application-translation-catalog/services/application-translation-catalog.service';
 
 type LastRanks = { tsRankCD: number; tsRank: number };
 
@@ -43,13 +69,18 @@ const OBJECT_METADATA_ITEMS_CHUNK_SIZE = 5;
 
 @Injectable()
 export class SearchService {
+  private readonly logger = new Logger(SearchService.name);
+
   constructor(
-    private readonly twentyORMManager: TwentyORMManager,
-    private readonly fileService: FileService,
+    private readonly workspaceOrmManager: WorkspaceOrmManager,
+    private readonly fileUrlService: FileUrlService,
+    private readonly twentyConfigService: TwentyConfigService,
+    private readonly applicationTranslationCatalogService: ApplicationTranslationCatalogService,
   ) {}
 
   async getAllRecordsWithObjectMetadataItems({
-    objectMetadataItemWithFieldMaps,
+    flatObjectMetadatas,
+    flatFieldMetadataMaps,
     includedObjectNameSingulars,
     excludedObjectNameSingulars,
     searchInput,
@@ -57,10 +88,11 @@ export class SearchService {
     filter,
     after,
   }: {
-    objectMetadataItemWithFieldMaps: ObjectMetadataItemWithFieldMaps[];
+    flatObjectMetadatas: FlatObjectMetadata[];
+    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
   } & SearchArgs) {
     const filteredObjectMetadataItems = this.filterObjectMetadataItems({
-      objectMetadataItemWithFieldMaps,
+      flatObjectMetadatas,
       includedObjectNameSingulars: includedObjectNameSingulars ?? [],
       excludedObjectNameSingulars: excludedObjectNameSingulars ?? [],
     });
@@ -75,24 +107,40 @@ export class SearchService {
 
     for (const objectMetadataItemChunk of filteredObjectMetadataItemsChunks) {
       const recordsWithObjectMetadataItems = await Promise.all(
-        objectMetadataItemChunk.map(async (objectMetadataItem) => {
-          const repository =
-            await this.twentyORMManager.getRepository<ObjectRecord>(
-              objectMetadataItem.nameSingular,
-            );
+        objectMetadataItemChunk.map(async (flatObjectMetadata) => {
+          return this.workspaceOrmManager.executeInWorkspaceContext(
+            async () => {
+              const context = getWorkspaceContext();
+              const rolePermissionConfig =
+                resolveRolePermissionConfig({
+                  authContext: context.authContext,
+                  userWorkspaceRoleMap: context.userWorkspaceRoleMap,
+                  apiKeyRoleMap: context.apiKeyRoleMap,
+                }) ?? undefined;
 
-          return {
-            objectMetadataItem,
-            records: await this.buildSearchQueryAndGetRecords({
-              entityManager: repository,
-              objectMetadataItem,
-              searchTerms: formatSearchTerms(searchInput, 'and'),
-              searchTermsOr: formatSearchTerms(searchInput, 'or'),
-              limit: limit as number,
-              filter: filter ?? ({} as ObjectRecordFilter),
-              after,
-            }),
-          };
+              const repository =
+                this.workspaceOrmManager.getRepository<ObjectRecord>(
+                  flatObjectMetadata.nameSingular,
+                  rolePermissionConfig,
+                );
+
+              return {
+                objectMetadataItem: flatObjectMetadata,
+                records: await this.buildSearchQueryAndGetRecordsWithFallback({
+                  entityManager: repository,
+                  rolePermissionConfig,
+                  flatObjectMetadata,
+                  flatFieldMetadataMaps,
+                  searchInput,
+                  searchTerms: formatSearchTerms(searchInput, 'and'),
+                  searchTermsOr: formatSearchTerms(searchInput, 'or'),
+                  limit: limit as number,
+                  filter: filter ?? ({} as ObjectRecordFilter),
+                  after,
+                }),
+              };
+            },
+          );
         }),
       );
 
@@ -103,24 +151,43 @@ export class SearchService {
   }
 
   filterObjectMetadataItems({
-    objectMetadataItemWithFieldMaps,
+    flatObjectMetadatas,
     includedObjectNameSingulars,
     excludedObjectNameSingulars,
   }: {
-    objectMetadataItemWithFieldMaps: ObjectMetadataItemWithFieldMaps[];
+    flatObjectMetadatas: FlatObjectMetadata[];
     includedObjectNameSingulars: string[];
     excludedObjectNameSingulars: string[];
   }) {
-    return objectMetadataItemWithFieldMaps.filter(
-      ({ nameSingular, isSearchable }) => {
+    const hasExplicitInclusion = includedObjectNameSingulars.length > 0;
+
+    return flatObjectMetadatas.filter(
+      ({ nameSingular, isSearchable, isActive }) => {
+        if (!isActive) {
+          return false;
+        }
+
+        if (hasExplicitInclusion) {
+          if (
+            OBJECTS_WITH_CHANNEL_VISIBILITY_CONSTRAINTS.includes(
+              nameSingular as (typeof OBJECTS_WITH_CHANNEL_VISIBILITY_CONSTRAINTS)[number],
+            )
+          ) {
+            return false;
+          }
+
+          return (
+            includedObjectNameSingulars.includes(nameSingular) &&
+            !excludedObjectNameSingulars.includes(nameSingular)
+          );
+        }
+
         if (!isSearchable) {
           return false;
         }
+
         if (excludedObjectNameSingulars.includes(nameSingular)) {
           return false;
-        }
-        if (includedObjectNameSingulars.length > 0) {
-          return includedObjectNameSingulars.includes(nameSingular);
         }
 
         return true;
@@ -128,9 +195,19 @@ export class SearchService {
     );
   }
 
-  async buildSearchQueryAndGetRecords<Entity extends ObjectLiteral>({
+  // Runs a fast tsvector query first (uses GIN index). If tsvector returns zero
+  // results for an object type on the first page, falls back to ILIKE on the
+  // searchVector text to catch cases where tokenization fails (e.g. CJK text).
+  // Skipped when tsvector finds any results (partial results mean the data just
+  // has fewer matches, not a tokenization issue) and on paginated requests.
+  async buildSearchQueryAndGetRecordsWithFallback<
+    Entity extends ObjectLiteral,
+  >({
     entityManager,
-    objectMetadataItem,
+    rolePermissionConfig,
+    flatObjectMetadata,
+    flatFieldMetadataMaps,
+    searchInput,
     searchTerms,
     searchTermsOr,
     limit,
@@ -138,41 +215,100 @@ export class SearchService {
     after,
   }: {
     entityManager: WorkspaceRepository<Entity>;
-    objectMetadataItem: ObjectMetadataItemWithFieldMaps;
+    rolePermissionConfig?: RolePermissionConfig;
+    flatObjectMetadata: FlatObjectMetadata;
+    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
+    searchInput: string;
     searchTerms: string;
     searchTermsOr: string;
     limit: number;
     filter: ObjectRecordFilterInput;
     after?: string;
   }) {
-    const queryBuilder = entityManager.createQueryBuilder();
+    const tsvectorResults = await this.buildSearchQueryAndGetRecords({
+      entityManager,
+      flatObjectMetadata,
+      flatFieldMetadataMaps,
+      searchTerms,
+      searchTermsOr,
+      limit,
+      filter,
+      after,
+    });
+
+    if (
+      tsvectorResults.length > 0 ||
+      !isNonEmptyString(searchInput.trim()) ||
+      isDefined(after)
+    ) {
+      return tsvectorResults;
+    }
+
+    const fallbackResults = await this.buildIlikeFallbackQuery({
+      entityManager,
+      rolePermissionConfig,
+      flatObjectMetadata,
+      flatFieldMetadataMaps,
+      searchInput,
+      limit: limit + 1,
+      filter,
+    });
+
+    return [...tsvectorResults, ...fallbackResults];
+  }
+
+  async buildSearchQueryAndGetRecords<Entity extends ObjectLiteral>({
+    entityManager,
+    flatObjectMetadata,
+    flatFieldMetadataMaps,
+    searchTerms,
+    searchTermsOr,
+    limit,
+    filter,
+    after,
+  }: {
+    entityManager: WorkspaceRepository<Entity>;
+    flatObjectMetadata: FlatObjectMetadata;
+    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
+    searchTerms: string;
+    searchTermsOr: string;
+    limit: number;
+    filter: ObjectRecordFilterInput;
+    after?: string;
+  }) {
+    const queryBuilder = entityManager.createQueryBuilder(
+      flatObjectMetadata.nameSingular,
+    );
+
+    const { flatObjectMetadataMaps } = entityManager.internalContext;
 
     const queryParser = new GraphqlQueryParser(
-      objectMetadataItem,
-      generateObjectMetadataMaps([
-        {
-          ...objectMetadataItem,
-          fields: Object.values(objectMetadataItem.fieldsById),
-        },
-      ]),
+      flatObjectMetadata,
+      flatObjectMetadataMaps,
+      flatFieldMetadataMaps,
     );
 
     queryParser.applyFilterToBuilder(
       queryBuilder,
-      objectMetadataItem.nameSingular,
+      flatObjectMetadata.nameSingular,
       filter,
     );
 
     queryParser.applyDeletedAtToBuilder(queryBuilder, filter);
 
-    const imageIdentifierField =
-      this.getImageIdentifierColumn(objectMetadataItem);
+    const imageIdentifierColumns = this.getImageIdentifierColumns(
+      flatObjectMetadata,
+      flatFieldMetadataMaps,
+    );
 
     const fieldsToSelect = [
       'id',
-      ...this.getLabelIdentifierColumns(objectMetadataItem),
-      ...(imageIdentifierField ? [imageIdentifierField] : []),
-    ].map((field) => `"${field}"`);
+      ...this.getLabelIdentifierColumns(
+        flatObjectMetadata,
+        flatFieldMetadataMaps,
+      ),
+      ...imageIdentifierColumns,
+    ];
 
     const tsRankCDExpr = `ts_rank_cd("${SEARCH_VECTOR_FIELD.name}", to_tsquery('simple', public.unaccent_immutable(:searchTerms)))`;
 
@@ -180,13 +316,26 @@ export class SearchService {
 
     const cursorWhereCondition = this.computeCursorWhereCondition({
       after,
-      objectMetadataNameSingular: objectMetadataItem.nameSingular,
+      objectMetadataNameSingular: flatObjectMetadata.nameSingular,
       tsRankExpr,
       tsRankCDExpr,
     });
 
+    const [firstField, ...remainingFields] = fieldsToSelect;
+
+    queryBuilder.select(
+      `"${flatObjectMetadata.nameSingular}"."${firstField}"`,
+      firstField,
+    );
+
+    for (const field of remainingFields) {
+      queryBuilder.addSelect(
+        `"${flatObjectMetadata.nameSingular}"."${field}"`,
+        field,
+      );
+    }
+
     queryBuilder
-      .select(fieldsToSelect)
       .addSelect(tsRankCDExpr, 'tsRankCD')
       .addSelect(tsRankExpr, 'tsRank');
 
@@ -221,7 +370,133 @@ export class SearchService {
       .setParameter('searchTerms', searchTerms)
       .setParameter('searchTermsOr', searchTermsOr)
       .take(limit + 1) // We take one more to check if hasNextPage is true
-      .getRawMany();
+      .getRawMany<ObjectRecord & { tsRank: number; tsRankCD: number }>();
+  }
+
+  private async buildIlikeFallbackQuery<Entity extends ObjectLiteral>({
+    entityManager,
+    rolePermissionConfig,
+    flatObjectMetadata,
+    flatFieldMetadataMaps,
+    searchInput,
+    limit,
+    filter,
+  }: {
+    entityManager: WorkspaceRepository<Entity>;
+    rolePermissionConfig?: RolePermissionConfig;
+    flatObjectMetadata: FlatObjectMetadata;
+    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
+    searchInput: string;
+    limit: number;
+    filter: ObjectRecordFilterInput;
+  }) {
+    const timeoutMs = this.twentyConfigService.get(
+      'SEARCH_ILIKE_FALLBACK_TIMEOUT_MS',
+    );
+
+    try {
+      return await this.workspaceOrmManager.runInWorkspaceTransaction(
+        async (transactionScope) => {
+          await transactionScope.executeRawQuery(
+            `SELECT set_config('statement_timeout', $1, true)`,
+            [String(timeoutMs)],
+          );
+
+          const repository = transactionScope.getRepository<Entity>(
+            flatObjectMetadata.nameSingular,
+            rolePermissionConfig,
+          );
+
+          const queryBuilder = repository.createQueryBuilder(
+            flatObjectMetadata.nameSingular,
+          );
+
+          const { flatObjectMetadataMaps } = repository.internalContext;
+
+          const queryParser = new GraphqlQueryParser(
+            flatObjectMetadata,
+            flatObjectMetadataMaps,
+            flatFieldMetadataMaps,
+          );
+
+          queryParser.applyFilterToBuilder(
+            queryBuilder,
+            flatObjectMetadata.nameSingular,
+            filter,
+          );
+
+          queryParser.applyDeletedAtToBuilder(queryBuilder, filter);
+
+          const imageIdentifierColumns = this.getImageIdentifierColumns(
+            flatObjectMetadata,
+            flatFieldMetadataMaps,
+          );
+
+          const fieldsToSelect = [
+            'id',
+            ...this.getLabelIdentifierColumns(
+              flatObjectMetadata,
+              flatFieldMetadataMaps,
+            ),
+            ...imageIdentifierColumns,
+          ];
+
+          const [firstField, ...remainingFields] = fieldsToSelect;
+
+          queryBuilder.select(
+            `"${flatObjectMetadata.nameSingular}"."${firstField}"`,
+            firstField,
+          );
+
+          for (const field of remainingFields) {
+            queryBuilder.addSelect(
+              `"${flatObjectMetadata.nameSingular}"."${field}"`,
+              field,
+            );
+          }
+
+          const searchWords = searchInput
+            .trim()
+            .split(/\s+/)
+            .filter(isNonEmptyString);
+
+          searchWords.forEach((word, index) => {
+            const paramName = `ilikeFallback${index}`;
+
+            queryBuilder.andWhere(
+              `public.unaccent_immutable("${SEARCH_VECTOR_FIELD.name}"::text) ILIKE public.unaccent_immutable(:${paramName})`,
+              { [paramName]: `%${escapeForIlike(word)}%` },
+            );
+          });
+
+          const rawResults = await queryBuilder
+            .orderBy(`"${flatObjectMetadata.nameSingular}"."id"`, 'ASC')
+            .take(limit)
+            .getRawMany<ObjectRecord>();
+
+          return rawResults.map((record) => ({
+            ...record,
+            tsRankCD: 0,
+            tsRank: 0,
+          }));
+        },
+      );
+    } catch (error) {
+      if (isQueryCanceledError(error)) {
+        this.logger.warn(
+          `Search ILIKE fallback exceeded ${timeoutMs}ms timeout`,
+          {
+            workspaceId: entityManager.internalContext.workspaceId,
+            objectNameSingular: flatObjectMetadata.nameSingular,
+            searchInputLength: searchInput.length,
+          },
+        );
+
+        return [];
+      }
+
+      throw error;
+    }
   }
 
   computeCursorWhereCondition({
@@ -273,19 +548,27 @@ export class SearchService {
   }
 
   getLabelIdentifierColumns(
-    objectMetadataItem: ObjectMetadataItemWithFieldMaps,
+    flatObjectMetadata: FlatObjectMetadata,
+    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>,
   ) {
-    if (!objectMetadataItem.labelIdentifierFieldMetadataId) {
+    if (!flatObjectMetadata.labelIdentifierFieldMetadataId) {
       throw new SearchException(
         'Label identifier field not found',
         SearchExceptionCode.LABEL_IDENTIFIER_FIELD_NOT_FOUND,
       );
     }
 
-    const labelIdentifierField =
-      objectMetadataItem.fieldsById[
-        objectMetadataItem.labelIdentifierFieldMetadataId
-      ];
+    const labelIdentifierField = findFlatEntityByIdInFlatEntityMaps({
+      flatEntityId: flatObjectMetadata.labelIdentifierFieldMetadataId,
+      flatEntityMaps: flatFieldMetadataMaps,
+    });
+
+    if (!isDefined(labelIdentifierField)) {
+      throw new SearchException(
+        'Label identifier field not found',
+        SearchExceptionCode.LABEL_IDENTIFIER_FIELD_NOT_FOUND,
+      );
+    }
 
     if (labelIdentifierField.type === FieldMetadataType.FULL_NAME) {
       return [
@@ -294,62 +577,165 @@ export class SearchService {
       ];
     }
 
-    return [
-      objectMetadataItem.fieldsById[
-        objectMetadataItem.labelIdentifierFieldMetadataId
-      ].name,
-    ];
+    return [labelIdentifierField.name];
   }
 
   getLabelIdentifierValue(
     record: ObjectRecord,
-    objectMetadataItem: ObjectMetadataItemWithFieldMaps,
+    flatObjectMetadata: FlatObjectMetadata,
+    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>,
   ): string {
-    const labelIdentifierFields =
-      this.getLabelIdentifierColumns(objectMetadataItem);
+    const labelIdentifierFields = this.getLabelIdentifierColumns(
+      flatObjectMetadata,
+      flatFieldMetadataMaps,
+    );
 
     return labelIdentifierFields.map((field) => record[field]).join(' ');
   }
 
-  getImageIdentifierColumn(
-    objectMetadataItem: ObjectMetadataItemWithFieldMaps,
-  ) {
-    if (objectMetadataItem.nameSingular === 'company') {
-      return 'domainNamePrimaryLinkUrl';
+  private getEffectiveImageIdentifierFieldMetadata(
+    flatObjectMetadata: FlatObjectMetadata,
+    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>,
+  ): FlatFieldMetadata | undefined {
+    const imageIdentifierFieldMetadataId =
+      getEffectiveImageIdentifierFieldMetadataId(flatObjectMetadata);
+
+    if (!isDefined(imageIdentifierFieldMetadataId)) {
+      return undefined;
     }
 
-    if (!objectMetadataItem.imageIdentifierFieldMetadataId) {
-      return null;
-    }
-
-    return objectMetadataItem.fieldsById[
-      objectMetadataItem.imageIdentifierFieldMetadataId
-    ].name;
-  }
-
-  private getImageUrlWithToken(avatarUrl: string, workspaceId: string): string {
-    return this.fileService.signFileUrl({
-      url: avatarUrl,
-      workspaceId,
+    return findFlatEntityByIdInFlatEntityMaps({
+      flatEntityId: imageIdentifierFieldMetadataId,
+      flatEntityMaps: flatFieldMetadataMaps,
     });
   }
 
-  getImageIdentifierValue(
-    record: ObjectRecord,
-    objectMetadataItem: ObjectMetadataItemWithFieldMaps,
-    workspaceId: string,
-  ): string {
-    const imageIdentifierField =
-      this.getImageIdentifierColumn(objectMetadataItem);
-
-    if (objectMetadataItem.nameSingular === 'company') {
-      return getLogoUrlFromDomainName(record.domainNamePrimaryLinkUrl) || '';
+  getImageIdentifierColumns(
+    flatObjectMetadata: FlatObjectMetadata,
+    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>,
+  ): string[] {
+    if (flatObjectMetadata.nameSingular === 'workspaceMember') {
+      return ['avatarUrl'];
     }
 
-    return imageIdentifierField &&
-      isNonEmptyString(record[imageIdentifierField])
-      ? this.getImageUrlWithToken(record[imageIdentifierField], workspaceId)
-      : '';
+    const imageIdentifierField = this.getEffectiveImageIdentifierFieldMetadata(
+      flatObjectMetadata,
+      flatFieldMetadataMaps,
+    );
+
+    if (!isDefined(imageIdentifierField)) {
+      return [];
+    }
+
+    const imageIdentifierCompositeType = isCompositeFieldMetadataType(
+      imageIdentifierField.type,
+    )
+      ? compositeTypeDefinitions.get(imageIdentifierField.type)
+      : undefined;
+
+    if (isDefined(imageIdentifierCompositeType)) {
+      return imageIdentifierCompositeType.properties
+        .filter(
+          (compositeProperty) => compositeProperty.name === 'primaryLinkUrl',
+        )
+        .map((compositeProperty) =>
+          computeCompositeColumnName(
+            imageIdentifierField.name,
+            compositeProperty,
+          ),
+        );
+    }
+
+    return [imageIdentifierField.name];
+  }
+
+  private async getImageUrlWithToken(
+    avatarFileId: string,
+    fileFolder: FileFolder,
+    workspaceId: string,
+  ): Promise<string> {
+    return this.fileUrlService.signFileByIdUrl({
+      fileId: avatarFileId,
+      workspaceId,
+      fileFolder,
+    });
+  }
+
+  async getImageIdentifierValue(
+    record: ObjectRecord,
+    flatObjectMetadata: FlatObjectMetadata,
+    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>,
+    workspaceId: string,
+  ): Promise<string> {
+    if (flatObjectMetadata.nameSingular === 'workspaceMember') {
+      const avatarFileId = extractFileIdFromUrl(
+        record.avatarUrl,
+        FileFolder.CorePicture,
+      );
+
+      if (!isDefined(avatarFileId)) {
+        return '';
+      }
+
+      return this.getImageUrlWithToken(
+        avatarFileId,
+        FileFolder.CorePicture,
+        workspaceId,
+      );
+    }
+
+    const imageIdentifierField = this.getEffectiveImageIdentifierFieldMetadata(
+      flatObjectMetadata,
+      flatFieldMetadataMaps,
+    );
+
+    if (!isDefined(imageIdentifierField)) {
+      return '';
+    }
+
+    switch (imageIdentifierField.type) {
+      case FieldMetadataType.FILES: {
+        const avatarFileId = record[imageIdentifierField.name]?.[0]?.fileId;
+
+        if (!isNonEmptyString(avatarFileId)) {
+          return '';
+        }
+
+        return this.getImageUrlWithToken(
+          avatarFileId,
+          FileFolder.FilesField,
+          workspaceId,
+        );
+      }
+      case FieldMetadataType.LINKS: {
+        if (!this.twentyConfigService.get('ALLOW_REQUESTS_TO_TWENTY_ICONS')) {
+          return '';
+        }
+
+        const primaryLinkUrlProperty = compositeTypeDefinitions
+          .get(FieldMetadataType.LINKS)
+          ?.properties.find((property) => property.name === 'primaryLinkUrl');
+
+        if (!isDefined(primaryLinkUrlProperty)) {
+          return '';
+        }
+
+        const primaryLinkUrl =
+          record[
+            computeCompositeColumnName(
+              imageIdentifierField.name,
+              primaryLinkUrlProperty,
+            )
+          ];
+
+        return isNonEmptyString(primaryLinkUrl)
+          ? getLinkFaviconUrl(primaryLinkUrl) || ''
+          : '';
+      }
+      default: {
+        return '';
+      }
+    }
   }
 
   computeEdges({
@@ -389,27 +775,69 @@ export class SearchService {
     return recordEdges;
   }
 
-  computeSearchObjectResults({
+  async computeSearchObjectResults({
     recordsWithObjectMetadataItems,
+    flatFieldMetadataMaps,
     workspaceId,
     limit,
     after,
+    loaders,
+    locale,
   }: {
     recordsWithObjectMetadataItems: RecordsWithObjectMetadataItem[];
+    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
     workspaceId: string;
     limit: number;
     after?: string;
-  }): SearchResultConnectionDTO {
-    const searchRecords = recordsWithObjectMetadataItems.flatMap(
+    loaders: IDataloaders;
+    locale: keyof typeof APP_LOCALES | undefined;
+  }): Promise<SearchResultConnectionDTO> {
+    const objectLabelSingularByObjectMetadataId = new Map(
+      await Promise.all(
+        recordsWithObjectMetadataItems.map(
+          async ({ objectMetadataItem }) =>
+            [
+              objectMetadataItem.id,
+              resolveEffectiveEntityProperty({
+                metadataName: 'objectMetadata',
+                baseValue: objectMetadataItem.labelSingular,
+                overrides: objectMetadataItem.overrides,
+                property: 'labelSingular',
+                i18nContext:
+                  await this.applicationTranslationCatalogService.buildEffectiveEntityI18nContext(
+                    {
+                      applicationId:
+                        objectMetadataItem.applicationId ?? undefined,
+                      loaders,
+                      locale,
+                      workspaceId,
+                    },
+                  ),
+              }),
+            ] as const,
+        ),
+      ),
+    );
+
+    const recordPromises = recordsWithObjectMetadataItems.flatMap(
       ({ objectMetadataItem, records }) => {
-        return records.map((record) => {
+        return records.map(async (record) => {
           return {
             recordId: record.id,
             objectNameSingular: objectMetadataItem.nameSingular,
-            label: this.getLabelIdentifierValue(record, objectMetadataItem),
-            imageUrl: this.getImageIdentifierValue(
+            objectLabelSingular:
+              objectLabelSingularByObjectMetadataId.get(
+                objectMetadataItem.id,
+              ) ?? objectMetadataItem.labelSingular,
+            label: this.getLabelIdentifierValue(
               record,
               objectMetadataItem,
+              flatFieldMetadataMaps,
+            ),
+            imageUrl: await this.getImageIdentifierValue(
+              record,
+              objectMetadataItem,
+              flatFieldMetadataMaps,
               workspaceId,
             ),
             tsRankCD: record.tsRankCD,
@@ -418,6 +846,7 @@ export class SearchService {
         });
       },
     );
+    const searchRecords = await Promise.all(recordPromises);
 
     const sortedRecords = this.sortSearchObjectResults(searchRecords).slice(
       0,

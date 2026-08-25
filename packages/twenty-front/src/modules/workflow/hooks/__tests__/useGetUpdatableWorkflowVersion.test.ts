@@ -19,9 +19,9 @@ jest.mock('@/workflow/hooks/useCreateDraftFromWorkflowVersion', () => ({
 }));
 
 jest.mock(
-  '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue',
+  '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue',
   () => ({
-    useRecoilComponentValue: jest.fn(() => mockWorkflowId),
+    useAtomComponentStateValue: jest.fn(() => mockWorkflowId),
   }),
 );
 
@@ -48,7 +48,6 @@ describe('useGetUpdatableWorkflowVersionOrThrow', () => {
   });
 
   it('should create draft from active version when current version is active', async () => {
-    // Mock the workflow to have an active version
     const mockActiveWorkflow = {
       ...mockWorkflow,
       currentVersion: {

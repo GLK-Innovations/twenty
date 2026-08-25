@@ -1,19 +1,21 @@
 import { Scope } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
 
-import { Not } from 'typeorm';
+import { type ObjectRecordDeleteEvent } from 'twenty-shared/database-events';
+import { Not, type Repository } from 'typeorm';
 
-import { type ObjectRecordDeleteEvent } from 'src/engine/core-modules/event-emitter/types/object-record-delete.event';
 import { Process } from 'src/engine/core-modules/message-queue/decorators/process.decorator';
 import { Processor } from 'src/engine/core-modules/message-queue/decorators/processor.decorator';
 import { MessageQueue } from 'src/engine/core-modules/message-queue/message-queue.constants';
-import { TwentyORMManager } from 'src/engine/twenty-orm/twenty-orm.manager';
+import { UserWorkspaceEntity } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
+import { CalendarChannelEntity } from 'src/engine/metadata-modules/calendar-channel/entities/calendar-channel.entity';
+import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
+import { buildSystemAuthContext } from 'src/engine/twenty-orm/utils/build-system-auth-context.util';
 import { type WorkspaceEventBatch } from 'src/engine/workspace-event-emitter/types/workspace-event-batch.type';
 import { type BlocklistWorkspaceEntity } from 'src/modules/blocklist/standard-objects/blocklist.workspace-entity';
 import { CalendarChannelSyncStatusService } from 'src/modules/calendar/common/services/calendar-channel-sync-status.service';
-import {
-  CalendarChannelSyncStage,
-  type CalendarChannelWorkspaceEntity,
-} from 'src/modules/calendar/common/standard-objects/calendar-channel.workspace-entity';
+import { CalendarChannelSyncStage } from 'twenty-shared/types';
+import { isDefined } from 'twenty-shared/utils';
 
 export type BlocklistReimportCalendarEventsJobData = WorkspaceEventBatch<
   ObjectRecordDeleteEvent<BlocklistWorkspaceEntity>
@@ -25,7 +27,11 @@ export type BlocklistReimportCalendarEventsJobData = WorkspaceEventBatch<
 })
 export class BlocklistReimportCalendarEventsJob {
   constructor(
-    private readonly twentyORMManager: TwentyORMManager,
+    private readonly workspaceOrmManager: WorkspaceOrmManager,
+    @InjectRepository(CalendarChannelEntity)
+    private readonly calendarChannelRepository: Repository<CalendarChannelEntity>,
+    @InjectRepository(UserWorkspaceEntity)
+    private readonly userWorkspaceRepository: Repository<UserWorkspaceEntity>,
     private readonly calendarChannelSyncStatusService: CalendarChannelSyncStatusService,
   ) {}
 
@@ -33,31 +39,55 @@ export class BlocklistReimportCalendarEventsJob {
   async handle(data: BlocklistReimportCalendarEventsJobData): Promise<void> {
     const workspaceId = data.workspaceId;
 
-    const calendarChannelRepository =
-      await this.twentyORMManager.getRepository<CalendarChannelWorkspaceEntity>(
-        'calendarChannel',
-      );
+    const authContext = buildSystemAuthContext(workspaceId);
 
-    for (const eventPayload of data.events) {
-      const workspaceMemberId =
-        eventPayload.properties.before.workspaceMemberId;
+    await this.workspaceOrmManager.executeInWorkspaceContext(
+      async () => {
+        const workspaceMemberRepository =
+          this.workspaceOrmManager.getRepository('workspaceMember', {
+            shouldBypassPermissionChecks: true,
+          });
 
-      const calendarChannels = await calendarChannelRepository.find({
-        select: ['id'],
-        where: {
-          connectedAccount: {
-            accountOwnerId: workspaceMemberId,
-          },
-          syncStage: Not(
-            CalendarChannelSyncStage.CALENDAR_EVENT_LIST_FETCH_PENDING,
-          ),
-        },
-      });
+        for (const eventPayload of data.events) {
+          const workspaceMemberId =
+            eventPayload.properties.before.workspaceMemberId;
 
-      await this.calendarChannelSyncStatusService.resetAndScheduleCalendarEventListFetch(
-        calendarChannels.map((calendarChannel) => calendarChannel.id),
-        workspaceId,
-      );
-    }
+          const workspaceMember = await workspaceMemberRepository.findOne({
+            where: { id: workspaceMemberId },
+          });
+
+          if (!isDefined(workspaceMember)) {
+            continue;
+          }
+
+          const userWorkspace = await this.userWorkspaceRepository.findOne({
+            where: { userId: workspaceMember.userId, workspaceId },
+            select: ['id'],
+          });
+
+          if (!isDefined(userWorkspace)) {
+            continue;
+          }
+
+          const calendarChannels = await this.calendarChannelRepository.find({
+            select: ['id'],
+            where: {
+              connectedAccount: { userWorkspaceId: userWorkspace.id },
+              syncStage: Not(
+                CalendarChannelSyncStage.CALENDAR_EVENT_LIST_FETCH_PENDING,
+              ),
+              workspaceId,
+            },
+          });
+
+          await this.calendarChannelSyncStatusService.resetAndMarkAsCalendarEventListFetchPending(
+            calendarChannels.map((calendarChannel) => calendarChannel.id),
+            workspaceId,
+          );
+        }
+      },
+      authContext,
+      { lite: true },
+    );
   }
 }

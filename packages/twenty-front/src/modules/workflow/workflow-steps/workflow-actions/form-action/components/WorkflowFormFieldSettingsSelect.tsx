@@ -1,13 +1,15 @@
 import { useFilteredObjectMetadataItems } from '@/object-metadata/hooks/useFilteredObjectMetadataItems';
-import { FormFieldInputContainer } from '@/object-record/record-field/ui/form-types/components/FormFieldInputContainer';
+import { isHiddenSystemField } from '@/object-metadata/utils/isHiddenSystemField';
+import { FormFieldInputContainer } from '@/ui/input/components/FormFieldInputContainer';
 import { FormSelectFieldInput } from '@/object-record/record-field/ui/form-types/components/FormSelectFieldInput';
 import { FormTextFieldInput } from '@/object-record/record-field/ui/form-types/components/FormTextFieldInput';
-import { InputLabel } from '@/ui/input/components/InputLabel';
+import { InputLabel } from 'twenty-ui/input';
 import { type WorkflowFormActionField } from '@/workflow/workflow-steps/workflow-actions/form-action/types/WorkflowFormActionField';
 import { getDefaultFormFieldSettings } from '@/workflow/workflow-steps/workflow-actions/form-action/utils/getDefaultFormFieldSettings';
-import styled from '@emotion/styled';
+import { t } from '@lingui/core/macro';
+import { styled } from '@linaria/react';
 import camelCase from 'lodash.camelcase';
-import { FieldMetadataType } from 'twenty-shared/types';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 type WorkflowFormFieldSettingsSelectProps = {
   field: WorkflowFormActionField;
@@ -17,13 +19,13 @@ type WorkflowFormFieldSettingsSelectProps = {
 const StyledFormFieldSettingsSelect = styled.div`
   display: flex;
   flex-direction: column;
-  gap: ${({ theme }) => theme.spacing(2)};
+  gap: ${themeCssVariables.spacing[2]};
 `;
 
 const StyledRowContainer = styled.div`
   display: flex;
   flex-direction: row;
-  gap: ${({ theme }) => theme.spacing(2)};
+  gap: ${themeCssVariables.spacing[2]};
 `;
 
 export const WorkflowFormFieldSettingsSelect = ({
@@ -32,7 +34,7 @@ export const WorkflowFormFieldSettingsSelect = ({
 }: WorkflowFormFieldSettingsSelectProps) => {
   const selectTypeOptions = [
     {
-      label: 'Existing Field',
+      label: t`Existing Field`,
       value: 'EXISTING_FIELD',
     },
   ];
@@ -47,14 +49,14 @@ export const WorkflowFormFieldSettingsSelect = ({
       return acc.concat(
         objectMetadataItem.fields
           .filter(
-            (field) =>
-              field.isActive &&
-              !field.isSystem &&
-              field.type === FieldMetadataType.SELECT,
+            (objectField) =>
+              objectField.isActive &&
+              !isHiddenSystemField(objectField) &&
+              objectField.type === field.type,
           )
-          .map((field) => ({
-            label: `${objectMetadataItem.labelSingular} > ${field.label}`,
-            value: field.id,
+          .map((objectField) => ({
+            label: `${objectMetadataItem.labelSingular} > ${objectField.label}`,
+            value: objectField.id,
           })),
       );
     },
@@ -65,7 +67,7 @@ export const WorkflowFormFieldSettingsSelect = ({
     <StyledFormFieldSettingsSelect>
       <StyledRowContainer>
         <FormFieldInputContainer>
-          <InputLabel>Label</InputLabel>
+          <InputLabel>{t`Label`}</InputLabel>
           <FormTextFieldInput
             onChange={(newLabel: string) => {
               onChange({
@@ -75,13 +77,11 @@ export const WorkflowFormFieldSettingsSelect = ({
               });
             }}
             defaultValue={field.label}
-            placeholder={
-              getDefaultFormFieldSettings(FieldMetadataType.SELECT).label
-            }
+            placeholder={getDefaultFormFieldSettings(field.type).label}
           />
         </FormFieldInputContainer>
         <FormFieldInputContainer>
-          <InputLabel>Select Type</InputLabel>
+          <InputLabel>{t`Select Type`}</InputLabel>
           <FormSelectFieldInput
             onChange={(newSelectType: string | null) => {
               if (newSelectType === null) {
@@ -102,7 +102,7 @@ export const WorkflowFormFieldSettingsSelect = ({
         </FormFieldInputContainer>
       </StyledRowContainer>
       <FormFieldInputContainer>
-        <InputLabel>Field</InputLabel>
+        <InputLabel>{t`Field`}</InputLabel>
         <FormSelectFieldInput
           onChange={(newSelectFieldId: string | null) => {
             if (newSelectFieldId === null) {

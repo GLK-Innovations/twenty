@@ -5,7 +5,7 @@ import { isDefined } from 'twenty-shared/utils';
 import { isListValue } from '~/utils/validation/isListValue';
 import { isNumericRange } from '~/utils/validation/isNumericRange';
 import { isStepValue } from '~/utils/validation/isStepValue';
-import { type CronDescriptionOptions } from '../types/cronDescriptionOptions';
+import { type CronDescriptionOptions } from '@/workflow/workflow-trigger/utils/cron-to-human/types/cronDescriptionOptions';
 
 const getMonthName = (
   monthNum: number,
@@ -33,7 +33,6 @@ export const getMonthsDescription = (
     return '';
   }
 
-  // Every month
   if (months === '*') {
     return '';
   }
@@ -88,7 +87,6 @@ export const getMonthsDescription = (
     return t`between ${startMonth} and ${endMonth}`;
   }
 
-  // List values (e.g., "1,6,12")
   if (isListValue(months)) {
     const values = months.split(',').map((v) => v.trim());
     const monthNames = values.map((month) => {
@@ -109,10 +107,9 @@ export const getMonthsDescription = (
     }
     const lastMonth = monthNames.pop();
     const remainingMonths = monthNames.join(', ');
-    return t`only in ${remainingMonths} and ${lastMonth}`;
+    return t`only in ${remainingMonths} and ${lastMonth ?? ''}`;
   }
 
-  // Single month value
   const monthNum = parseInt(months, 10);
   if (!isNaN(monthNum)) {
     const monthName = getMonthName(

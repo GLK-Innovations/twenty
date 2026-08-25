@@ -1,6 +1,6 @@
 import { type Field } from '~/generated-metadata/graphql';
 
-import { formatFieldMetadataItemInput } from '../utils/formatFieldMetadataItemInput';
+import { formatFieldMetadataItemInput } from '@/object-metadata/utils/formatFieldMetadataItemInput';
 
 import { type RelationCreationPayload } from 'twenty-shared/types';
 import { useCreateOneFieldMetadataItem } from './useCreateOneFieldMetadataItem';
@@ -24,6 +24,7 @@ export const useFieldMetadataItem = () => {
       | 'options'
       | 'settings'
       | 'isLabelSyncedWithName'
+      | 'isUnique'
     > & {
       objectMetadataId: string;
       relationCreationPayload?: RelationCreationPayload;

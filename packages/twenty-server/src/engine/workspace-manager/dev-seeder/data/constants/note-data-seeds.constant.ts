@@ -10,6 +10,9 @@ type NoteDataSeed = {
   createdByWorkspaceMemberId: string;
   createdByName: string;
   createdByContext: string | null;
+  updatedBySource: string;
+  updatedByWorkspaceMemberId: string;
+  updatedByName: string;
 };
 
 export const NOTE_DATA_SEED_COLUMNS: (keyof NoteDataSeed)[] = [
@@ -22,6 +25,9 @@ export const NOTE_DATA_SEED_COLUMNS: (keyof NoteDataSeed)[] = [
   'createdByWorkspaceMemberId',
   'createdByName',
   'createdByContext',
+  'updatedBySource',
+  'updatedByWorkspaceMemberId',
+  'updatedByName',
 ];
 
 const GENERATE_NOTE_IDS = (): Record<string, string> => {
@@ -130,7 +136,6 @@ const COMPANY_NOTE_TEMPLATES = [
   },
 ];
 
-// Generate note data seeds
 const GENERATE_NOTE_SEEDS = (): NoteDataSeed[] => {
   const NOTE_SEEDS: NoteDataSeed[] = [];
 
@@ -161,6 +166,9 @@ const GENERATE_NOTE_SEEDS = (): NoteDataSeed[] => {
       createdByWorkspaceMemberId: WORKSPACE_MEMBER_DATA_SEED_IDS.TIM,
       createdByName: 'Tim A',
       createdByContext: null,
+      updatedBySource: 'MANUAL',
+      updatedByWorkspaceMemberId: WORKSPACE_MEMBER_DATA_SEED_IDS.TIM,
+      updatedByName: 'Tim A',
     });
   }
 
@@ -191,6 +199,9 @@ const GENERATE_NOTE_SEEDS = (): NoteDataSeed[] => {
       createdByWorkspaceMemberId: WORKSPACE_MEMBER_DATA_SEED_IDS.TIM,
       createdByName: 'Tim A',
       createdByContext: null,
+      updatedBySource: 'MANUAL',
+      updatedByWorkspaceMemberId: WORKSPACE_MEMBER_DATA_SEED_IDS.TIM,
+      updatedByName: 'Tim A',
     });
   }
 

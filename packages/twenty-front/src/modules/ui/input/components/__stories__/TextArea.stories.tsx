@@ -1,8 +1,8 @@
-import { type Meta, type StoryObj } from '@storybook/react';
+import { type Meta, type StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 
-import { expect, userEvent, within } from '@storybook/test';
-import { TextArea, type TextAreaProps } from '../TextArea';
+import { TextArea, type TextAreaProps } from '@/ui/input/components/TextArea';
+import { expect, userEvent, within } from 'storybook/test';
 import { ComponentDecorator } from 'twenty-ui/testing';
 
 type RenderProps = TextAreaProps;
@@ -14,7 +14,7 @@ const Render = (args: RenderProps) => {
     setValue(text);
   };
 
-  // eslint-disable-next-line react/jsx-props-no-spreading
+  // oxlint-disable-next-line react/jsx-props-no-spreading
   return <TextArea {...args} value={value} onChange={handleChange} />;
 };
 
@@ -22,7 +22,7 @@ const meta: Meta<typeof TextArea> = {
   title: 'UI/Input/TextArea',
   component: TextArea,
   decorators: [ComponentDecorator],
-  args: { minRows: 4, placeholder: 'Lorem Ipsum' },
+  args: { minRows: 4, maxRows: 5, placeholder: 'Lorem Ipsum' },
   render: Render,
 };
 
@@ -41,8 +41,8 @@ export const Disabled: Story = {
 
 export const WithLabel: Story = {
   args: { label: 'My Textarea' },
-  play: async () => {
-    const canvas = within(document.body);
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
 
     const label = await canvas.findByText('My Textarea');
 
@@ -53,5 +53,22 @@ export const WithLabel: Story = {
     const input = await canvas.findByRole('textbox');
 
     expect(input).toHaveFocus();
+  },
+};
+
+export const Transparent: Story = {
+  args: {
+    variant: 'transparent',
+    value: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
+  },
+};
+
+export const TransparentUnbounded: Story = {
+  args: {
+    variant: 'transparent',
+    maxRows: undefined,
+    value: Array.from({ length: 10 }, (_, index) => `Line ${index + 1}`).join(
+      '\n',
+    ),
   },
 };

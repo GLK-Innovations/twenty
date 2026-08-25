@@ -1,9 +1,10 @@
-import styled from '@emotion/styled';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
+import { styled } from '@linaria/react';
 
 const StyledNodeIconContainer = styled.div`
   align-items: center;
-  background: ${({ theme }) => theme.background.transparent.light};
-  border-radius: 4px;
+  background: ${themeCssVariables.background.transparent.light};
+  border-radius: ${themeCssVariables.border.radius.sm};
   box-sizing: border-box;
   display: flex;
   height: 32px;

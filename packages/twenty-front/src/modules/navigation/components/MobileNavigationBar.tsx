@@ -1,70 +1,58 @@
-import { useCommandMenu } from '@/command-menu/hooks/useCommandMenu';
-import { useOpenRecordsSearchPageInCommandMenu } from '@/command-menu/hooks/useOpenRecordsSearchPageInCommandMenu';
-import { isCommandMenuOpenedState } from '@/command-menu/states/isCommandMenuOpenedState';
-import { useOpenSettingsMenu } from '@/navigation/hooks/useOpenSettings';
-import { isNavigationDrawerExpandedState } from '@/ui/navigation/states/isNavigationDrawerExpanded';
-import { useRecoilState } from 'recoil';
-import {
-  type IconComponent,
-  IconList,
-  IconSearch,
-  IconSettings,
-} from 'twenty-ui/display';
+import { MobileNavigationBarScrollEffect } from '@/navigation/components/MobileNavigationBarScrollEffect';
+import { useMobileNavigationBarItems } from '@/navigation/hooks/useMobileNavigationBarItems';
+import { isMobileNavigationBarVisibleState } from '@/navigation/states/isMobileNavigationBarVisibleState';
+import { isSidePanelOpenedState } from '@/side-panel/states/isSidePanelOpenedState';
+import { RootStackingContextZIndices } from '@/ui/layout/constants/RootStackingContextZIndices';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { styled } from '@linaria/react';
 import { NavigationBar } from 'twenty-ui/navigation';
-import { useIsSettingsPage } from '../hooks/useIsSettingsPage';
-import { currentMobileNavigationDrawerState } from '../states/currentMobileNavigationDrawerState';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
 
-type NavigationBarItemName = 'main' | 'search' | 'tasks' | 'settings';
+// The bar floats over the page, so the container has to let taps through to
+// whatever is scrolling underneath it. flex-start rather than left so the bar
+// follows the writing direction in RTL locales.
+const StyledFloatingContainer = styled.div`
+  bottom: 0;
+  display: flex;
+  justify-content: flex-start;
+  left: 0;
+  padding: ${themeCssVariables.spacing[3]};
+  padding-bottom: calc(
+    ${themeCssVariables.spacing[3]} + env(safe-area-inset-bottom, 0px)
+  );
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  z-index: ${RootStackingContextZIndices.MobileNavigationBar};
+
+  > * {
+    pointer-events: auto;
+  }
+
+  @media print {
+    display: none;
+  }
+`;
 
 export const MobileNavigationBar = () => {
-  const [isCommandMenuOpened] = useRecoilState(isCommandMenuOpenedState);
-  const { closeCommandMenu } = useCommandMenu();
-  const { openRecordsSearchPage } = useOpenRecordsSearchPageInCommandMenu();
-  const isSettingsPage = useIsSettingsPage();
-  const [isNavigationDrawerExpanded, setIsNavigationDrawerExpanded] =
-    useRecoilState(isNavigationDrawerExpandedState);
-  const [currentMobileNavigationDrawer, setCurrentMobileNavigationDrawer] =
-    useRecoilState(currentMobileNavigationDrawerState);
-  const { openSettingsMenu } = useOpenSettingsMenu();
+  const isSidePanelOpened = useAtomStateValue(isSidePanelOpenedState);
+  const isMobileNavigationBarVisible = useAtomStateValue(
+    isMobileNavigationBarVisibleState,
+  );
+  const { items, activeItemName } = useMobileNavigationBarItems();
 
-  const activeItemName = isNavigationDrawerExpanded
-    ? currentMobileNavigationDrawer
-    : isCommandMenuOpened
-      ? 'search'
-      : isSettingsPage
-        ? 'settings'
-        : 'main';
+  const isHidden = isSidePanelOpened || !isMobileNavigationBarVisible;
 
-  const items: {
-    name: NavigationBarItemName;
-    Icon: IconComponent;
-    onClick: () => void;
-  }[] = [
-    {
-      name: 'main',
-      Icon: IconList,
-      onClick: () => {
-        closeCommandMenu();
-        setIsNavigationDrawerExpanded(
-          (previousIsOpen) => activeItemName !== 'main' || !previousIsOpen,
-        );
-        setCurrentMobileNavigationDrawer('main');
-      },
-    },
-    {
-      name: 'search',
-      Icon: IconSearch,
-      onClick: openRecordsSearchPage,
-    },
-    {
-      name: 'settings',
-      Icon: IconSettings,
-      onClick: () => {
-        closeCommandMenu();
-        openSettingsMenu();
-      },
-    },
-  ];
-
-  return <NavigationBar activeItemName={activeItemName} items={items} />;
+  return (
+    <>
+      <MobileNavigationBarScrollEffect />
+      <StyledFloatingContainer>
+        <NavigationBar
+          activeItemName={activeItemName}
+          isHidden={isHidden}
+          items={items}
+        />
+      </StyledFloatingContainer>
+    </>
+  );
 };

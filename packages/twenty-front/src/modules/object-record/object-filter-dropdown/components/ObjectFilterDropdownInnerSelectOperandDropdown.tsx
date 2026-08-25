@@ -1,15 +1,22 @@
+import { objectMetadataItemsSelector } from '@/object-metadata/states/objectMetadataItemsSelector';
+import { getFieldMetadataItemById } from '@/object-metadata/utils/getFieldMetadataItemById';
 import { DATE_FILTER_TYPES } from '@/object-record/object-filter-dropdown/constants/DateFilterTypes';
 import { DATE_PICKER_DROPDOWN_CONTENT_WIDTH } from '@/object-record/object-filter-dropdown/constants/DatePickerDropdownContentWidth';
 import { useApplyObjectFilterDropdownOperand } from '@/object-record/object-filter-dropdown/hooks/useApplyObjectFilterDropdownOperand';
 import { fieldMetadataItemUsedInDropdownComponentSelector } from '@/object-record/object-filter-dropdown/states/fieldMetadataItemUsedInDropdownComponentSelector';
+import { relationTargetFieldMetadataIdUsedInDropdownComponentState } from '@/object-record/object-filter-dropdown/states/relationTargetFieldMetadataIdUsedInDropdownComponentState';
 import { selectedOperandInDropdownComponentState } from '@/object-record/object-filter-dropdown/states/selectedOperandInDropdownComponentState';
 import { subFieldNameUsedInDropdownComponentState } from '@/object-record/object-filter-dropdown/states/subFieldNameUsedInDropdownComponentState';
 import { getOperandLabel } from '@/object-record/object-filter-dropdown/utils/getOperandLabel';
+import { useTimeZoneAbbreviationForNowInUserTimeZone } from '@/object-record/record-filter/hooks/useTimeZoneAbbreviationForNowInUserTimeZone';
 import { type RecordFilterOperand } from '@/object-record/record-filter/types/RecordFilterOperand';
 import { getRecordFilterOperands } from '@/object-record/record-filter/utils/getRecordFilterOperands';
+import { useUserTimezone } from '@/ui/input/components/internal/date/hooks/useUserTimezone';
 import { DropdownMenuInnerSelect } from '@/ui/layout/dropdown/components/DropdownMenuInnerSelect';
 import { GenericDropdownContentWidth } from '@/ui/layout/dropdown/constants/GenericDropdownContentWidth';
-import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
+import { useAtomComponentSelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentSelectorValue';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 import { getFilterTypeFromFieldType, isDefined } from 'twenty-shared/utils';
 import { type SelectOption } from 'twenty-ui/input';
 
@@ -17,29 +24,61 @@ const OBJECT_FILTER_DROPDOWN_INNER_SELECT_OPERAND_DROPDOWN_ID =
   'object-filter-dropdown-inner-select-operand-dropdown';
 
 export const ObjectFilterDropdownInnerSelectOperandDropdown = () => {
-  const selectedOperandInDropdown = useRecoilComponentValue(
+  const selectedOperandInDropdown = useAtomComponentStateValue(
     selectedOperandInDropdownComponentState,
   );
 
-  const fieldMetadataItemUsedInDropdown = useRecoilComponentValue(
+  const fieldMetadataItemUsedInDropdown = useAtomComponentSelectorValue(
     fieldMetadataItemUsedInDropdownComponentSelector,
   );
 
-  const subFieldNameUsedInDropdown = useRecoilComponentValue(
+  const subFieldNameUsedInDropdown = useAtomComponentStateValue(
     subFieldNameUsedInDropdownComponentState,
   );
 
-  const operandsForFilterType = isDefined(fieldMetadataItemUsedInDropdown)
+  const relationTargetFieldMetadataIdUsedInDropdown =
+    useAtomComponentStateValue(
+      relationTargetFieldMetadataIdUsedInDropdownComponentState,
+    );
+
+  const objectMetadataItems = useAtomStateValue(objectMetadataItemsSelector);
+
+  // The target field may have been deleted from the workspace since the
+  // filter was saved — return null and let the parent skip rendering
+  // rather than throwing.
+  const relationTargetFieldMetadataItem = isDefined(
+    relationTargetFieldMetadataIdUsedInDropdown,
+  )
+    ? getFieldMetadataItemById({
+        fieldMetadataId: relationTargetFieldMetadataIdUsedInDropdown,
+        objectMetadataItems,
+      }).fieldMetadataItem
+    : null;
+
+  const effectiveFieldMetadataItem = isDefined(
+    relationTargetFieldMetadataIdUsedInDropdown,
+  )
+    ? relationTargetFieldMetadataItem
+    : fieldMetadataItemUsedInDropdown;
+
+  const operandsForFilterType = isDefined(effectiveFieldMetadataItem)
     ? getRecordFilterOperands({
-        filterType: getFilterTypeFromFieldType(
-          fieldMetadataItemUsedInDropdown.type,
-        ),
+        filterType: getFilterTypeFromFieldType(effectiveFieldMetadataItem.type),
         subFieldName: subFieldNameUsedInDropdown,
       })
     : [];
 
+  const { userTimeZoneAbbreviation } =
+    useTimeZoneAbbreviationForNowInUserTimeZone();
+
+  const { isSystemTimezone } = useUserTimezone();
+
+  const timeZoneAbbreviation = !isSystemTimezone
+    ? userTimeZoneAbbreviation
+    : null;
+
   const options = operandsForFilterType.map((operand) => ({
-    label: getOperandLabel(operand),
+    label: getOperandLabel(operand, timeZoneAbbreviation),
     value: operand,
   })) as SelectOption[];
 
@@ -58,13 +97,13 @@ export const ObjectFilterDropdownInnerSelectOperandDropdown = () => {
 
   if (
     !isDefined(selectedOperandInDropdown) ||
-    !isDefined(fieldMetadataItemUsedInDropdown)
+    !isDefined(effectiveFieldMetadataItem)
   ) {
     return null;
   }
 
   const filterType = getFilterTypeFromFieldType(
-    fieldMetadataItemUsedInDropdown.type,
+    effectiveFieldMetadataItem.type,
   );
 
   const isDateFilter = DATE_FILTER_TYPES.includes(filterType);

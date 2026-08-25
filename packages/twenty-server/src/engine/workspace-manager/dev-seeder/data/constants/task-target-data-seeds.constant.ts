@@ -5,20 +5,19 @@ import { TASK_DATA_SEED_IDS } from 'src/engine/workspace-manager/dev-seeder/data
 type TaskTargetDataSeed = {
   id: string;
   taskId: string | null;
-  personId: string | null;
-  companyId: string | null;
-  opportunityId: string | null;
+  targetPersonId: string | null;
+  targetCompanyId: string | null;
+  targetOpportunityId: string | null;
 };
 
 export const TASK_TARGET_DATA_SEED_COLUMNS: (keyof TaskTargetDataSeed)[] = [
   'id',
   'taskId',
-  'personId',
-  'companyId',
-  'opportunityId',
+  'targetPersonId',
+  'targetCompanyId',
+  'targetOpportunityId',
 ];
 
-// Generate all task target IDs
 const GENERATE_TASK_TARGET_IDS = (): Record<string, string> => {
   const TASK_TARGET_IDS: Record<string, string> = {};
 
@@ -43,37 +42,34 @@ const GENERATE_TASK_TARGET_IDS = (): Record<string, string> => {
 
 const TASK_TARGET_DATA_SEED_IDS = GENERATE_TASK_TARGET_IDS();
 
-// Generate task target data seeds
 const GENERATE_TASK_TARGET_SEEDS = (): TaskTargetDataSeed[] => {
   const TASK_TARGET_SEEDS: TaskTargetDataSeed[] = [];
 
-  // Person task targets (link each person task to its corresponding person)
   for (let INDEX = 1; INDEX <= 1200; INDEX++) {
     TASK_TARGET_SEEDS.push({
       id: TASK_TARGET_DATA_SEED_IDS[`ID_${INDEX}`],
       taskId: TASK_DATA_SEED_IDS[`ID_${INDEX}`],
-      personId:
+      targetPersonId:
         PERSON_DATA_SEED_IDS[
           `ID_${INDEX}` as keyof typeof PERSON_DATA_SEED_IDS
         ],
-      companyId: null,
-      opportunityId: null,
+      targetCompanyId: null,
+      targetOpportunityId: null,
     });
   }
 
-  // Company task targets (link each company task to its corresponding company)
   for (let INDEX = 1201; INDEX <= 1800; INDEX++) {
     const COMPANY_INDEX = INDEX - 1200;
 
     TASK_TARGET_SEEDS.push({
       id: TASK_TARGET_DATA_SEED_IDS[`ID_${INDEX}`],
       taskId: TASK_DATA_SEED_IDS[`ID_${INDEX}`],
-      personId: null,
-      companyId:
+      targetPersonId: null,
+      targetCompanyId:
         COMPANY_DATA_SEED_IDS[
           `ID_${COMPANY_INDEX}` as keyof typeof COMPANY_DATA_SEED_IDS
         ],
-      opportunityId: null,
+      targetOpportunityId: null,
     });
   }
 
@@ -82,7 +78,6 @@ const GENERATE_TASK_TARGET_SEEDS = (): TaskTargetDataSeed[] => {
 
 export const TASK_TARGET_DATA_SEEDS = GENERATE_TASK_TARGET_SEEDS();
 
-// Map for O(1) lookups by task ID
 export const TASK_TARGET_DATA_SEEDS_MAP = new Map<string, TaskTargetDataSeed>(
   TASK_TARGET_DATA_SEEDS.filter((target) => target.taskId !== null).map(
     (target) => [target.taskId!, target],

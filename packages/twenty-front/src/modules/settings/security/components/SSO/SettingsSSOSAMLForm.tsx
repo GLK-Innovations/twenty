@@ -3,29 +3,23 @@
 import { parseSAMLMetadataFromXMLFile } from '@/settings/security/utils/parseSAMLMetadataFromXMLFile';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 import { SettingsTextInput } from '@/ui/input/components/SettingsTextInput';
-import { useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
+import { type ChangeEvent, useContext, useRef } from 'react';
+import { styled } from '@linaria/react';
 import { useLingui } from '@lingui/react/macro';
-import { type ChangeEvent, useRef } from 'react';
 import { useFormContext } from 'react-hook-form';
 import { isDefined } from 'twenty-shared/utils';
-import {
-  H2Title,
-  HorizontalSeparator,
-  IconCheck,
-  IconCopy,
-  IconDownload,
-  IconUpload,
-} from 'twenty-ui/display';
+import { IconCheck, IconCopy, IconDownload, IconUpload } from 'twenty-ui/icon';
+import { HorizontalSeparator, Section } from 'twenty-ui/layout';
+import { H2Title } from 'twenty-ui/typography';
 import { Button } from 'twenty-ui/input';
-import { Section } from 'twenty-ui/layout';
+import { ThemeContext, themeCssVariables } from 'twenty-ui/theme-constants';
 import { REACT_APP_SERVER_BASE_URL } from '~/config';
 import { useCopyToClipboard } from '~/hooks/useCopyToClipboard';
 
 const StyledUploadFileContainer = styled.div`
   align-items: center;
   display: flex;
-  gap: ${({ theme }) => theme.spacing(2)};
+  gap: ${themeCssVariables.spacing[2]};
 `;
 
 const StyledFileInput = styled.input`
@@ -35,7 +29,7 @@ const StyledFileInput = styled.input`
 const StyledInputsContainer = styled.div`
   display: flex;
   flex-direction: column;
-  gap: ${({ theme }) => theme.spacing(2, 4)};
+  gap: ${themeCssVariables.spacing[2]} ${themeCssVariables.spacing[4]};
   width: 100%;
 `;
 
@@ -46,18 +40,18 @@ const StyledContainer = styled.div`
 
 const StyledLinkContainer = styled.div`
   flex: 1;
-  margin-right: ${({ theme }) => theme.spacing(2)};
+  margin-right: ${themeCssVariables.spacing[2]};
 `;
 
 const StyledButtonCopy = styled.div`
   align-items: end;
   display: flex;
-  margin-bottom: ${({ theme }) => theme.spacing(1)};
+  margin-bottom: ${themeCssVariables.spacing[1]};
 `;
 
 export const SettingsSSOSAMLForm = () => {
+  const { theme } = useContext(ThemeContext);
   const { enqueueErrorSnackBar } = useSnackBar();
-  const theme = useTheme();
   const { setValue, getValues, watch, trigger } = useFormContext();
   const { t } = useLingui();
   const { copyToClipboard } = useCopyToClipboard();
@@ -69,9 +63,9 @@ export const SettingsSSOSAMLForm = () => {
       e.target.value = '';
       if (!samlMetadataParsed.success) {
         return enqueueErrorSnackBar({
-          message: t`Invalid File`,
+          message: t`Invalid file: ${samlMetadataParsed.reason}`,
           options: {
-            duration: 2000,
+            duration: 5000,
           },
         });
       }
@@ -173,7 +167,7 @@ export const SettingsSSOSAMLForm = () => {
               <SettingsTextInput
                 instanceId="sso-saml-acs-url"
                 disabled={true}
-                label="ACS Url"
+                label={t`ACS Url`}
                 value={acsUrl}
                 fullWidth
               />
@@ -194,7 +188,7 @@ export const SettingsSSOSAMLForm = () => {
               <SettingsTextInput
                 instanceId="sso-saml-entity-id"
                 disabled={true}
-                label="Entity ID"
+                label={t`Entity ID`}
                 value={entityID}
                 fullWidth
               />

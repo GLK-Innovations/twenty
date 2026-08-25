@@ -1,32 +1,40 @@
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
 import { useLingui } from '@lingui/react/macro';
 
-import { useAiModelOptions } from '@/ai/hooks/useAiModelOptions';
+import {
+  useAiModelLabel,
+  useAiModelOptions,
+} from '@/ai/hooks/useAiModelOptions';
+import { SettingsAgentModelCapabilities } from '@/ai/components/SettingsAgentModelCapabilities';
+import { aiModelsState } from '@/client-config/states/aiModelsState';
 import { IconPicker } from '@/ui/input/components/IconPicker';
 import { Select } from '@/ui/input/components/Select';
 import { SettingsTextInput } from '@/ui/input/components/SettingsTextInput';
 import { TextArea } from '@/ui/input/components/TextArea';
 import { useModal } from '@/ui/layout/modal/hooks/useModal';
 import { isDefined } from 'twenty-shared/utils';
-import { H2Title, IconTrash } from 'twenty-ui/display';
+import { IconTrash } from 'twenty-ui/icon';
+import { H2Title } from 'twenty-ui/typography';
 import { Button } from 'twenty-ui/input';
 import { Section } from 'twenty-ui/layout';
-import { type Agent } from '~/generated/graphql';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
+import { type Agent } from '~/generated-metadata/graphql';
 import { SettingsAgentDeleteConfirmationModal } from '~/pages/settings/ai/components/SettingsAgentDeleteConfirmationModal';
+import { SettingsAgentResponseFormat } from '~/pages/settings/ai/components/SettingsAgentResponseFormat';
 import { computeMetadataNameFromLabel } from '~/pages/settings/data-model/utils/computeMetadataNameFromLabel';
-import { SettingsAgentModelCapabilities } from '../components/SettingsAgentModelCapabilities';
-import { type SettingsAIAgentFormValues } from '../hooks/useSettingsAgentFormState';
+import { type SettingsAiAgentFormValues } from '~/pages/settings/ai/hooks/useSettingsAgentFormState';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 
 const StyledFormContainer = styled.div`
   display: flex;
   flex-direction: column;
-  gap: ${({ theme }) => theme.spacing(2)};
+  gap: ${themeCssVariables.spacing[2]};
 `;
 
 const StyledIconNameRow = styled.div`
   align-items: flex-start;
   display: flex;
-  gap: ${({ theme }) => theme.spacing(2)};
+  gap: ${themeCssVariables.spacing[2]};
 `;
 
 const StyledNameContainer = styled.div`
@@ -34,18 +42,18 @@ const StyledNameContainer = styled.div`
 `;
 
 const StyledErrorMessage = styled.div`
-  color: ${({ theme }) => theme.color.red};
-  font-size: ${({ theme }) => theme.font.size.sm};
-  margin-top: ${({ theme }) => theme.spacing(1)};
+  color: ${themeCssVariables.color.red};
+  font-size: ${themeCssVariables.font.size.sm};
+  margin-top: ${themeCssVariables.spacing[1]};
 `;
 
 const DELETE_AGENT_MODAL_ID = 'delete-agent-modal';
 
 type SettingsAgentSettingsTabProps = {
-  formValues: SettingsAIAgentFormValues;
+  formValues: SettingsAiAgentFormValues;
   onFieldChange: (
-    field: keyof SettingsAIAgentFormValues,
-    value: SettingsAIAgentFormValues[keyof SettingsAIAgentFormValues],
+    field: keyof SettingsAiAgentFormValues,
+    value: SettingsAiAgentFormValues[keyof SettingsAiAgentFormValues],
   ) => void;
   disabled: boolean;
   agent?: Agent;
@@ -60,7 +68,22 @@ export const SettingsAgentSettingsTab = ({
   const { t } = useLingui();
   const { openModal } = useModal();
 
-  const modelOptions = useAiModelOptions();
+  const aiModels = useAtomStateValue(aiModelsState);
+  const { options: activeModelOptions } = useAiModelOptions();
+  const currentModelLabel = useAiModelLabel(formValues.modelId);
+
+  const currentModel = aiModels.find((m) => m.modelId === formValues.modelId);
+  const isCurrentModelDeprecated = currentModel?.isDeprecated === true;
+
+  const modelOptions = isCurrentModelDeprecated
+    ? [
+        {
+          value: formValues.modelId,
+          label: `${currentModelLabel} (deprecated)`,
+        },
+        ...activeModelOptions,
+      ]
+    : activeModelOptions;
 
   const noModelsAvailable = modelOptions.length === 0;
 
@@ -97,7 +120,6 @@ export const SettingsAgentSettingsTab = ({
           </StyledNameContainer>
         </StyledIconNameRow>
       </StyledFormContainer>
-
       <StyledFormContainer>
         <TextArea
           textAreaId="agent-description-textarea"
@@ -108,7 +130,6 @@ export const SettingsAgentSettingsTab = ({
           disabled={disabled}
         />
       </StyledFormContainer>
-
       <StyledFormContainer>
         {noModelsAvailable ? (
           <StyledErrorMessage>
@@ -125,7 +146,6 @@ export const SettingsAgentSettingsTab = ({
           />
         )}
       </StyledFormContainer>
-
       {formValues.modelId && (
         <StyledFormContainer>
           <SettingsAgentModelCapabilities
@@ -138,7 +158,6 @@ export const SettingsAgentSettingsTab = ({
           />
         </StyledFormContainer>
       )}
-
       <StyledFormContainer>
         <TextArea
           textAreaId="agent-prompt-textarea"
@@ -151,7 +170,15 @@ export const SettingsAgentSettingsTab = ({
           disabled={disabled}
         />
       </StyledFormContainer>
-
+      <StyledFormContainer>
+        <SettingsAgentResponseFormat
+          responseFormat={formValues.responseFormat}
+          onResponseFormatChange={(format) =>
+            onFieldChange('responseFormat', format)
+          }
+          disabled={disabled}
+        />
+      </StyledFormContainer>
       {!disabled && agent && formValues.isCustom && (
         <Section>
           <H2Title title={t`Danger zone`} description={t`Delete this agent`} />

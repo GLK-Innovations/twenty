@@ -18,6 +18,7 @@ import { RESUME_DELAYED_WORKFLOW_JOB_NAME } from 'src/modules/workflow/workflow-
 import { isWorkflowDelayAction } from 'src/modules/workflow/workflow-executor/workflow-actions/delay/guards/is-workflow-delay-action.guard';
 import { ResumeDelayedWorkflowJobData } from 'src/modules/workflow/workflow-executor/workflow-actions/delay/types/resume-delayed-workflow-job-data.type';
 import { WorkflowDelayActionInput } from 'src/modules/workflow/workflow-executor/workflow-actions/delay/types/workflow-delay-action-input.type';
+import { buildRunWorkflowJobOptions } from 'src/modules/workflow/workflow-runner/utils/build-run-workflow-job-options.util';
 
 @Injectable()
 export class DelayWorkflowAction implements WorkflowAction {
@@ -55,7 +56,7 @@ export class DelayWorkflowAction implements WorkflowAction {
       if (!workflowActionInput.scheduledDateTime) {
         throw new WorkflowStepExecutorException(
           'Scheduled date time is required for scheduled date delay',
-          WorkflowStepExecutorExceptionCode.INVALID_STEP_TYPE,
+          WorkflowStepExecutorExceptionCode.INVALID_STEP_INPUT,
         );
       }
 
@@ -67,14 +68,14 @@ export class DelayWorkflowAction implements WorkflowAction {
       if (delayInMs < 0) {
         throw new WorkflowStepExecutorException(
           'Scheduled date cannot be in the past',
-          WorkflowStepExecutorExceptionCode.INVALID_STEP_TYPE,
+          WorkflowStepExecutorExceptionCode.INVALID_STEP_INPUT,
         );
       }
     } else if (workflowActionInput.delayType === 'DURATION') {
       if (!workflowActionInput.duration) {
         throw new WorkflowStepExecutorException(
           'Duration is required for duration delay',
-          WorkflowStepExecutorExceptionCode.INVALID_STEP_TYPE,
+          WorkflowStepExecutorExceptionCode.INVALID_STEP_INPUT,
         );
       }
 
@@ -93,7 +94,7 @@ export class DelayWorkflowAction implements WorkflowAction {
     } else {
       throw new WorkflowStepExecutorException(
         'Invalid delay type',
-        WorkflowStepExecutorExceptionCode.INVALID_STEP_TYPE,
+        WorkflowStepExecutorExceptionCode.INVALID_STEP_INPUT,
       );
     }
 
@@ -105,6 +106,7 @@ export class DelayWorkflowAction implements WorkflowAction {
         stepId: currentStepId,
       },
       {
+        ...buildRunWorkflowJobOptions(runInfo.workflowRunId),
         delay: delayInMs,
       },
     );

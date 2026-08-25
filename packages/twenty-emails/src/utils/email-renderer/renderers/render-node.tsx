@@ -1,14 +1,30 @@
+import { bulletList } from '@/utils/email-renderer/nodes/bullet-list';
+import { button } from '@/utils/email-renderer/nodes/button';
+import { columns } from '@/utils/email-renderer/nodes/columns';
+import { divider } from '@/utils/email-renderer/nodes/divider';
+import { html } from '@/utils/email-renderer/nodes/html';
+import { section } from '@/utils/email-renderer/nodes/section';
+import { hardBreak } from '@/utils/email-renderer/nodes/hard-break';
+import { heading } from '@/utils/email-renderer/nodes/heading';
+import { image } from '@/utils/email-renderer/nodes/image';
+import { listItem } from '@/utils/email-renderer/nodes/list-item';
+import { orderedList } from '@/utils/email-renderer/nodes/ordered-list';
+import { paragraph } from '@/utils/email-renderer/nodes/paragraph';
+import { text } from '@/utils/email-renderer/nodes/text';
+import { variableTag } from '@/utils/email-renderer/nodes/variable-tag';
 import { type JSONContent } from '@tiptap/core';
-import { Fragment, type ReactNode } from 'react';
-import { TIPTAP_NODE_TYPES, type TipTapNodeType } from 'twenty-shared/utils';
-import { heading } from '../nodes/heading';
-import { image } from '../nodes/image';
-import { paragraph } from '../nodes/paragraph';
-import { text } from '../nodes/text';
-import { variableTag } from '../nodes/variable-tag';
-import { bulletList } from '../nodes/bullet-list';
-import { listItem } from '../nodes/list-item';
-import { orderedList } from '../nodes/ordered-list';
+import { Fragment, type JSX, type ReactNode } from 'react';
+import { type InheritedTypography } from 'src/utils/email-renderer/utils/inherited-typography';
+import {
+  isRenderedEmailDocumentNodeType,
+  TIPTAP_NODE_TYPES,
+  type RenderedEmailDocumentNodeType,
+} from 'twenty-shared/utils';
+
+type EmailNodeRenderer = (
+  node: JSONContent,
+  inherited: InheritedTypography,
+) => ReactNode;
 
 const NODE_RENDERERS = {
   [TIPTAP_NODE_TYPES.PARAGRAPH]: paragraph,
@@ -19,23 +35,36 @@ const NODE_RENDERERS = {
   [TIPTAP_NODE_TYPES.BULLET_LIST]: bulletList,
   [TIPTAP_NODE_TYPES.ORDERED_LIST]: orderedList,
   [TIPTAP_NODE_TYPES.LIST_ITEM]: listItem,
-};
+  [TIPTAP_NODE_TYPES.HARD_BREAK]: hardBreak,
+  [TIPTAP_NODE_TYPES.SECTION]: section,
+  [TIPTAP_NODE_TYPES.COLUMNS]: columns,
+  [TIPTAP_NODE_TYPES.BUTTON]: button,
+  [TIPTAP_NODE_TYPES.DIVIDER]: divider,
+  [TIPTAP_NODE_TYPES.HTML]: html,
+} satisfies Record<RenderedEmailDocumentNodeType, EmailNodeRenderer>;
 
-const renderNode = (node: JSONContent): ReactNode => {
-  const renderer = NODE_RENDERERS[node.type as TipTapNodeType];
-
-  if (!renderer) {
+const renderNode = (
+  node: JSONContent,
+  inherited: InheritedTypography,
+): ReactNode => {
+  if (
+    typeof node.type !== 'string' ||
+    !isRenderedEmailDocumentNodeType(node.type)
+  ) {
     return null;
   }
 
-  return renderer(node);
+  return NODE_RENDERERS[node.type](node, inherited);
 };
 
-export const mappedNodeContent = (node: JSONContent): JSX.Element[] => {
+export const mappedNodeContent = (
+  node: JSONContent,
+  inherited: InheritedTypography = {},
+): JSX.Element[] => {
   const allNodes = node.content || [];
   return allNodes
     .map((childNode, index) => {
-      const component = renderNode(childNode);
+      const component = renderNode(childNode, inherited);
       if (!component) {
         return null;
       }

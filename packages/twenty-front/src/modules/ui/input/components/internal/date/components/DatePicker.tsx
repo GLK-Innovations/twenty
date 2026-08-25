@@ -1,310 +1,86 @@
-import styled from '@emotion/styled';
-import { lazy, Suspense, type ComponentType } from 'react';
-import type { ReactDatePickerProps as ReactDatePickerLibProps } from 'react-datepicker';
+import { styled } from '@linaria/react';
+import { lazy, Suspense, useContext, type ComponentType } from 'react';
+import type { DatePickerProps as ReactDatePickerLibProps } from 'react-datepicker';
 import Skeleton, { SkeletonTheme } from 'react-loading-skeleton';
 
 import { SKELETON_LOADER_HEIGHT_SIZES } from '@/activities/components/SkeletonLoader';
 import { currentWorkspaceMemberState } from '@/auth/states/currentWorkspaceMemberState';
-import { CalendarStartDay } from 'twenty-shared';
+import { CalendarStartDay } from 'twenty-shared/constants';
 
 import { detectCalendarStartDay } from '@/localization/utils/detection/detectCalendarStartDay';
 import { DatePickerHeader } from '@/ui/input/components/internal/date/components/DatePickerHeader';
 import { RelativeDatePickerHeader } from '@/ui/input/components/internal/date/components/RelativeDatePickerHeader';
-import { getHighlightedDates } from '@/ui/input/components/internal/date/utils/getHighlightedDates';
+import {
+  DATE_PICKER_CONTAINER_WIDTH,
+  StyledDatePickerContainer,
+} from '@/ui/input/components/internal/date/components/StyledDatePickerContainer';
+import { getRelativeDatePickerCalendarRange } from '@/ui/input/components/internal/date/utils/getRelativeDatePickerCalendarRange';
 import { useCloseDropdown } from '@/ui/layout/dropdown/hooks/useCloseDropdown';
-import { useTheme } from '@emotion/react';
 import { t } from '@lingui/core/macro';
-import { addMonths, setMonth, setYear, subMonths } from 'date-fns';
 import 'react-datepicker/dist/react-datepicker.css';
-import { useRecoilValue } from 'recoil';
 
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { Temporal } from 'temporal-polyfill';
 import { type Nullable } from 'twenty-shared/types';
 import {
-  getDateFromPlainDate,
-  getPlainDateFromDate,
   isDefined,
+  turnJSDateToPlainDate,
+  turnPlainDateToShiftedDateInSystemTimeZone,
   type RelativeDateFilter,
 } from 'twenty-shared/utils';
-import { IconCalendarX } from 'twenty-ui/display';
-import {
-  MenuItemLeftContent,
-  StyledHoverableMenuItemBase,
-} from 'twenty-ui/navigation';
+import { IconCalendarX } from 'twenty-ui/icon';
+import { MenuItemLeftContent } from 'twenty-ui/navigation';
+import { ThemeContext, themeCssVariables } from 'twenty-ui/theme-constants';
 
 export const MONTH_AND_YEAR_DROPDOWN_MONTH_SELECT_ID =
   'date-picker-month-and-year-dropdown-month-select';
 export const MONTH_AND_YEAR_DROPDOWN_YEAR_SELECT_ID =
   'date-picker-month-and-year-dropdown-year-select';
 
-const DATE_PICKER_CONTAINER_WIDTH = 280;
-
-const StyledContainer = styled.div<{ calendarDisabled?: boolean }>`
-  width: ${DATE_PICKER_CONTAINER_WIDTH}px;
-
-  & .react-datepicker {
-    border-color: ${({ theme }) => theme.border.color.light};
-    background: transparent;
-    font-family: 'Inter';
-    font-size: ${({ theme }) => theme.font.size.md};
-    border: none;
-    display: block;
-    font-weight: ${({ theme }) => theme.font.weight.regular};
-  }
-
-  & .react-datepicker-popper {
-    position: relative !important;
-    inset: auto !important;
-    transform: none !important;
-    padding: 0 !important;
-  }
-
-  & .react-datepicker__triangle {
-    display: none;
-  }
-
-  & .react-datepicker__triangle::after {
-    display: none;
-  }
-
-  & .react-datepicker__triangle::before {
-    display: none;
-  }
-
-  & .react-datepicker-wrapper {
-    display: none;
-  }
-
-  // Header
-
-  & .react-datepicker__header {
-    background: transparent;
-    border: none;
-    padding: 0;
-  }
-
-  &
-    .react-datepicker__input-time-container
-    .react-datepicker-time__input-container
-    .react-datepicker-time__input {
-    outline: none;
-  }
-
-  & .react-datepicker__header__dropdown {
-    display: flex;
-    color: ${({ theme }) => theme.font.color.primary};
-    margin-left: ${({ theme }) => theme.spacing(1)};
-    margin-bottom: ${({ theme }) => theme.spacing(10)};
-  }
-
-  & .react-datepicker__month-dropdown-container,
-  & .react-datepicker__year-dropdown-container {
-    text-align: left;
-    border-radius: ${({ theme }) => theme.border.radius.sm};
-    margin-left: ${({ theme }) => theme.spacing(1)};
-    margin-right: 0;
-    padding: ${({ theme }) => theme.spacing(2)};
-    padding-right: ${({ theme }) => theme.spacing(4)};
-    background-color: ${({ theme }) => theme.background.tertiary};
-  }
-
-  & .react-datepicker__month-read-view--down-arrow,
-  & .react-datepicker__year-read-view--down-arrow {
-    height: 5px;
-    width: 5px;
-    border-width: 1px 1px 0 0;
-    border-color: ${({ theme }) => theme.border.color.light};
-    top: 3px;
-    right: -6px;
-  }
-
-  & .react-datepicker__year-read-view,
-  & .react-datepicker__month-read-view {
-    padding-right: ${({ theme }) => theme.spacing(2)};
-  }
-
-  & .react-datepicker__month-dropdown-container {
-    width: 80px;
-  }
-
-  & .react-datepicker__year-dropdown-container {
-    width: 50px;
-  }
-
-  & .react-datepicker__month-dropdown,
-  & .react-datepicker__year-dropdown {
-    overflow-y: scroll;
-    top: ${({ theme }) => theme.spacing(2)};
-  }
-  & .react-datepicker__month-dropdown {
-    left: ${({ theme }) => theme.spacing(2)};
-    height: 260px;
-  }
-
-  & .react-datepicker__year-dropdown {
-    left: calc(${({ theme }) => theme.spacing(9)} + 80px);
-    width: 100px;
-    height: 260px;
-  }
-
-  & .react-datepicker__navigation--years {
-    display: none;
-  }
-
-  & .react-datepicker__month-option--selected,
-  & .react-datepicker__year-option--selected {
-    display: none;
-  }
-
-  & .react-datepicker__year-option,
-  & .react-datepicker__month-option {
-    text-align: left;
-    padding: ${({ theme }) => theme.spacing(2)}
-      calc(${({ theme }) => theme.spacing(2)} - 2px);
-    width: calc(100% - ${({ theme }) => theme.spacing(4)});
-    border-radius: ${({ theme }) => theme.border.radius.xs};
-    color: ${({ theme }) => theme.font.color.secondary};
-    cursor: pointer;
-    margin: 2px;
-
-    &:hover {
-      background: ${({ theme }) => theme.background.transparent.light};
-    }
-  }
-
-  & .react-datepicker__year-option {
-    &:first-of-type,
-    &:last-of-type {
-      display: none;
-    }
-  }
-
-  & .react-datepicker__current-month {
-    display: none;
-  }
-
-  & .react-datepicker__day-name {
-    color: ${({ theme }) => theme.font.color.secondary};
-    width: 34px;
-    height: 40px;
-    line-height: 40px;
-  }
-
-  & .react-datepicker__month-container {
-    float: none;
-  }
-
-  // Days
-
-  & .react-datepicker__month {
-    margin-top: 0;
-
-    pointer-events: ${({ calendarDisabled }) =>
-      calendarDisabled ? 'none' : 'auto'};
-    opacity: ${({ calendarDisabled }) => (calendarDisabled ? '0.5' : '1')};
-  }
-
-  & .react-datepicker__day {
-    width: 34px;
-    height: 34px;
-    line-height: 34px;
-  }
-
-  & .react-datepicker__navigation--previous,
-  & .react-datepicker__navigation--next {
-    height: 34px;
-    border-radius: ${({ theme }) => theme.border.radius.sm};
-    padding-top: 6px;
-    &:hover {
-      background: ${({ theme }) => theme.background.transparent.light};
-    }
-  }
-  & .react-datepicker__navigation--previous {
-    right: 38px;
-    top: 6px;
-    left: auto;
-
-    & > span {
-      margin-left: -6px;
-    }
-  }
-
-  & .react-datepicker__navigation--next {
-    right: 6px;
-    top: 6px;
-
-    & > span {
-      margin-left: 6px;
-    }
-  }
-
-  & .react-datepicker__navigation-icon::before {
-    height: 7px;
-    width: 7px;
-    border-width: 1px 1px 0 0;
-    border-color: ${({ theme }) => theme.font.color.tertiary};
-  }
-
-  & .react-datepicker__day--keyboard-selected {
-    background-color: inherit;
-  }
-
-  & .react-datepicker__day,
-  .react-datepicker__time-name {
-    color: ${({ theme }) => theme.font.color.primary};
-  }
-
-  & .react-datepicker__day--selected {
-    background-color: ${({ theme }) => theme.color.blue};
-    color: ${({ theme }) => theme.background.primary};
-
-    &.react-datepicker__day:hover {
-      color: ${({ theme }) => theme.background.primary};
-    }
-  }
-
-  & .react-datepicker__day--outside-month {
-    color: ${({ theme }) => theme.font.color.tertiary};
-  }
-
-  & .react-datepicker__day:hover {
-    color: ${({ theme }) => theme.font.color.tertiary};
-  }
-
-  & .clearable {
-    border-bottom: 1px solid ${({ theme }) => theme.border.color.light};
-  }
-`;
-
-const StyledButtonContainer = styled(StyledHoverableMenuItemBase)`
+const StyledButtonContainer = styled.div`
+  align-items: center;
+  border-radius: calc(
+    ${themeCssVariables.border.radius.md} - ${themeCssVariables.spacing[1]}
+  );
   box-sizing: border-box;
+  cursor: pointer;
+  display: flex;
   height: 32px;
-  margin: ${({ theme }) => theme.spacing(1)};
-  padding: ${({ theme }) => theme.spacing(1)};
+  margin: ${themeCssVariables.spacing[1]};
+  padding: ${themeCssVariables.spacing[1]};
   width: auto;
+
+  &:hover {
+    background: ${themeCssVariables.background.transparent.light};
+  }
 `;
 
-const StyledButton = styled(MenuItemLeftContent)`
+const StyledButtonContent = styled.div`
+  align-items: center;
+  display: flex;
+  gap: ${themeCssVariables.spacing[2]};
   justify-content: start;
 `;
 
 const StyledDatePickerFallback = styled.div`
   align-items: center;
-  background: ${({ theme }) => theme.background.secondary};
-  border-radius: ${({ theme }) => theme.border.radius.md};
-  color: ${({ theme }) => theme.font.color.tertiary};
+  background: ${themeCssVariables.background.secondary};
+  border-radius: ${themeCssVariables.border.radius.md};
+  color: ${themeCssVariables.font.color.tertiary};
   display: flex;
   flex-direction: column;
-  gap: ${({ theme }) => theme.spacing(2)};
+  gap: ${themeCssVariables.spacing[2]};
   height: 300px;
   justify-content: center;
-  padding: ${({ theme }) => theme.spacing(4)};
+  padding: ${themeCssVariables.spacing[4]};
   width: 280px;
 `;
 
 type DatePickerProps = {
+  instanceId: string;
   isRelative?: boolean;
   hideHeaderInput?: boolean;
-  date: Nullable<string>;
+  plainDateString: Nullable<string>;
   relativeDate?: RelativeDateFilter & {
     start: string;
     end: string;
@@ -319,21 +95,34 @@ type DatePickerProps = {
   onEscape?: (date: string | null) => void;
   keyboardEventsDisabled?: boolean;
   onClear?: () => void;
+  hideCalendar?: boolean;
 };
 
-type DatePickerPropsType = ReactDatePickerLibProps<
-  boolean | undefined,
-  boolean | undefined
->;
+// react-datepicker v9 types its props as a discriminated union keyed on
+// selectsRange/selectsMultiple. We drive selectsRange dynamically (relative
+// filters highlight a contiguous range), which TS cannot narrow to a single
+// union branch, so collapse the discriminants to plain optionals.
+type DatePickerPropsType = Omit<
+  ReactDatePickerLibProps,
+  'selectsRange' | 'selectsMultiple' | 'onChange' | 'formatMultipleDates'
+> & {
+  selectsRange?: boolean;
+  onChange?: (date: Date | null) => void;
+};
 
 const ReactDatePicker = lazy<ComponentType<DatePickerPropsType>>(() =>
   import('react-datepicker').then((mod) => ({
-    default: mod.default as unknown as ComponentType<DatePickerPropsType>,
+    // react-datepicker ships CJS; under vite 8 this dynamic import's `default`
+    // can be the module namespace ({ default: Component }) rather than the
+    // component itself, so unwrap a nested default when present.
+    default: ((mod.default as any)?.default ??
+      mod.default) as unknown as ComponentType<DatePickerPropsType>,
   })),
 );
 
 export const DatePicker = ({
-  date,
+  instanceId,
+  plainDateString,
   onChange,
   onClose,
   clearable = true,
@@ -343,14 +132,34 @@ export const DatePicker = ({
   onRelativeDateChange,
   hideHeaderInput,
 }: DatePickerProps) => {
-  const dateOrToday = date ?? getPlainDateFromDate(new Date());
-  const shiftedDateForReactPicker = getDateFromPlainDate(dateOrToday);
+  const { theme } = useContext(ThemeContext);
+  const plainDate = isDefined(plainDateString)
+    ? Temporal.PlainDate.from(plainDateString)
+    : Temporal.Now.plainDateISO();
 
-  const theme = useTheme();
+  const relativeRangeStart = isRelative ? relativeDate?.start : undefined;
+  const relativeRangeEnd = isRelative ? relativeDate?.end : undefined;
+
+  const relativeRangeStartPlainDate = isDefined(relativeRangeStart)
+    ? Temporal.PlainDate.from(relativeRangeStart)
+    : null;
+
+  const relativeRangeEndPlainDate = isDefined(relativeRangeEnd)
+    ? Temporal.PlainDate.from(relativeRangeEnd).subtract({ days: 1 })
+    : null;
+
+  const {
+    startDate: relativeRangeStartDate,
+    endDate: relativeRangeEndDate,
+    rangeKey: relativeDateRangeKey,
+  } = getRelativeDatePickerCalendarRange(
+    relativeRangeStartPlainDate,
+    relativeRangeEndPlainDate,
+  );
 
   const { closeDropdown: closeDropdownMonthSelect } = useCloseDropdown();
   const { closeDropdown: closeDropdownYearSelect } = useCloseDropdown();
-  const currentWorkspaceMember = useRecoilValue(currentWorkspaceMemberState);
+  const currentWorkspaceMember = useAtomStateValue(currentWorkspaceMemberState);
   const handleClear = () => {
     closeDropdowns();
     onClear?.();
@@ -367,72 +176,57 @@ export const DatePicker = ({
   };
 
   const handleChangeMonth = (month: number) => {
-    const newDate = setMonth(shiftedDateForReactPicker, month);
+    const newDate = plainDate?.with({ month: month });
 
-    const plainDate = getPlainDateFromDate(newDate);
-
-    onChange?.(plainDate);
+    onChange?.(newDate?.toString() ?? null);
   };
 
   const handleAddMonth = () => {
-    const dateParsed = addMonths(shiftedDateForReactPicker, 1);
+    const newDate = plainDate?.add({ months: 1 });
 
-    const plainDate = getPlainDateFromDate(dateParsed);
-
-    onChange?.(plainDate);
+    onChange?.(newDate?.toString() ?? null);
   };
 
   const handleSubtractMonth = () => {
-    const dateParsed = subMonths(shiftedDateForReactPicker, 1);
+    const newDate = plainDate?.subtract({ months: 1 });
 
-    const plainDate = getPlainDateFromDate(dateParsed);
-
-    onChange?.(plainDate);
+    onChange?.(newDate?.toString() ?? null);
   };
 
   const handleChangeYear = (year: number) => {
-    const dateParsed = setYear(shiftedDateForReactPicker, year);
+    const newDate = plainDate?.with({ year: year });
 
-    const plainDate = getPlainDateFromDate(dateParsed);
-
-    onChange?.(plainDate);
+    onChange?.(newDate?.toString() ?? null);
   };
 
-  const handleDateChange = (date: Date) => {
-    const plainDate = getPlainDateFromDate(date);
+  const handleDateChange = (datePicked: Date | null) => {
+    if (!isDefined(datePicked)) {
+      return;
+    }
+    const plainDatePicked = turnJSDateToPlainDate(datePicked);
 
-    onChange?.(plainDate);
+    onChange?.(plainDatePicked.toString());
   };
 
-  const handleDateSelect = (date: Date) => {
-    const plainDate = getPlainDateFromDate(date);
+  const handleDateSelect = (datePicked: Date | null) => {
+    if (!isDefined(datePicked)) {
+      return;
+    }
+    const plainDatePicked = turnJSDateToPlainDate(datePicked);
 
-    handleClose?.(plainDate);
+    handleClose?.(plainDatePicked.toString());
   };
-
-  const highlightedDates =
-    isRelative && isDefined(relativeDate?.end) && isDefined(relativeDate?.start)
-      ? getHighlightedDates({
-          start: getDateFromPlainDate(relativeDate.start),
-          end: getDateFromPlainDate(relativeDate.end),
-        })
-      : [];
-
-  const dateAsDate = isDefined(date) ? getDateFromPlainDate(date) : undefined;
-
-  const selectedDates = isRelative
-    ? highlightedDates
-    : isDefined(dateAsDate)
-      ? [dateAsDate]
-      : [];
 
   const calendarStartDay =
     currentWorkspaceMember?.calendarStartDay === CalendarStartDay.SYSTEM
       ? CalendarStartDay[detectCalendarStartDay()]
       : (currentWorkspaceMember?.calendarStartDay ?? undefined);
 
+  const dateForDatePicker =
+    turnPlainDateToShiftedDateInSystemTimeZone(plainDate);
+
   return (
-    <StyledContainer calendarDisabled={isRelative}>
+    <StyledDatePickerContainer calendarDisabled={isRelative}>
       <div className={clearable ? 'clearable ' : ''}>
         <Suspense
           fallback={
@@ -463,27 +257,42 @@ export const DatePicker = ({
           }
         >
           <ReactDatePicker
+            key={relativeDateRangeKey}
             open={true}
-            selected={shiftedDateForReactPicker}
-            selectedDates={selectedDates}
-            openToDate={shiftedDateForReactPicker}
             disabledKeyboardNavigation
             onChange={handleDateChange}
-            calendarStartDay={calendarStartDay}
+            onSelect={handleDateSelect}
+            openToDate={isRelative ? relativeRangeStartDate : dateForDatePicker}
+            selectsRange={isRelative ? true : undefined}
+            startDate={isRelative ? relativeRangeStartDate : undefined}
+            endDate={isRelative ? relativeRangeEndDate : undefined}
+            selected={isRelative ? undefined : dateForDatePicker}
+            calendarStartDay={
+              calendarStartDay as 0 | 1 | 2 | 3 | 4 | 5 | 6 | undefined
+            }
             renderCustomHeader={({
+              monthDate,
+              decreaseMonth,
+              increaseMonth,
               prevMonthButtonDisabled,
               nextMonthButtonDisabled,
             }) =>
               isRelative ? (
                 <RelativeDatePickerHeader
+                  instanceId={instanceId}
                   direction={relativeDate?.direction ?? 'PAST'}
                   amount={relativeDate?.amount}
                   unit={relativeDate?.unit ?? 'DAY'}
                   onChange={onRelativeDateChange}
+                  calendarMonthDate={monthDate}
+                  onPreviousMonth={decreaseMonth}
+                  onNextMonth={increaseMonth}
+                  prevMonthButtonDisabled={prevMonthButtonDisabled}
+                  nextMonthButtonDisabled={nextMonthButtonDisabled}
                 />
               ) : (
                 <DatePickerHeader
-                  date={dateOrToday}
+                  date={plainDate?.toString() ?? null}
                   onChange={onChange}
                   onChangeMonth={handleChangeMonth}
                   onChangeYear={handleChangeYear}
@@ -495,16 +304,16 @@ export const DatePicker = ({
                 />
               )
             }
-            onSelect={handleDateSelect}
-            selectsMultiple={isRelative}
           />
         </Suspense>
       </div>
       {clearable && (
         <StyledButtonContainer onClick={handleClear}>
-          <StyledButton LeftIcon={IconCalendarX} text={t`Clear`} />
+          <StyledButtonContent>
+            <MenuItemLeftContent LeftIcon={IconCalendarX} text={t`Clear`} />
+          </StyledButtonContent>
         </StyledButtonContainer>
       )}
-    </StyledContainer>
+    </StyledDatePickerContainer>
   );
 };

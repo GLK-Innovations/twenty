@@ -1,9 +1,10 @@
+import { t } from '@lingui/core/macro';
 import { useMemo } from 'react';
 
 import { SELECT_COUNTRY_DROPDOWN_ID } from '@/ui/input/components/internal/country/constants/SelectCountryDropdownId';
 import { useCountries } from '@/ui/input/components/internal/hooks/useCountries';
 import { Select } from '@/ui/input/components/Select';
-import { IconCircleOff, type IconComponentProps } from 'twenty-ui/display';
+import { IconCircleOff, type IconComponentProps } from 'twenty-ui/icon';
 import { type SelectOption } from 'twenty-ui/input';
 
 export const CountrySelect = ({
@@ -27,7 +28,7 @@ export const CountrySelect = ({
       }),
     );
     countryList.unshift({
-      label: 'No country',
+      label: t`No country`,
       value: '',
       Icon: IconCircleOff,
     });

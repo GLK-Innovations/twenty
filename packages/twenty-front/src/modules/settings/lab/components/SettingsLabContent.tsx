@@ -1,28 +1,32 @@
 import { currentWorkspaceState } from '@/auth/states/currentWorkspaceState';
 import { SettingsOptionCardContentToggle } from '@/settings/components/SettingsOptions/SettingsOptionCardContentToggle';
 import { useLabPublicFeatureFlags } from '@/settings/lab/hooks/useLabPublicFeatureFlags';
-import styled from '@emotion/styled';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { styled } from '@linaria/react';
+import { isNonEmptyString } from '@sniptt/guards';
 import { useState } from 'react';
-import { useRecoilValue } from 'recoil';
-import { Card } from 'twenty-ui/layout';
-import { type FeatureFlagKey } from '~/generated/graphql';
+import { useIcons } from 'twenty-ui/icon';
+import { Card } from 'twenty-ui/surfaces';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
+import { type FeatureFlagKey } from '~/generated-metadata/graphql';
 
 const StyledCardGrid = styled.div`
   display: grid;
-  gap: ${({ theme }) => theme.spacing(4)};
+  gap: ${themeCssVariables.spacing[4]};
   grid-template-columns: 1fr;
 `;
 
 const StyledImage = styled.img`
-  border-bottom: 1px solid ${({ theme }) => theme.border.color.medium};
-  height: 120px;
-  width: 100%;
-  object-fit: cover;
+  border-bottom: 1px solid ${themeCssVariables.border.color.medium};
   display: flex;
+  height: 120px;
+  object-fit: cover;
+  width: 100%;
 `;
 
 export const SettingsLabContent = () => {
-  const currentWorkspace = useRecoilValue(currentWorkspaceState);
+  const currentWorkspace = useAtomStateValue(currentWorkspaceState);
+  const { getIcon } = useIcons();
   const { labPublicFeatureFlags, handleLabPublicFeatureFlagUpdate } =
     useLabPublicFeatureFlags();
   const [hasImageLoadingError, setHasImageLoadingError] = useState<
@@ -37,38 +41,59 @@ export const SettingsLabContent = () => {
     setHasImageLoadingError((prev) => ({ ...prev, [key]: true }));
   };
 
+  const labPublicFeatureFlagsWithImage = labPublicFeatureFlags.filter((flag) =>
+    isNonEmptyString(flag.metadata.imagePath),
+  );
+  const labPublicFeatureFlagsWithoutImage = labPublicFeatureFlags.filter(
+    (flag) => !isNonEmptyString(flag.metadata.imagePath),
+  );
+
   return (
     currentWorkspace?.id && (
       <StyledCardGrid>
-        {[...labPublicFeatureFlags]
-          .sort((a, b) => {
-            // Sort flags with images first
-            if (a.metadata.imagePath !== '' && b.metadata.imagePath === '')
-              return -1;
-            if (a.metadata.imagePath === '' && b.metadata.imagePath !== '')
-              return 1;
-            return 0;
-          })
-          .map((flag) => (
-            <Card key={flag.key} rounded>
-              {flag.metadata.imagePath && !hasImageLoadingError[flag.key] ? (
-                <StyledImage
-                  src={flag.metadata.imagePath}
-                  alt={flag.metadata.label}
-                  onError={() => handleImageError(flag.key)}
-                />
-              ) : (
-                <></>
-              )}
+        {labPublicFeatureFlagsWithImage.map((flag) => (
+          <Card
+            key={flag.key}
+            rounded
+            backgroundColor={themeCssVariables.background.secondary}
+          >
+            {!hasImageLoadingError[flag.key] && (
+              <StyledImage
+                src={flag.metadata.imagePath ?? undefined}
+                alt={flag.metadata.label}
+                onError={() => handleImageError(flag.key)}
+              />
+            )}
+            <SettingsOptionCardContentToggle
+              Icon={getIcon(flag.metadata.icon)}
+              title={flag.metadata.label}
+              description={flag.metadata.description}
+              checked={flag.value}
+              onChange={(value) => handleToggle(flag.key, value)}
+              toggleCentered={false}
+            />
+          </Card>
+        ))}
+
+        {labPublicFeatureFlagsWithoutImage.length > 0 && (
+          <Card
+            rounded
+            backgroundColor={themeCssVariables.background.secondary}
+          >
+            {labPublicFeatureFlagsWithoutImage.map((flag, index) => (
               <SettingsOptionCardContentToggle
+                key={flag.key}
+                Icon={getIcon(flag.metadata.icon)}
                 title={flag.metadata.label}
                 description={flag.metadata.description}
                 checked={flag.value}
                 onChange={(value) => handleToggle(flag.key, value)}
                 toggleCentered={false}
+                divider={index < labPublicFeatureFlagsWithoutImage.length - 1}
               />
-            </Card>
-          ))}
+            ))}
+          </Card>
+        )}
       </StyledCardGrid>
     )
   );

@@ -1,17 +1,23 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 
+import { PermissionFlagType } from 'twenty-shared/constants';
 import { WorkspaceActivationStatus } from 'twenty-shared/workspace';
 import { DataSource, Repository } from 'typeorm';
 
+import { FlatApplication } from 'src/engine/core-modules/application/types/flat-application.type';
 import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
 import { ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
 import { FieldPermissionService } from 'src/engine/metadata-modules/object-permission/field-permission/field-permission.service';
 import { ObjectPermissionService } from 'src/engine/metadata-modules/object-permission/object-permission.service';
+import { RolePermissionFlagService } from 'src/engine/metadata-modules/role-permission-flag/role-permission-flag.service';
+import { RoleTargetService } from 'src/engine/metadata-modules/role-target/services/role-target.service';
+import { RoleDTO } from 'src/engine/metadata-modules/role/dtos/role.dto';
 import { RoleEntity } from 'src/engine/metadata-modules/role/role.entity';
 import { RoleService } from 'src/engine/metadata-modules/role/role.service';
 import { UserRoleService } from 'src/engine/metadata-modules/user-role/user-role.service';
-import { WorkspacePermissionsCacheService } from 'src/engine/metadata-modules/workspace-permissions-cache/workspace-permissions-cache.service';
+import { InjectWorkspaceScopedRepository } from 'src/engine/twenty-orm/workspace-scoped-repository/inject-workspace-scoped-repository.decorator';
+import { WorkspaceScopedRepository } from 'src/engine/twenty-orm/workspace-scoped-repository/workspace-scoped-repository';
 import {
   SEED_APPLE_WORKSPACE_ID,
   SEED_YCOMBINATOR_WORKSPACE_ID,
@@ -21,7 +27,7 @@ import {
   USER_WORKSPACE_DATA_SEED_IDS,
 } from 'src/engine/workspace-manager/dev-seeder/core/utils/seed-user-workspaces.util';
 import { API_KEY_DATA_SEED_IDS } from 'src/engine/workspace-manager/dev-seeder/data/constants/api-key-data-seeds.constant';
-import { ADMIN_ROLE } from 'src/engine/workspace-manager/workspace-sync-metadata/standard-roles/roles/admin-role';
+import { STANDARD_ROLE } from 'src/engine/workspace-manager/twenty-standard-application/constants/standard-role.constant';
 
 @Injectable()
 export class DevSeederPermissionsService {
@@ -33,19 +39,29 @@ export class DevSeederPermissionsService {
     private readonly objectPermissionService: ObjectPermissionService,
     @InjectRepository(ObjectMetadataEntity)
     private readonly objectMetadataRepository: Repository<ObjectMetadataEntity>,
-    @InjectRepository(RoleEntity)
-    private readonly roleRepository: Repository<RoleEntity>,
-    private readonly workspacePermissionsCacheService: WorkspacePermissionsCacheService,
+    @InjectWorkspaceScopedRepository(RoleEntity)
+    private readonly roleRepository: WorkspaceScopedRepository<RoleEntity>,
     private readonly fieldPermissionService: FieldPermissionService,
+    private readonly roleTargetService: RoleTargetService,
+    private readonly rolePermissionFlagService: RolePermissionFlagService,
     @InjectDataSource()
     private readonly coreDataSource: DataSource,
   ) {}
 
-  public async initPermissions(workspaceId: string) {
-    const adminRole = await this.roleRepository.findOne({
+  public async initPermissions({
+    twentyStandardFlatApplication,
+    workspaceCustomFlatApplication,
+    workspaceId,
+    light = false,
+  }: {
+    workspaceId: string;
+    twentyStandardFlatApplication: FlatApplication;
+    workspaceCustomFlatApplication: FlatApplication;
+    light?: boolean;
+  }) {
+    const adminRole = await this.roleRepository.findOne(workspaceId, {
       where: {
-        standardId: ADMIN_ROLE.standardId,
-        workspaceId,
+        universalIdentifier: STANDARD_ROLE.admin.universalIdentifier,
       },
     });
 
@@ -55,34 +71,15 @@ export class DevSeederPermissionsService {
       );
     }
 
-    try {
-      await this.coreDataSource
-        .createQueryBuilder()
-        .insert()
-        .into('core.roleTargets', ['roleId', 'apiKeyId', 'workspaceId'])
-        .orIgnore()
-        .values([
-          {
-            roleId: adminRole.id,
-            apiKeyId: API_KEY_DATA_SEED_IDS.ID_1,
-            workspaceId: workspaceId,
-          },
-        ])
-        .execute();
-
-      await this.workspacePermissionsCacheService.recomputeApiKeyRoleMapCache({
-        workspaceId,
-      });
-      await this.workspacePermissionsCacheService.recomputeUserWorkspaceRoleMapCache(
-        {
-          workspaceId,
-        },
-      );
-    } catch (error) {
-      this.logger.error(
-        `Could not assign role to test API key: ${error.message}`,
-      );
-    }
+    await this.roleTargetService.create({
+      createRoleTargetInput: {
+        roleId: adminRole.id,
+        targetId: API_KEY_DATA_SEED_IDS.ID_1,
+        targetMetadataForeignKey: 'apiKeyId',
+        applicationId: twentyStandardFlatApplication.id,
+      },
+      workspaceId,
+    });
 
     let adminUserWorkspaceId: string | undefined;
     let memberUserWorkspaceIds: string[] = [];
@@ -90,32 +87,61 @@ export class DevSeederPermissionsService {
     let guestUserWorkspaceId: string | undefined;
 
     if (workspaceId === SEED_APPLE_WORKSPACE_ID) {
-      adminUserWorkspaceId = USER_WORKSPACE_DATA_SEED_IDS.JANE;
-      limitedUserWorkspaceId = USER_WORKSPACE_DATA_SEED_IDS.TIM;
-      memberUserWorkspaceIds = [
-        USER_WORKSPACE_DATA_SEED_IDS.JONY,
-        ...Object.values(RANDOM_USER_WORKSPACE_IDS),
-      ];
-      guestUserWorkspaceId = USER_WORKSPACE_DATA_SEED_IDS.PHIL;
+      if (light) {
+        // In light mode, Tim is admin (prefilled login user needs full
+        // access for SDK development). No demo permission roles needed.
+        adminUserWorkspaceId = USER_WORKSPACE_DATA_SEED_IDS.TIM;
+        memberUserWorkspaceIds = [
+          USER_WORKSPACE_DATA_SEED_IDS.JANE,
+          USER_WORKSPACE_DATA_SEED_IDS.JONY,
+          USER_WORKSPACE_DATA_SEED_IDS.PHIL,
+          ...Object.values(RANDOM_USER_WORKSPACE_IDS),
+        ];
+      } else {
+        adminUserWorkspaceId = USER_WORKSPACE_DATA_SEED_IDS.JANE;
+        limitedUserWorkspaceId = USER_WORKSPACE_DATA_SEED_IDS.TIM;
+        guestUserWorkspaceId = USER_WORKSPACE_DATA_SEED_IDS.PHIL;
+        memberUserWorkspaceIds = [
+          USER_WORKSPACE_DATA_SEED_IDS.JONY,
+          ...Object.values(RANDOM_USER_WORKSPACE_IDS),
+        ];
 
-      const guestRole = await this.roleService.createGuestRole({
-        workspaceId,
-      });
+        const guestRole = await this.roleService.createGuestRole({
+          workspaceId,
+          ownerFlatApplication: workspaceCustomFlatApplication,
+        });
 
-      await this.userRoleService.assignRoleToUserWorkspace({
-        workspaceId,
-        userWorkspaceId: guestUserWorkspaceId,
-        roleId: guestRole.id,
-      });
+        await this.userRoleService.assignRoleToManyUserWorkspace({
+          workspaceId,
+          userWorkspaceIds: [guestUserWorkspaceId],
+          roleId: guestRole.id,
+        });
 
-      const limitedRole =
-        await this.createLimitedRoleForSeedWorkspace(workspaceId);
+        // The limited role restricts access to Pet and Rocket objects,
+        // which are only created in full (non-light) mode
+        const limitedRole = await this.createLimitedRoleForSeedWorkspace({
+          workspaceId,
+          ownerFlatApplication: workspaceCustomFlatApplication,
+        });
 
-      await this.userRoleService.assignRoleToUserWorkspace({
-        workspaceId,
-        userWorkspaceId: limitedUserWorkspaceId,
-        roleId: limitedRole.id,
-      });
+        await this.userRoleService.assignRoleToManyUserWorkspace({
+          workspaceId,
+          userWorkspaceIds: [limitedUserWorkspaceId],
+          roleId: limitedRole.id,
+        });
+
+        const impersonateOnlyRole =
+          await this.createImpersonateOnlyRoleForSeedWorkspace({
+            workspaceId,
+            ownerFlatApplication: workspaceCustomFlatApplication,
+          });
+
+        await this.userRoleService.assignRoleToManyUserWorkspace({
+          workspaceId,
+          userWorkspaceIds: [USER_WORKSPACE_DATA_SEED_IDS.SCOTT],
+          roleId: impersonateOnlyRole.id,
+        });
+      }
     } else if (workspaceId === SEED_YCOMBINATOR_WORKSPACE_ID) {
       adminUserWorkspaceId = USER_WORKSPACE_DATA_SEED_IDS.TIM_ACME;
       memberUserWorkspaceIds = [
@@ -125,16 +151,42 @@ export class DevSeederPermissionsService {
       ];
     }
 
-    if (adminUserWorkspaceId) {
-      await this.userRoleService.assignRoleToUserWorkspace({
-        workspaceId,
-        userWorkspaceId: adminUserWorkspaceId,
-        roleId: adminRole.id,
-      });
+    if (!adminUserWorkspaceId) {
+      throw new Error(
+        'Should never occur, no eligible user workspace for admin has been found',
+      );
     }
 
+    await this.userRoleService.assignRoleToManyUserWorkspace({
+      workspaceId,
+      userWorkspaceIds: [adminUserWorkspaceId],
+      roleId: adminRole.id,
+    });
+
+    const memberRole = await this.initMinimalPermissionsAndActivateWorkspace({
+      workspaceId,
+      workspaceCustomFlatApplication,
+    });
+
+    if (memberUserWorkspaceIds.length > 0) {
+      await this.userRoleService.assignRoleToManyUserWorkspace({
+        workspaceId,
+        userWorkspaceIds: memberUserWorkspaceIds,
+        roleId: memberRole.id,
+      });
+    }
+  }
+
+  public async initMinimalPermissionsAndActivateWorkspace({
+    workspaceId,
+    workspaceCustomFlatApplication,
+  }: {
+    workspaceId: string;
+    workspaceCustomFlatApplication: FlatApplication;
+  }): Promise<RoleDTO> {
     const memberRole = await this.roleService.createMemberRole({
       workspaceId,
+      ownerFlatApplication: workspaceCustomFlatApplication,
     });
 
     await this.coreDataSource
@@ -144,19 +196,56 @@ export class DevSeederPermissionsService {
         activationStatus: WorkspaceActivationStatus.ACTIVE,
       });
 
-    if (memberUserWorkspaceIds) {
-      for (const memberUserWorkspaceId of memberUserWorkspaceIds) {
-        await this.userRoleService.assignRoleToUserWorkspace({
-          workspaceId,
-          userWorkspaceId: memberUserWorkspaceId,
-          roleId: memberRole.id,
-        });
-      }
-    }
+    return memberRole;
   }
 
-  private async createLimitedRoleForSeedWorkspace(workspaceId: string) {
+  // Creates a non-admin role whose only elevated capability is the workspace
+  // IMPERSONATE permission flag. Assigned to Scott so the impersonation
+  // escalation guard can be exercised: a non-admin holding IMPERSONATE must
+  // still be blocked from impersonating an admin.
+  private async createImpersonateOnlyRoleForSeedWorkspace({
+    ownerFlatApplication,
+    workspaceId,
+  }: {
+    workspaceId: string;
+    ownerFlatApplication: FlatApplication;
+  }): Promise<RoleDTO> {
+    const impersonateOnlyRole = await this.roleService.createRole({
+      ownerFlatApplication,
+      workspaceId,
+      input: {
+        label: 'Impersonate-only',
+        description: 'Member role granted only the impersonate permission',
+        icon: 'IconSpy',
+        canUpdateAllSettings: false,
+        canAccessAllTools: false,
+        canReadAllObjectRecords: true,
+        canUpdateAllObjectRecords: false,
+        canSoftDeleteAllObjectRecords: false,
+        canDestroyAllObjectRecords: false,
+      },
+    });
+
+    await this.rolePermissionFlagService.upsertPermissionFlags({
+      workspaceId,
+      input: {
+        roleId: impersonateOnlyRole.id,
+        permissionFlagKeys: [PermissionFlagType.IMPERSONATE],
+      },
+    });
+
+    return impersonateOnlyRole;
+  }
+
+  private async createLimitedRoleForSeedWorkspace({
+    ownerFlatApplication,
+    workspaceId,
+  }: {
+    workspaceId: string;
+    ownerFlatApplication: FlatApplication;
+  }) {
     const customRole = await this.roleService.createRole({
+      ownerFlatApplication,
       workspaceId,
       input: {
         label: 'Object-restricted',
@@ -234,12 +323,12 @@ export class DevSeederPermissionsService {
       },
     });
 
-    const personCityFieldMetadata = personObjectMetadata.fields.find(
-      (field) => field.name === 'city',
+    const personJobTitleFieldMetadata = personObjectMetadata.fields.find(
+      (field) => field.name === 'jobTitle',
     );
 
-    if (!personCityFieldMetadata) {
-      throw new Error('Person city field metadata not found');
+    if (!personJobTitleFieldMetadata) {
+      throw new Error('Person jobTitle field metadata not found');
     }
 
     const companyLinkedinLinkFieldMetadata = companyObjectMetadata.fields.find(
@@ -250,9 +339,9 @@ export class DevSeederPermissionsService {
       throw new Error('Company linkedin link field metadata not found');
     }
 
-    const readOnlyOnPersonCityFieldPermission = {
+    const readOnlyOnPersonJobTitleFieldPermission = {
       objectMetadataId: personObjectMetadata.id,
-      fieldMetadataId: personCityFieldMetadata.id,
+      fieldMetadataId: personJobTitleFieldMetadata.id,
       canReadFieldValue: null,
       canUpdateFieldValue: false,
     };
@@ -269,7 +358,7 @@ export class DevSeederPermissionsService {
       input: {
         roleId: customRole.id,
         fieldPermissions: [
-          readOnlyOnPersonCityFieldPermission,
+          readOnlyOnPersonJobTitleFieldPermission,
           noReadOnCompanyLinkedinLinkFieldPermission,
         ],
       },

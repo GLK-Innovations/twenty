@@ -1,13 +1,15 @@
 import { CalendarMonthCard } from '@/activities/calendar/components/CalendarMonthCard';
 import { CalendarContext } from '@/activities/calendar/contexts/CalendarContext';
 import { currentWorkspaceMemberState } from '@/auth/states/currentWorkspaceMemberState';
+import { DATE_TIME_SETTINGS_PREVIEW_DATE } from '@/localization/constants/DateTimeSettingsPreviewDate';
 import { SettingsAccountsCalendarDisplaySettings } from '@/settings/accounts/components/SettingsAccountsCalendarDisplaySettings';
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
 import { t } from '@lingui/core/macro';
-import { Section } from '@react-email/components';
+import { Section } from 'twenty-ui/layout';
 import { addMinutes, endOfDay, min, startOfDay } from 'date-fns';
-import { useRecoilValue } from 'recoil';
-import { H2Title } from 'twenty-ui/display';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { H2Title } from 'twenty-ui/typography';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
 import {
   CalendarChannelVisibility,
   type TimelineCalendarEvent,
@@ -16,14 +18,14 @@ import {
 const StyledGeneralContainer = styled.div`
   display: flex;
   flex-direction: column;
-  gap: ${({ theme }) => theme.spacing(6)};
-  padding-top: ${({ theme }) => theme.spacing(6)};
+  gap: ${themeCssVariables.spacing[6]};
+  padding-top: ${themeCssVariables.spacing[6]};
 `;
 
 export const SettingsAccountsCalendarChannelsGeneral = () => {
-  const currentWorkspaceMember = useRecoilValue(currentWorkspaceMemberState);
+  const currentWorkspaceMember = useAtomStateValue(currentWorkspaceMemberState);
 
-  const exampleStartDate = new Date();
+  const exampleStartDate = DATE_TIME_SETTINGS_PREVIEW_DATE;
   const exampleEndDate = min([
     addMinutes(exampleStartDate, 30),
     endOfDay(exampleStartDate),
@@ -47,6 +49,7 @@ export const SettingsAccountsCalendarChannelsGeneral = () => {
         workspaceMemberId: currentWorkspaceMember?.id || '',
       },
     ],
+    callRecordings: [],
     endsAt: exampleEndDate.toISOString(),
     isFullDay: false,
     startsAt: exampleStartDate.toISOString(),
@@ -58,7 +61,7 @@ export const SettingsAccountsCalendarChannelsGeneral = () => {
     description: '',
     isCanceled: false,
     location: '',
-    title: 'Onboarding call',
+    title: t`Onboarding call`,
     visibility: CalendarChannelVisibility.SHARE_EVERYTHING,
   };
 

@@ -1,5 +1,13 @@
+import { randomUUID } from 'crypto';
+
+import gql from 'graphql-tag';
 import request from 'supertest';
+import { getCurrentUser } from 'test/integration/graphql/utils/get-current-user.util';
 import { signUpOperationFactory } from 'test/integration/graphql/utils/sign-up-operation-factory.util';
+import { signUpInWorkspaceAndGetAccessToken } from 'test/integration/graphql/utils/sign-up-in-workspace-and-get-access-token.util';
+import { deleteUser } from 'test/integration/graphql/utils/delete-user.util';
+import { makeMetadataAPIRequest } from 'test/integration/metadata/suites/utils/make-metadata-api-request.util';
+import { updateConfigVariable } from 'test/integration/twenty-config/utils/update-config-variable.util';
 
 import { ErrorCode } from 'src/engine/core-modules/graphql/utils/graphql-errors.util';
 import { PermissionsExceptionMessage } from 'src/engine/metadata-modules/permissions/permissions.exception';
@@ -20,7 +28,7 @@ describe('deleteUser', () => {
     };
 
     await client
-      .post('/graphql')
+      .post('/metadata')
       .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
       .send(query)
       .expect((res) => {
@@ -45,7 +53,7 @@ describe('deleteUser', () => {
     };
 
     await client
-      .post('/graphql')
+      .post('/metadata')
       .set('Authorization', `Bearer ${APPLE_JONY_MEMBER_ACCESS_TOKEN}`)
       .send(query)
       .expect(200)
@@ -74,7 +82,7 @@ describe('deleteUser', () => {
     };
 
     await client
-      .post('/graphql')
+      .post('/metadata')
       .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
       .send(enablePublicInviteLinkMutation)
       .expect(200)
@@ -85,26 +93,23 @@ describe('deleteUser', () => {
         );
       });
 
-    // Sign up a new user into the current workspace via public invite link
     const testEmail = `test_user_${Date.now()}@example.com`;
     const signUpMutation = signUpOperationFactory({
       email: testEmail,
       password: 'Password123!',
     });
 
-    const signUpResponse = await client.post('/graphql').send(signUpMutation);
+    const signUpResponse = await client.post('/metadata').send(signUpMutation);
 
     expect(signUpResponse.status).toBe(200);
     expect(signUpResponse.body.errors).toBeUndefined();
 
-    // Query workspace members and find the created user by email to get workspaceMemberId
     const newWorkspaceMemberQuery = {
       query: `
         query WorkspaceMember($workspaceMemberFilter: WorkspaceMemberFilterInput!) {
           workspaceMember(filter: $workspaceMemberFilter) {
           id
             userId
-            userWorkspaceId
           }
         }
       `,
@@ -129,7 +134,6 @@ describe('deleteUser', () => {
     expect(createdMember).toBeDefined();
     const createdWorkspaceMemberId = createdMember.id;
 
-    // 2. Act
     const deleteUserFromWorkspaceMutation = {
       query: `
         mutation DeleteUserFromWorkspace {
@@ -141,7 +145,7 @@ describe('deleteUser', () => {
     };
 
     const deleteResponse = await client
-      .post('/graphql')
+      .post('/metadata')
       .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
       .send(deleteUserFromWorkspaceMutation);
 
@@ -149,7 +153,6 @@ describe('deleteUser', () => {
 
     expect(deleteResponse.body.errors).toBeUndefined();
 
-    // 3. Assert
     const membersAfterDeletionResponse = await client
       .post('/graphql')
       .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
@@ -169,7 +172,7 @@ describe('deleteUser', () => {
     };
 
     const rolesResponse = await client
-      .post('/graphql')
+      .post('/metadata')
       .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
       .send(getRolesWithMembersQuery);
 
@@ -185,6 +188,103 @@ describe('deleteUser', () => {
       expect(
         role.workspaceMembers.find((wm) => wm.id === createdWorkspaceMemberId),
       ).toBeUndefined();
+    }
+  });
+});
+
+describe('updateUserEmail', () => {
+  let newUserAccessToken: string | undefined;
+
+  afterEach(async () => {
+    if (newUserAccessToken) {
+      await deleteUser({
+        accessToken: newUserAccessToken,
+        expectToFail: false,
+      });
+      newUserAccessToken = undefined;
+    }
+  });
+
+  it('should update email directly when IS_EMAIL_VERIFICATION_REQUIRED is false', async () => {
+    const originalEmail = `update-email-no-verif-${randomUUID()}@example.com`;
+    const updatedEmail = `updated-${randomUUID()}@example.com`;
+
+    newUserAccessToken =
+      await signUpInWorkspaceAndGetAccessToken(originalEmail);
+
+    const updateEmailMutation = gql`
+      mutation UpdateUserEmail($newEmail: String!) {
+        updateUserEmail(newEmail: $newEmail)
+      }
+    `;
+
+    const updateResponse = await makeMetadataAPIRequest(
+      {
+        query: updateEmailMutation,
+        variables: { newEmail: updatedEmail },
+      },
+      newUserAccessToken,
+    );
+
+    expect(updateResponse.status).toBe(200);
+    expect(updateResponse.body.errors).toBeUndefined();
+    expect(updateResponse.body.data.updateUserEmail).toBe(true);
+
+    const { data } = await getCurrentUser({
+      accessToken: newUserAccessToken,
+      expectToFail: false,
+    });
+
+    expect(data.currentUser.email).toBe(updatedEmail);
+  });
+
+  it('should not update email immediately when IS_EMAIL_VERIFICATION_REQUIRED is true', async () => {
+    const originalEmail = `update-email-with-verif-${randomUUID()}@example.com`;
+    const updatedEmail = `updated-verif-${randomUUID()}@example.com`;
+
+    newUserAccessToken =
+      await signUpInWorkspaceAndGetAccessToken(originalEmail);
+
+    await updateConfigVariable({
+      input: {
+        key: 'IS_EMAIL_VERIFICATION_REQUIRED',
+        value: true,
+      },
+    });
+
+    try {
+      const updateEmailMutation = gql`
+        mutation UpdateUserEmail($newEmail: String!) {
+          updateUserEmail(newEmail: $newEmail)
+        }
+      `;
+
+      const updateResponse = await makeMetadataAPIRequest(
+        {
+          query: updateEmailMutation,
+          variables: { newEmail: updatedEmail },
+        },
+        newUserAccessToken,
+      );
+
+      expect(updateResponse.status).toBe(200);
+      expect(updateResponse.body.errors).toBeUndefined();
+      expect(updateResponse.body.data.updateUserEmail).toBe(true);
+
+      // Email should remain unchanged — verification email was sent but not confirmed
+      const { data } = await getCurrentUser({
+        accessToken: newUserAccessToken,
+        expectToFail: false,
+      });
+
+      expect(data.currentUser.email).toBe(originalEmail);
+    } finally {
+      await updateConfigVariable({
+        input: {
+          key: 'IS_EMAIL_VERIFICATION_REQUIRED',
+          value: false,
+        },
+      });
     }
   });
 });

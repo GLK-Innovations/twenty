@@ -1,40 +1,18 @@
 import { StepStatus } from 'twenty-shared/workflow';
 
-import { shouldSkipStepExecution } from 'src/modules/workflow/workflow-executor/utils/should-skip-step-execution.util';
 import {
-  type WorkflowAction,
-  WorkflowActionType,
-} from 'src/modules/workflow/workflow-executor/workflow-actions/types/workflow-action.type';
+  createMockCodeStep,
+  createMockIfElseStep,
+} from 'src/modules/workflow/workflow-executor/utils/create-mock-workflow-steps.util';
+import { shouldSkipStepExecution } from 'src/modules/workflow/workflow-executor/utils/should-skip-step-execution.util';
+import { type WorkflowAction } from 'src/modules/workflow/workflow-executor/workflow-actions/types/workflow-action.type';
 
 describe('shouldSkipStepExecution', () => {
-  const createMockStep = (
-    id: string,
-    nextStepIds: string[] = [],
-  ): WorkflowAction => ({
-    id,
-    name: 'Mock Step',
-    type: WorkflowActionType.CODE,
-    settings: {
-      input: {
-        serverlessFunctionId: 'mock-function-id',
-        serverlessFunctionVersion: 'mock-function-version',
-        serverlessFunctionInput: {},
-      },
-      errorHandlingOptions: {
-        continueOnFailure: { value: false },
-        retryOnFailure: { value: false },
-      },
-      outputSchema: {},
-    },
-    valid: true,
-    nextStepIds,
-  });
-
   it('should return true when all parent steps are skipped', () => {
     const steps = [
-      createMockStep('step-1', ['step-3']),
-      createMockStep('step-2', ['step-3']),
-      createMockStep('step-3', []),
+      createMockCodeStep('step-1', ['step-3']),
+      createMockCodeStep('step-2', ['step-3']),
+      createMockCodeStep('step-3', []),
     ];
     const stepInfos = {
       'step-1': { status: StepStatus.SKIPPED },
@@ -53,9 +31,9 @@ describe('shouldSkipStepExecution', () => {
 
   it('should return true when all parent steps are stopped', () => {
     const steps = [
-      createMockStep('step-1', ['step-3']),
-      createMockStep('step-2', ['step-3']),
-      createMockStep('step-3', []),
+      createMockCodeStep('step-1', ['step-3']),
+      createMockCodeStep('step-2', ['step-3']),
+      createMockCodeStep('step-3', []),
     ];
     const stepInfos = {
       'step-1': { status: StepStatus.STOPPED },
@@ -74,9 +52,9 @@ describe('shouldSkipStepExecution', () => {
 
   it('should return true when parent steps are mix of skipped and stopped', () => {
     const steps = [
-      createMockStep('step-1', ['step-3']),
-      createMockStep('step-2', ['step-3']),
-      createMockStep('step-3', []),
+      createMockCodeStep('step-1', ['step-3']),
+      createMockCodeStep('step-2', ['step-3']),
+      createMockCodeStep('step-3', []),
     ];
     const stepInfos = {
       'step-1': { status: StepStatus.SKIPPED },
@@ -95,9 +73,9 @@ describe('shouldSkipStepExecution', () => {
 
   it('should return false when at least one parent step is successful', () => {
     const steps = [
-      createMockStep('step-1', ['step-3']),
-      createMockStep('step-2', ['step-3']),
-      createMockStep('step-3', []),
+      createMockCodeStep('step-1', ['step-3']),
+      createMockCodeStep('step-2', ['step-3']),
+      createMockCodeStep('step-3', []),
     ];
     const stepInfos = {
       'step-1': { status: StepStatus.SKIPPED },
@@ -116,9 +94,9 @@ describe('shouldSkipStepExecution', () => {
 
   it('should return false when at least one parent step is failed', () => {
     const steps = [
-      createMockStep('step-1', ['step-3']),
-      createMockStep('step-2', ['step-3']),
-      createMockStep('step-3', []),
+      createMockCodeStep('step-1', ['step-3']),
+      createMockCodeStep('step-2', ['step-3']),
+      createMockCodeStep('step-3', []),
     ];
     const stepInfos = {
       'step-1': { status: StepStatus.SKIPPED },
@@ -137,9 +115,9 @@ describe('shouldSkipStepExecution', () => {
 
   it('should return false when at least one parent step is running', () => {
     const steps = [
-      createMockStep('step-1', ['step-3']),
-      createMockStep('step-2', ['step-3']),
-      createMockStep('step-3', []),
+      createMockCodeStep('step-1', ['step-3']),
+      createMockCodeStep('step-2', ['step-3']),
+      createMockCodeStep('step-3', []),
     ];
     const stepInfos = {
       'step-1': { status: StepStatus.SKIPPED },
@@ -158,9 +136,9 @@ describe('shouldSkipStepExecution', () => {
 
   it('should return false when at least one parent step is not started', () => {
     const steps = [
-      createMockStep('step-1', ['step-3']),
-      createMockStep('step-2', ['step-3']),
-      createMockStep('step-3', []),
+      createMockCodeStep('step-1', ['step-3']),
+      createMockCodeStep('step-2', ['step-3']),
+      createMockCodeStep('step-3', []),
     ];
     const stepInfos = {
       'step-1': { status: StepStatus.SKIPPED },
@@ -179,9 +157,9 @@ describe('shouldSkipStepExecution', () => {
 
   it('should return false when there are no parent steps', () => {
     const steps = [
-      createMockStep('step-1', ['step-2']),
-      createMockStep('step-2', []),
-      createMockStep('step-3', []),
+      createMockCodeStep('step-1', ['step-2']),
+      createMockCodeStep('step-2', []),
+      createMockCodeStep('step-3', []),
     ];
     const stepInfos = {
       'step-1': { status: StepStatus.SKIPPED },
@@ -200,8 +178,8 @@ describe('shouldSkipStepExecution', () => {
 
   it('should return true when single parent step is skipped', () => {
     const steps = [
-      createMockStep('step-1', ['step-2']),
-      createMockStep('step-2', []),
+      createMockCodeStep('step-1', ['step-2']),
+      createMockCodeStep('step-2', []),
     ];
     const stepInfos = {
       'step-1': { status: StepStatus.SKIPPED },
@@ -219,9 +197,9 @@ describe('shouldSkipStepExecution', () => {
 
   it('should handle undefined steps gracefully', () => {
     const steps = [
-      createMockStep('step-1', ['step-2']),
+      createMockCodeStep('step-1', ['step-2']),
       undefined as unknown as WorkflowAction,
-      createMockStep('step-2', []),
+      createMockCodeStep('step-2', []),
     ];
     const stepInfos = {
       'step-1': { status: StepStatus.SKIPPED },
@@ -239,8 +217,8 @@ describe('shouldSkipStepExecution', () => {
 
   it('should return false when parent step status is pending', () => {
     const steps = [
-      createMockStep('step-1', ['step-2']),
-      createMockStep('step-2', []),
+      createMockCodeStep('step-1', ['step-2']),
+      createMockCodeStep('step-2', []),
     ];
     const stepInfos = {
       'step-1': { status: StepStatus.PENDING },
@@ -258,13 +236,12 @@ describe('shouldSkipStepExecution', () => {
 
   it('should work with multiple parent steps with different statuses', () => {
     const steps = [
-      createMockStep('step-1', ['step-4']),
-      createMockStep('step-2', ['step-4']),
-      createMockStep('step-3', ['step-4']),
-      createMockStep('step-4', []),
+      createMockCodeStep('step-1', ['step-4']),
+      createMockCodeStep('step-2', ['step-4']),
+      createMockCodeStep('step-3', ['step-4']),
+      createMockCodeStep('step-4', []),
     ];
 
-    // Test case 1: All skipped - should return true
     expect(
       shouldSkipStepExecution({
         step: steps[3],
@@ -278,7 +255,6 @@ describe('shouldSkipStepExecution', () => {
       }),
     ).toBe(true);
 
-    // Test case 2: Mixed skipped/stopped - should return true
     expect(
       shouldSkipStepExecution({
         step: steps[3],
@@ -292,7 +268,6 @@ describe('shouldSkipStepExecution', () => {
       }),
     ).toBe(true);
 
-    // Test case 3: One success among skipped - should return false
     expect(
       shouldSkipStepExecution({
         step: steps[3],
@@ -306,7 +281,6 @@ describe('shouldSkipStepExecution', () => {
       }),
     ).toBe(false);
 
-    // Test case 4: One failed among skipped - should return false
     expect(
       shouldSkipStepExecution({
         step: steps[3],
@@ -319,5 +293,47 @@ describe('shouldSkipStepExecution', () => {
         },
       }),
     ).toBe(false);
+  });
+
+  it('should return true when IF-ELSE parent is skipped and step is a branch child', () => {
+    const ifElseStep = createMockIfElseStep('if-else', [
+      { id: 'true-branch', nextStepIds: ['step-a'] },
+      { id: 'false-branch', nextStepIds: ['step-b'] },
+    ]);
+    const stepA = createMockCodeStep('step-a');
+    const stepB = createMockCodeStep('step-b');
+    const steps: WorkflowAction[] = [ifElseStep, stepA, stepB];
+
+    const result = shouldSkipStepExecution({
+      step: stepA,
+      steps,
+      stepInfos: {
+        'if-else': { status: StepStatus.SKIPPED },
+        'step-a': { status: StepStatus.NOT_STARTED },
+        'step-b': { status: StepStatus.NOT_STARTED },
+      },
+    });
+
+    expect(result).toBe(true);
+  });
+
+  it('should return false when IF-ELSE parent succeeded and step is a branch child', () => {
+    const ifElseStep = createMockIfElseStep('if-else', [
+      { id: 'true-branch', nextStepIds: ['step-a'] },
+      { id: 'false-branch', nextStepIds: ['step-b'] },
+    ]);
+    const stepA = createMockCodeStep('step-a');
+    const steps: WorkflowAction[] = [ifElseStep, stepA];
+
+    const result = shouldSkipStepExecution({
+      step: stepA,
+      steps,
+      stepInfos: {
+        'if-else': { status: StepStatus.SUCCESS },
+        'step-a': { status: StepStatus.NOT_STARTED },
+      },
+    });
+
+    expect(result).toBe(false);
   });
 });

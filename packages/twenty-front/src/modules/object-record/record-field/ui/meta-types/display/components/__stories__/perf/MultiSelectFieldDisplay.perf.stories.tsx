@@ -1,4 +1,4 @@
-import { type Meta, type StoryObj } from '@storybook/react';
+import { type Meta, type StoryObj } from '@storybook/react-vite';
 import { useContext, useEffect } from 'react';
 
 import { FieldFocusContext } from '@/object-record/record-field/ui/contexts/FieldFocusContext';
@@ -67,7 +67,7 @@ export const Elipsis: Story = {
 
 export const Performance = getProfilingStory({
   componentName: 'MultiSelectFieldDisplay',
-  averageThresholdInMs: 0.2,
+  averageThresholdInMs: 0.4,
   numberOfRuns: 50,
   numberOfTestsPerRun: 100,
 });

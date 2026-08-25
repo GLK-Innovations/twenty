@@ -1,65 +1,126 @@
-import { type ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
+import { t } from '@lingui/core/macro';
+
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
+import { isManyToOneRelationField } from '@/object-metadata/utils/isManyToOneRelationField';
 import {
   type RecordGroupDefinition,
   RecordGroupDefinitionType,
 } from '@/object-record/record-group/types/RecordGroupDefinition';
 import { type ViewGroup } from '@/views/types/ViewGroup';
-import { FieldMetadataType } from '~/generated-metadata/graphql';
 import { isDefined } from 'twenty-shared/utils';
+import { type ThemeColor } from 'twenty-ui/theme';
+import { FieldMetadataType } from '~/generated-metadata/graphql';
 
-export const mapViewGroupsToRecordGroupDefinitions = ({
-  objectMetadataItem,
-  viewGroups,
+const isNoValueGroup = (viewGroup: ViewGroup): boolean =>
+  !isDefined(viewGroup.fieldValue) || viewGroup.fieldValue === '';
+
+const buildRecordGroupDefinition = ({
+  viewGroup,
+  isNoValue,
+  title,
+  value,
+  color,
 }: {
-  objectMetadataItem: ObjectMetadataItem;
-  viewGroups: ViewGroup[];
-}): RecordGroupDefinition[] => {
-  if (viewGroups?.length === 0) {
-    return [];
-  }
+  viewGroup: ViewGroup;
+  isNoValue: boolean;
+  title: string;
+  value: string | null;
+  color: ThemeColor | 'transparent';
+}): RecordGroupDefinition => ({
+  id: viewGroup.id,
+  type: isNoValue
+    ? RecordGroupDefinitionType.NoValue
+    : RecordGroupDefinitionType.Value,
+  title,
+  value,
+  color,
+  position: viewGroup.position,
+  isVisible: viewGroup.isVisible,
+});
 
-  const fieldMetadataId = viewGroups?.[0]?.fieldMetadataId;
-  const selectFieldMetadataItem = objectMetadataItem.fields.find(
-    (field) =>
-      field.id === fieldMetadataId && field.type === FieldMetadataType.SELECT,
-  );
+const mapRelationViewGroupsToRecordGroupDefinitions = (
+  viewGroups: ViewGroup[],
+): RecordGroupDefinition[] =>
+  viewGroups.map((viewGroup) => {
+    const isNoValue = isNoValueGroup(viewGroup);
 
-  if (!selectFieldMetadataItem) {
-    return [];
-  }
+    return buildRecordGroupDefinition({
+      viewGroup,
+      isNoValue,
+      title: isNoValue ? t`No Value` : '',
+      value: isNoValue ? null : viewGroup.fieldValue,
+      color: 'transparent',
+    });
+  });
 
-  if (!selectFieldMetadataItem.options) {
-    throw new Error(
-      `Select Field ${objectMetadataItem.nameSingular} has no options`,
-    );
-  }
-
-  const recordGroupDefinitionsFromViewGroups = viewGroups
+const mapSelectViewGroupsToRecordGroupDefinitions = (
+  selectFieldMetadataItem: EnrichedObjectMetadataItem['fields'][number],
+  viewGroups: ViewGroup[],
+): RecordGroupDefinition[] =>
+  viewGroups
     .map((viewGroup) => {
       const selectedOption = selectFieldMetadataItem.options?.find(
         (option) => option.value === viewGroup.fieldValue,
       );
 
-      if (!selectedOption && selectFieldMetadataItem.isNullable === false) {
+      const hasNonEmptyValue =
+        isDefined(viewGroup.fieldValue) && viewGroup.fieldValue !== '';
+
+      if (
+        !isDefined(selectedOption) &&
+        (hasNonEmptyValue || selectFieldMetadataItem.isNullable === false)
+      ) {
         return null;
       }
 
-      return {
-        id: viewGroup.id,
-        fieldMetadataId: viewGroup.fieldMetadataId,
-        type: !isDefined(selectedOption)
-          ? RecordGroupDefinitionType.NoValue
-          : RecordGroupDefinitionType.Value,
-        title: selectedOption?.label ?? 'No Value',
+      return buildRecordGroupDefinition({
+        viewGroup,
+        isNoValue: !isDefined(selectedOption),
+        title: selectedOption?.label ?? t`No Value`,
         value: selectedOption?.value ?? null,
         color: selectedOption?.color ?? 'transparent',
-        position: viewGroup.position,
-        isVisible: viewGroup.isVisible,
-      } as RecordGroupDefinition;
+      });
     })
     .filter(isDefined);
 
-  return recordGroupDefinitionsFromViewGroups.sort(
-    (a, b) => a.position - b.position,
+export const mapViewGroupsToRecordGroupDefinitions = ({
+  mainGroupByFieldMetadataId,
+  objectMetadataItem,
+  viewGroups,
+}: {
+  mainGroupByFieldMetadataId: string;
+  objectMetadataItem: EnrichedObjectMetadataItem;
+  viewGroups: ViewGroup[];
+}): RecordGroupDefinition[] => {
+  if (viewGroups.length === 0) {
+    return [];
+  }
+
+  const groupByFieldMetadataItem = objectMetadataItem.fields.find(
+    (field) => field.id === mainGroupByFieldMetadataId,
   );
+
+  if (!isDefined(groupByFieldMetadataItem)) {
+    return [];
+  }
+
+  let recordGroupDefinitions: RecordGroupDefinition[] = [];
+
+  if (isManyToOneRelationField(groupByFieldMetadataItem)) {
+    recordGroupDefinitions =
+      mapRelationViewGroupsToRecordGroupDefinitions(viewGroups);
+  } else if (groupByFieldMetadataItem.type === FieldMetadataType.SELECT) {
+    if (!groupByFieldMetadataItem.options) {
+      throw new Error(
+        `Select Field ${objectMetadataItem.nameSingular} has no options`,
+      );
+    }
+
+    recordGroupDefinitions = mapSelectViewGroupsToRecordGroupDefinitions(
+      groupByFieldMetadataItem,
+      viewGroups,
+    );
+  }
+
+  return recordGroupDefinitions.sort((a, b) => a.position - b.position);
 };

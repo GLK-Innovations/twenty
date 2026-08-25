@@ -1,73 +1,61 @@
-import { PageLayoutCanvasViewer } from '@/page-layout/components/PageLayoutCanvasViewer';
 import { PageLayoutGridLayout } from '@/page-layout/components/PageLayoutGridLayout';
-import { PageLayoutVerticalListEditor } from '@/page-layout/components/PageLayoutVerticalListEditor';
-import { PageLayoutVerticalListViewer } from '@/page-layout/components/PageLayoutVerticalListViewer';
+import { PageLayoutVerticalList } from '@/page-layout/components/PageLayoutVerticalList';
 import { usePageLayoutContentContext } from '@/page-layout/contexts/PageLayoutContentContext';
-import { useCurrentPageLayout } from '@/page-layout/hooks/useCurrentPageLayout';
-import { useReorderPageLayoutWidgets } from '@/page-layout/hooks/useReorderPageLayoutWidgets';
-import { isPageLayoutInEditModeComponentState } from '@/page-layout/states/isPageLayoutInEditModeComponentState';
-import { useIsInPinnedTab } from '@/page-layout/widgets/hooks/useIsInPinnedTab';
-import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
-import { useIsFeatureEnabled } from '@/workspace/hooks/useIsFeatureEnabled';
-import styled from '@emotion/styled';
-import { isDefined } from 'twenty-shared/utils';
-import { FeatureFlagKey } from '~/generated/graphql';
+import { useCurrentPageLayoutOrThrow } from '@/page-layout/hooks/useCurrentPageLayoutOrThrow';
+import { useIsPageLayoutInEditMode } from '@/page-layout/hooks/useIsPageLayoutInEditMode';
+import { usePageLayoutTabWithVisibleWidgetsOrThrow } from '@/page-layout/hooks/usePageLayoutTabWithVisibleWidgetsOrThrow';
+import { StandaloneWidgetPlaceholder } from '@/page-layout/widgets/components/StandaloneWidgetPlaceholder';
+import { RecordPageAddWidgetSection } from '@/page-layout/widgets/components/RecordPageAddWidgetSection';
+import { styled } from '@linaria/react';
+import {
+  PageLayoutTabLayoutMode,
+  PageLayoutType,
+} from '~/generated-metadata/graphql';
 
-const StyledContainer = styled.div<{ isInPinnedTab: boolean }>`
-  background: ${({ theme }) => theme.background.primary};
-  box-sizing: border-box;
-  flex: 1;
-  min-height: 100%;
-  position: relative;
-  width: 100%;
-  padding: ${({ theme, isInPinnedTab }) =>
-    isInPinnedTab ? 0 : theme.spacing(2)};
+const StyledEmptyStandalonePageContainer = styled.div`
+  display: grid;
+  height: 100%;
 `;
 
 export const PageLayoutContent = () => {
-  const isRecordPageEnabled = useIsFeatureEnabled(
-    FeatureFlagKey.IS_RECORD_PAGE_LAYOUT_ENABLED,
-  );
+  const isPageLayoutInEditMode = useIsPageLayoutInEditMode();
 
-  const isPageLayoutInEditMode = useRecoilComponentValue(
-    isPageLayoutInEditModeComponentState,
-  );
+  const { layoutMode, tabId } = usePageLayoutContentContext();
 
-  const { currentPageLayout } = useCurrentPageLayout();
-  const { tabId } = usePageLayoutContentContext();
+  const activeTab = usePageLayoutTabWithVisibleWidgetsOrThrow(tabId);
 
-  const { reorderWidgets } = useReorderPageLayoutWidgets(tabId);
+  const { currentPageLayout } = useCurrentPageLayoutOrThrow();
 
-  const activeTab = currentPageLayout?.tabs.find((tab) => tab.id === tabId);
+  const isRecordPageLayout =
+    currentPageLayout.type === PageLayoutType.RECORD_PAGE;
 
-  const { layoutMode } = usePageLayoutContentContext();
-  const { isInPinnedTab } = useIsInPinnedTab();
+  const isGridLayout = layoutMode === PageLayoutTabLayoutMode.GRID;
 
-  if (!isDefined(currentPageLayout) || !isDefined(activeTab)) {
-    return null;
-  }
+  const isEmptyStandalonePage =
+    currentPageLayout.type === PageLayoutType.STANDALONE_PAGE &&
+    activeTab.widgets.length === 0;
 
-  const isCanvasLayout = isRecordPageEnabled && layoutMode === 'canvas';
-  const isVerticalList = isRecordPageEnabled && layoutMode === 'vertical-list';
-
-  if (isCanvasLayout) {
-    return <PageLayoutCanvasViewer widgets={activeTab.widgets} />;
-  }
-
-  if (isVerticalList) {
+  if (isEmptyStandalonePage) {
     return (
-      <StyledContainer isInPinnedTab={isInPinnedTab}>
-        {isPageLayoutInEditMode ? (
-          <PageLayoutVerticalListEditor
-            widgets={activeTab.widgets}
-            onReorder={reorderWidgets}
-          />
-        ) : (
-          <PageLayoutVerticalListViewer widgets={activeTab.widgets} />
-        )}
-      </StyledContainer>
+      <StyledEmptyStandalonePageContainer>
+        <StandaloneWidgetPlaceholder />
+      </StyledEmptyStandalonePageContainer>
     );
   }
 
-  return <PageLayoutGridLayout tabId={tabId} />;
+  if (isGridLayout) {
+    return <PageLayoutGridLayout tabId={tabId} />;
+  }
+
+  const isVerticalListInEditMode = isPageLayoutInEditMode && isRecordPageLayout;
+
+  return (
+    <PageLayoutVerticalList
+      isInEditMode={isVerticalListInEditMode}
+      widgets={activeTab.widgets}
+      trailingElement={
+        isVerticalListInEditMode ? <RecordPageAddWidgetSection /> : undefined
+      }
+    />
+  );
 };

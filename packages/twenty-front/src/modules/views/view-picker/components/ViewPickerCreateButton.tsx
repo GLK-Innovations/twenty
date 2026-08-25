@@ -1,38 +1,40 @@
-import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
 import { ViewType } from '@/views/types/ViewType';
 import { useCreateViewFromCurrentState } from '@/views/view-picker/hooks/useCreateViewFromCurrentState';
-import { useDeleteViewFromCurrentState } from '@/views/view-picker/hooks/useDeleteViewFromCurrentState';
+import { useDestroyViewFromCurrentState } from '@/views/view-picker/hooks/useDestroyViewFromCurrentState';
 import { useGetAvailableFieldsForCalendar } from '@/views/view-picker/hooks/useGetAvailableFieldsForCalendar';
-import { useGetAvailableFieldsForKanban } from '@/views/view-picker/hooks/useGetAvailableFieldsForKanban';
+import { useGetAvailableFieldsToGroupRecordsBy } from '@/views/view-picker/hooks/useGetAvailableFieldsToGroupRecordsBy';
 import { useViewPickerMode } from '@/views/view-picker/hooks/useViewPickerMode';
 import { viewPickerCalendarFieldMetadataIdComponentState } from '@/views/view-picker/states/viewPickerCalendarFieldMetadataIdComponentState';
 import { viewPickerIsPersistingComponentState } from '@/views/view-picker/states/viewPickerIsPersistingComponentState';
-import { viewPickerKanbanFieldMetadataIdComponentState } from '@/views/view-picker/states/viewPickerKanbanFieldMetadataIdComponentState';
+import { viewPickerMainGroupByFieldMetadataIdComponentState } from '@/views/view-picker/states/viewPickerMainGroupByFieldMetadataIdComponentState';
 import { viewPickerTypeComponentState } from '@/views/view-picker/states/viewPickerTypeComponentState';
 import { useLingui } from '@lingui/react/macro';
 import { Button } from 'twenty-ui/input';
 
 export const ViewPickerCreateButton = () => {
   const { t } = useLingui();
-  const { availableFieldsForKanban, navigateToSelectSettings } =
-    useGetAvailableFieldsForKanban();
+  const { availableFieldsForGrouping, navigateToSelectSettings } =
+    useGetAvailableFieldsToGroupRecordsBy();
   const { availableFieldsForCalendar, navigateToDateFieldSettings } =
     useGetAvailableFieldsForCalendar();
 
   const { viewPickerMode } = useViewPickerMode();
-  const viewPickerType = useRecoilComponentValue(viewPickerTypeComponentState);
-  const viewPickerIsPersisting = useRecoilComponentValue(
+  const viewPickerType = useAtomComponentStateValue(
+    viewPickerTypeComponentState,
+  );
+  const viewPickerIsPersisting = useAtomComponentStateValue(
     viewPickerIsPersistingComponentState,
   );
-  const viewPickerKanbanFieldMetadataId = useRecoilComponentValue(
-    viewPickerKanbanFieldMetadataIdComponentState,
+  const viewPickerMainGroupByFieldMetadataId = useAtomComponentStateValue(
+    viewPickerMainGroupByFieldMetadataIdComponentState,
   );
-  const viewPickerCalendarFieldMetadataId = useRecoilComponentValue(
+  const viewPickerCalendarFieldMetadataId = useAtomComponentStateValue(
     viewPickerCalendarFieldMetadataIdComponentState,
   );
 
   const { createViewFromCurrentState } = useCreateViewFromCurrentState();
-  const { deleteViewFromCurrentState } = useDeleteViewFromCurrentState();
+  const { destroyViewFromCurrentState } = useDestroyViewFromCurrentState();
 
   const handleCreateButtonClick = () => {
     createViewFromCurrentState();
@@ -42,7 +44,7 @@ export const ViewPickerCreateButton = () => {
     return (
       <Button
         title={t`Delete`}
-        onClick={deleteViewFromCurrentState}
+        onClick={destroyViewFromCurrentState}
         accent="danger"
         fullWidth
         size="small"
@@ -55,8 +57,8 @@ export const ViewPickerCreateButton = () => {
   }
 
   if (
-    viewPickerType === ViewType.Kanban &&
-    availableFieldsForKanban.length === 0
+    viewPickerType === ViewType.KANBAN &&
+    availableFieldsForGrouping.length === 0
   ) {
     return (
       <Button
@@ -71,7 +73,7 @@ export const ViewPickerCreateButton = () => {
   }
 
   if (
-    viewPickerType === ViewType.Calendar &&
+    viewPickerType === ViewType.CALENDAR &&
     availableFieldsForCalendar.length === 0
   ) {
     return (
@@ -87,22 +89,23 @@ export const ViewPickerCreateButton = () => {
   }
 
   if (
-    viewPickerType !== ViewType.Kanban ||
-    viewPickerKanbanFieldMetadataId !== ''
+    viewPickerType !== ViewType.KANBAN ||
+    viewPickerMainGroupByFieldMetadataId !== ''
   ) {
     return (
       <Button
         title={t`Create`}
         onClick={handleCreateButtonClick}
+        ariaLabel={t`Create new view`}
         accent="blue"
         fullWidth
         size="small"
         justify="center"
         disabled={
           viewPickerIsPersisting ||
-          (viewPickerType === ViewType.Kanban &&
-            viewPickerKanbanFieldMetadataId === '') ||
-          (viewPickerType === ViewType.Calendar &&
+          (viewPickerType === ViewType.KANBAN &&
+            viewPickerMainGroupByFieldMetadataId === '') ||
+          (viewPickerType === ViewType.CALENDAR &&
             viewPickerCalendarFieldMetadataId === '')
         }
       />

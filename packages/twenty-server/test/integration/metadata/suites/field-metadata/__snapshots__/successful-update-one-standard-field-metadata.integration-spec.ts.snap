@@ -1,13 +1,12 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`Standard field metadata update should succeed when setting isActive to false 1`] = `
+exports[`Standard field metadata update should succeed Atomic update test suite when setting isActive to false 1`] = `
 {
   "defaultValue": "'NEW'",
   "description": "Opportunity stage",
   "icon": "IconProgressCheck",
   "id": Any<String>,
   "isActive": false,
-  "isCustom": false,
   "label": "Stage",
   "name": "stage",
   "options": [
@@ -47,18 +46,16 @@ exports[`Standard field metadata update should succeed when setting isActive to 
       "value": "CUSTOMER",
     },
   ],
-  "standardOverrides": null,
 }
 `;
 
-exports[`Standard field metadata update should succeed when updating defaultValue 1`] = `
+exports[`Standard field metadata update should succeed Atomic update test suite when updating defaultValue 1`] = `
 {
   "defaultValue": "'SCREENING'",
   "description": "Opportunity stage",
   "icon": "IconProgressCheck",
   "id": Any<String>,
   "isActive": true,
-  "isCustom": false,
   "label": "Stage",
   "name": "stage",
   "options": [
@@ -98,18 +95,16 @@ exports[`Standard field metadata update should succeed when updating defaultValu
       "value": "CUSTOMER",
     },
   ],
-  "standardOverrides": null,
 }
 `;
 
-exports[`Standard field metadata update should succeed when updating description 1`] = `
+exports[`Standard field metadata update should succeed Atomic update test suite when updating description 1`] = `
 {
   "defaultValue": "'NEW'",
-  "description": "Opportunity stage",
+  "description": "Updated test description for company name field",
   "icon": "IconProgressCheck",
   "id": Any<String>,
   "isActive": true,
-  "isCustom": false,
   "label": "Stage",
   "name": "stage",
   "options": [
@@ -149,22 +144,16 @@ exports[`Standard field metadata update should succeed when updating description
       "value": "CUSTOMER",
     },
   ],
-  "standardOverrides": {
-    "description": "Updated test description for company name field",
-    "icon": null,
-    "label": null,
-  },
 }
 `;
 
-exports[`Standard field metadata update should succeed when updating icon 1`] = `
+exports[`Standard field metadata update should succeed Atomic update test suite when updating icon 1`] = `
 {
   "defaultValue": "'NEW'",
   "description": "Opportunity stage",
-  "icon": "IconProgressCheck",
+  "icon": "IconBuildingFactory",
   "id": Any<String>,
   "isActive": true,
-  "isCustom": false,
   "label": "Stage",
   "name": "stage",
   "options": [
@@ -204,23 +193,17 @@ exports[`Standard field metadata update should succeed when updating icon 1`] = 
       "value": "CUSTOMER",
     },
   ],
-  "standardOverrides": {
-    "description": null,
-    "icon": "IconBuildingFactory",
-    "label": null,
-  },
 }
 `;
 
-exports[`Standard field metadata update should succeed when updating label 1`] = `
+exports[`Standard field metadata update should succeed Atomic update test suite when updating label 1`] = `
 {
   "defaultValue": "'NEW'",
   "description": "Opportunity stage",
   "icon": "IconProgressCheck",
   "id": Any<String>,
   "isActive": true,
-  "isCustom": false,
-  "label": "Stage",
+  "label": "Business Name",
   "name": "stage",
   "options": [
     {
@@ -259,22 +242,16 @@ exports[`Standard field metadata update should succeed when updating label 1`] =
       "value": "CUSTOMER",
     },
   ],
-  "standardOverrides": {
-    "description": null,
-    "icon": null,
-    "label": "Business Name",
-  },
 }
 `;
 
-exports[`Standard field metadata update should succeed when updating options 1`] = `
+exports[`Standard field metadata update should succeed Atomic update test suite when updating options 1`] = `
 {
   "defaultValue": "'NEW'",
   "description": "Opportunity stage",
   "icon": "IconProgressCheck",
   "id": Any<String>,
   "isActive": true,
-  "isCustom": false,
   "label": "Stage",
   "name": "stage",
   "options": [
@@ -321,6 +298,5 @@ exports[`Standard field metadata update should succeed when updating options 1`]
       "value": "CLOSED",
     },
   ],
-  "standardOverrides": null,
 }
 `;

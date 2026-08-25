@@ -1,11 +1,12 @@
 import { createOneFieldMetadata } from 'test/integration/metadata/suites/field-metadata/utils/create-one-field-metadata.util';
+import { createOneSelectFieldMetadataForIntegrationTests } from 'test/integration/metadata/suites/field-metadata/utils/create-one-select-field-metadata-for-integration-tests.util';
 import { createOneObjectMetadata } from 'test/integration/metadata/suites/object-metadata/utils/create-one-object-metadata.util';
 import { deleteOneObjectMetadata } from 'test/integration/metadata/suites/object-metadata/utils/delete-one-object-metadata.util';
 import { updateOneObjectMetadata } from 'test/integration/metadata/suites/object-metadata/utils/update-one-object-metadata.util';
-import { createManyCoreViewGroups } from 'test/integration/metadata/suites/view-group/utils/create-many-core-view-groups.util';
-import { deleteOneCoreViewGroup } from 'test/integration/metadata/suites/view-group/utils/delete-one-core-view-group.util';
-import { destroyOneCoreViewGroup } from 'test/integration/metadata/suites/view-group/utils/destroy-one-core-view-group.util';
-import { createOneCoreView } from 'test/integration/metadata/suites/view/utils/create-one-core-view.util';
+import { createManyViewGroups } from 'test/integration/metadata/suites/view-group/utils/create-many-view-groups.util';
+import { deleteOneViewGroup } from 'test/integration/metadata/suites/view-group/utils/delete-one-view-group.util';
+import { destroyOneViewGroup } from 'test/integration/metadata/suites/view-group/utils/destroy-one-view-group.util';
+import { createOneView } from 'test/integration/metadata/suites/view/utils/create-one-view.util';
 import { FieldMetadataType } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 
@@ -100,15 +101,23 @@ describe('View Group Resolver - Successful Create Many Operations - v2', () => {
         `,
     });
 
+    const { selectFieldMetadataId } =
+      await createOneSelectFieldMetadataForIntegrationTests({
+        input: {
+          objectMetadataId,
+        },
+      });
+
     const {
       data: {
-        createCoreView: { id: testViewId },
+        createView: { id: testViewId },
       },
-    } = await createOneCoreView({
+    } = await createOneView({
       input: {
         icon: 'icon123',
         objectMetadataId,
         name: 'TestViewForGroups',
+        mainGroupByFieldMetadataId: selectFieldMetadataId,
       },
       expectToFail: false,
     });
@@ -141,16 +150,16 @@ describe('View Group Resolver - Successful Create Many Operations - v2', () => {
     for (const viewGroupId of createdViewGroupIds) {
       if (isDefined(viewGroupId)) {
         const {
-          data: { deleteCoreViewGroup },
-        } = await deleteOneCoreViewGroup({
+          data: { deleteViewGroup },
+        } = await deleteOneViewGroup({
           expectToFail: false,
           input: {
             id: viewGroupId,
           },
         });
 
-        expect(deleteCoreViewGroup.deletedAt).not.toBeNull();
-        await destroyOneCoreViewGroup({
+        expect(deleteViewGroup.deletedAt).not.toBeNull();
+        await destroyOneViewGroup({
           expectToFail: false,
           input: {
             id: viewGroupId,
@@ -164,21 +173,18 @@ describe('View Group Resolver - Successful Create Many Operations - v2', () => {
   it('should successfully create multiple view groups in batch', async () => {
     const inputs: CreateViewGroupInput[] = [
       {
-        fieldMetadataId: testSetup.firstTestFieldMetadataId,
         viewId: testSetup.testViewId,
         position: 0,
         isVisible: true,
         fieldValue: 'Group A',
       },
       {
-        fieldMetadataId: testSetup.secondTestFieldMetadataId,
         viewId: testSetup.testViewId,
         position: 1,
         isVisible: false,
         fieldValue: 'Group B',
       },
       {
-        fieldMetadataId: testSetup.thirdTestFieldMetadataId,
         viewId: testSetup.testViewId,
         position: 2,
         isVisible: true,
@@ -187,9 +193,9 @@ describe('View Group Resolver - Successful Create Many Operations - v2', () => {
     ];
 
     const {
-      data: { createManyCoreViewGroups: createdViewGroups },
+      data: { createManyViewGroups: createdViewGroups },
       errors,
-    } = await createManyCoreViewGroups({
+    } = await createManyViewGroups({
       inputs,
       expectToFail: false,
     });
@@ -200,7 +206,6 @@ describe('View Group Resolver - Successful Create Many Operations - v2', () => {
 
     createdViewGroups.forEach((viewGroup, index) => {
       expect(viewGroup).toMatchObject({
-        fieldMetadataId: inputs[index].fieldMetadataId,
         viewId: testSetup.testViewId,
         position: inputs[index].position,
         isVisible: inputs[index].isVisible,
@@ -214,7 +219,6 @@ describe('View Group Resolver - Successful Create Many Operations - v2', () => {
   it('should successfully create single view group using batch endpoint', async () => {
     const inputs: CreateViewGroupInput[] = [
       {
-        fieldMetadataId: testSetup.firstTestFieldMetadataId,
         viewId: testSetup.testViewId,
         position: 5,
         isVisible: true,
@@ -223,9 +227,9 @@ describe('View Group Resolver - Successful Create Many Operations - v2', () => {
     ];
 
     const {
-      data: { createManyCoreViewGroups: createdViewGroups },
+      data: { createManyViewGroups: createdViewGroups },
       errors,
-    } = await createManyCoreViewGroups({
+    } = await createManyViewGroups({
       inputs,
       expectToFail: false,
     });
@@ -237,7 +241,6 @@ describe('View Group Resolver - Successful Create Many Operations - v2', () => {
     const viewGroup = createdViewGroups[0];
 
     expect(viewGroup).toMatchObject({
-      fieldMetadataId: testSetup.firstTestFieldMetadataId,
       viewId: testSetup.testViewId,
       position: 5,
       isVisible: true,
@@ -251,9 +254,9 @@ describe('View Group Resolver - Successful Create Many Operations - v2', () => {
     const inputs: CreateViewGroupInput[] = [];
 
     const {
-      data: { createManyCoreViewGroups: createdViewGroups },
+      data: { createManyViewGroups: createdViewGroups },
       errors,
-    } = await createManyCoreViewGroups({
+    } = await createManyViewGroups({
       inputs,
       expectToFail: false,
     });

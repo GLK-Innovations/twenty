@@ -1,12 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
 
-import { Repository } from 'typeorm';
+import { FeatureFlagKey } from 'twenty-shared/types';
 
 import { type FeatureFlagMap } from 'src/engine/core-modules/feature-flag/interfaces/feature-flag-map.interface';
 
-import { type FeatureFlagDTO } from 'src/engine/core-modules/feature-flag/dtos/feature-flag-dto';
-import { FeatureFlagKey } from 'src/engine/core-modules/feature-flag/enums/feature-flag-key.enum';
+import { type FeatureFlagDTO } from 'src/engine/core-modules/feature-flag/dtos/feature-flag.dto';
 import { FeatureFlagEntity } from 'src/engine/core-modules/feature-flag/feature-flag.entity';
 import {
   FeatureFlagException,
@@ -14,14 +12,16 @@ import {
 } from 'src/engine/core-modules/feature-flag/feature-flag.exception';
 import { featureFlagValidator } from 'src/engine/core-modules/feature-flag/validates/feature-flag.validate';
 import { publicFeatureFlagValidator } from 'src/engine/core-modules/feature-flag/validates/is-public-feature-flag.validate';
-import { WorkspaceFeatureFlagsMapCacheService } from 'src/engine/metadata-modules/workspace-feature-flags-map-cache/workspace-feature-flags-map-cache.service';
+import { InjectWorkspaceScopedRepository } from 'src/engine/twenty-orm/workspace-scoped-repository/inject-workspace-scoped-repository.decorator';
+import { WorkspaceScopedRepository } from 'src/engine/twenty-orm/workspace-scoped-repository/workspace-scoped-repository';
+import { WorkspaceCacheService } from 'src/engine/workspace-cache/services/workspace-cache.service';
 
 @Injectable()
 export class FeatureFlagService {
   constructor(
-    @InjectRepository(FeatureFlagEntity)
-    private readonly featureFlagRepository: Repository<FeatureFlagEntity>,
-    private readonly workspaceFeatureFlagsMapCacheService: WorkspaceFeatureFlagsMapCacheService,
+    @InjectWorkspaceScopedRepository(FeatureFlagEntity)
+    private readonly featureFlagRepository: WorkspaceScopedRepository<FeatureFlagEntity>,
+    private readonly workspaceCacheService: WorkspaceCacheService,
   ) {}
 
   public async isFeatureEnabled(
@@ -36,10 +36,10 @@ export class FeatureFlagService {
   public async getWorkspaceFeatureFlags(
     workspaceId: string,
   ): Promise<FeatureFlagDTO[]> {
-    const workspaceFeatureFlagsMap =
-      await this.workspaceFeatureFlagsMapCacheService.getWorkspaceFeatureFlagsMap(
-        { workspaceId },
-      );
+    const { featureFlagsMap: workspaceFeatureFlagsMap } =
+      await this.workspaceCacheService.getOrRecompute(workspaceId, [
+        'featureFlagsMap',
+      ]);
 
     return Object.entries(workspaceFeatureFlagsMap).map(([key, value]) => ({
       key: key as FeatureFlagKey,
@@ -50,10 +50,10 @@ export class FeatureFlagService {
   public async getWorkspaceFeatureFlagsMap(
     workspaceId: string,
   ): Promise<FeatureFlagMap> {
-    const workspaceFeatureFlagsMap =
-      await this.workspaceFeatureFlagsMapCacheService.getWorkspaceFeatureFlagsMap(
-        { workspaceId },
-      );
+    const { featureFlagsMap: workspaceFeatureFlagsMap } =
+      await this.workspaceCacheService.getOrRecompute(workspaceId, [
+        'featureFlagsMap',
+      ]);
 
     return workspaceFeatureFlagsMap;
   }
@@ -64,16 +64,17 @@ export class FeatureFlagService {
   ): Promise<void> {
     if (keys.length > 0) {
       await this.featureFlagRepository.upsert(
-        keys.map((key) => ({ workspaceId, key, value: true })),
+        workspaceId,
+        keys.map((key) => ({ key, value: true })),
         {
           conflictPaths: ['workspaceId', 'key'],
           skipUpdateIfNoValuesChanged: true,
         },
       );
 
-      await this.workspaceFeatureFlagsMapCacheService.recomputeFeatureFlagsMapCache(
-        { workspaceId },
-      );
+      await this.workspaceCacheService.invalidateAndRecompute(workspaceId, [
+        'featureFlagsMap',
+      ]);
     }
   }
 
@@ -106,29 +107,24 @@ export class FeatureFlagService {
       );
     }
 
-    const existingFeatureFlag = await this.featureFlagRepository.findOne({
-      where: {
-        key: featureFlag,
-        workspaceId: workspaceId,
-      },
-    });
-
-    const featureFlagToSave = existingFeatureFlag
-      ? {
-          ...existingFeatureFlag,
-          value,
-        }
-      : {
-          key: featureFlag,
-          value,
-          workspaceId: workspaceId,
-        };
-
-    const result = await this.featureFlagRepository.save(featureFlagToSave);
-
-    await this.workspaceFeatureFlagsMapCacheService.recomputeFeatureFlagsMapCache(
-      { workspaceId },
+    const existingFeatureFlag = await this.featureFlagRepository.findOne(
+      workspaceId,
+      { where: { key: featureFlag } },
     );
+
+    if (existingFeatureFlag?.value === value) {
+      return existingFeatureFlag;
+    }
+
+    const result = await this.featureFlagRepository.upsertAndReturnOne(
+      workspaceId,
+      { key: featureFlag, value },
+      ['workspaceId', 'key'],
+    );
+
+    await this.workspaceCacheService.invalidateAndRecompute(workspaceId, [
+      'featureFlagsMap',
+    ]);
 
     return result;
   }

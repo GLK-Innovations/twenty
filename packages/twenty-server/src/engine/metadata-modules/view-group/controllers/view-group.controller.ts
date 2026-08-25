@@ -7,18 +7,22 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseFilters,
   UseGuards,
 } from '@nestjs/common';
 
+import { ApiPath } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 
-import { FeatureFlagKey } from 'src/engine/core-modules/feature-flag/enums/feature-flag-key.enum';
-import { FeatureFlagService } from 'src/engine/core-modules/feature-flag/services/feature-flag.service';
 import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
+import { paginateMetadataRestItems } from 'src/engine/api/rest/metadata/utils/paginate-metadata-rest-items.util';
+import { type AuthenticatedRequest } from 'src/engine/api/rest/types/authenticated-request';
 import { AuthWorkspace } from 'src/engine/decorators/auth/auth-workspace.decorator';
 import { NoPermissionGuard } from 'src/engine/guards/no-permission.guard';
 import { WorkspaceAuthGuard } from 'src/engine/guards/workspace-auth.guard';
+import { FlatEntityMapsRestApiExceptionFilter } from 'src/engine/metadata-modules/flat-entity/filters/flat-entity-maps-rest-api-exception.filter';
+import { PermissionsRestApiExceptionFilter } from 'src/engine/metadata-modules/permissions/utils/permissions-rest-api-exception.filter';
 import { CreateViewGroupInput } from 'src/engine/metadata-modules/view-group/dtos/inputs/create-view-group.input';
 import { UpdateViewGroupInput } from 'src/engine/metadata-modules/view-group/dtos/inputs/update-view-group.input';
 import { type ViewGroupDTO } from 'src/engine/metadata-modules/view-group/dtos/view-group.dto';
@@ -30,33 +34,34 @@ import {
   ViewGroupExceptionMessageKey,
 } from 'src/engine/metadata-modules/view-group/exceptions/view-group.exception';
 import { ViewGroupRestApiExceptionFilter } from 'src/engine/metadata-modules/view-group/filters/view-group-rest-api-exception.filter';
-import { ViewGroupV2Service } from 'src/engine/metadata-modules/view-group/services/view-group-v2.service';
 import { ViewGroupService } from 'src/engine/metadata-modules/view-group/services/view-group.service';
-import { CreateViewGroupPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/create-view-group-permission.guard';
-import { DeleteViewGroupPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/delete-view-group-permission.guard';
-import { UpdateViewGroupPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/update-view-group-permission.guard';
+import { WorkspaceMigrationRunnerRestApiExceptionFilter } from 'src/engine/workspace-manager/workspace-migration/filters/workspace-migration-runner-rest-api-exception.filter';
+import { CreateViewChildEntityPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/create-view-child-entity-permission.guard';
+import { ViewChildEntityPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/view-child-entity-permission.guard';
 
-@Controller('rest/metadata/viewGroups')
+@Controller(`${ApiPath.Rest}/metadata/viewGroups`)
 @UseGuards(WorkspaceAuthGuard)
-@UseFilters(ViewGroupRestApiExceptionFilter)
+@UseFilters(
+  PermissionsRestApiExceptionFilter,
+  ViewGroupRestApiExceptionFilter,
+  FlatEntityMapsRestApiExceptionFilter,
+  WorkspaceMigrationRunnerRestApiExceptionFilter,
+)
 export class ViewGroupController {
-  constructor(
-    private readonly viewGroupService: ViewGroupService,
-    private readonly viewGroupV2Service: ViewGroupV2Service,
-    private readonly featureFlagService: FeatureFlagService,
-  ) {}
+  constructor(private readonly viewGroupService: ViewGroupService) {}
 
   @Get()
   @UseGuards(NoPermissionGuard)
   async findMany(
+    @Req() request: AuthenticatedRequest,
     @AuthWorkspace() workspace: WorkspaceEntity,
     @Query('viewId') viewId?: string,
-  ): Promise<ViewGroupDTO[]> {
-    if (viewId) {
-      return this.viewGroupService.findByViewId(workspace.id, viewId);
-    }
+  ) {
+    const items = viewId
+      ? await this.viewGroupService.findByViewId(workspace.id, viewId)
+      : await this.viewGroupService.findByWorkspaceId(workspace.id);
 
-    return this.viewGroupService.findByWorkspaceId(workspace.id);
+    return paginateMetadataRestItems({ items, request });
   }
 
   @Get(':id')
@@ -86,89 +91,45 @@ export class ViewGroupController {
   }
 
   @Post()
-  @UseGuards(CreateViewGroupPermissionGuard)
+  @UseGuards(CreateViewChildEntityPermissionGuard)
   async create(
     @Body() input: CreateViewGroupInput,
     @AuthWorkspace() workspace: WorkspaceEntity,
   ): Promise<ViewGroupDTO> {
-    const isWorkspaceMigrationV2Enabled =
-      await this.featureFlagService.isFeatureEnabled(
-        FeatureFlagKey.IS_WORKSPACE_MIGRATION_V2_ENABLED,
-        workspace.id,
-      );
-
-    if (isWorkspaceMigrationV2Enabled) {
-      return await this.viewGroupV2Service.createOne({
-        createViewGroupInput: input,
-        workspaceId: workspace.id,
-      });
-    }
-
-    return this.viewGroupService.create({
-      ...input,
+    return await this.viewGroupService.createOne({
+      createViewGroupInput: input,
       workspaceId: workspace.id,
     });
   }
 
   @Patch(':id')
-  @UseGuards(UpdateViewGroupPermissionGuard)
+  @UseGuards(ViewChildEntityPermissionGuard('viewGroup'))
   async update(
     @Param('id') id: string,
     @Body() input: UpdateViewGroupInput,
     @AuthWorkspace() workspace: WorkspaceEntity,
   ): Promise<ViewGroupDTO> {
-    const isWorkspaceMigrationV2Enabled =
-      await this.featureFlagService.isFeatureEnabled(
-        FeatureFlagKey.IS_WORKSPACE_MIGRATION_V2_ENABLED,
-        workspace.id,
-      );
-
-    if (isWorkspaceMigrationV2Enabled) {
-      const updateInput = {
-        id,
-        update: input.update ?? input,
-      };
-
-      return await this.viewGroupV2Service.updateOne({
-        updateViewGroupInput: updateInput,
-        workspaceId: workspace.id,
-      });
-    }
-
-    const updatedViewGroup = await this.viewGroupService.update(
+    const updateInput = {
       id,
-      workspace.id,
-      input,
-    );
+      update: input.update ?? input,
+    };
 
-    return updatedViewGroup;
+    return await this.viewGroupService.updateOne({
+      updateViewGroupInput: updateInput,
+      workspaceId: workspace.id,
+    });
   }
 
   @Delete(':id')
-  @UseGuards(DeleteViewGroupPermissionGuard)
+  @UseGuards(ViewChildEntityPermissionGuard('viewGroup'))
   async delete(
     @Param('id') id: string,
     @AuthWorkspace() workspace: WorkspaceEntity,
   ): Promise<{ success: boolean }> {
-    const isWorkspaceMigrationV2Enabled =
-      await this.featureFlagService.isFeatureEnabled(
-        FeatureFlagKey.IS_WORKSPACE_MIGRATION_V2_ENABLED,
-        workspace.id,
-      );
-
-    if (isWorkspaceMigrationV2Enabled) {
-      const deletedViewGroup = await this.viewGroupV2Service.deleteOne({
-        deleteViewGroupInput: { id },
-        workspaceId: workspace.id,
-      });
-
-      return { success: isDefined(deletedViewGroup) };
-    }
-
-    const deletedViewGroup = await this.viewGroupService.delete(
-      id,
-      workspace.id,
-    );
+    const deletedViewGroup = await this.viewGroupService.deleteOne({
+      deleteViewGroupInput: { id },
+      workspaceId: workspace.id,
+    });
 
     return { success: isDefined(deletedViewGroup) };
   }

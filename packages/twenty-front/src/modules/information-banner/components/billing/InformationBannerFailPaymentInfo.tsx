@@ -4,15 +4,16 @@ import { usePermissionFlagMap } from '@/settings/roles/hooks/usePermissionFlagMa
 import { t } from '@lingui/core/macro';
 import { SettingsPath } from 'twenty-shared/types';
 import { getSettingsPath, isDefined } from 'twenty-shared/utils';
+import { useQuery } from '@apollo/client/react';
 import {
   PermissionFlagType,
-  useBillingPortalSessionQuery,
+  BillingPortalSessionDocument,
 } from '~/generated-metadata/graphql';
 
 export const InformationBannerFailPaymentInfo = () => {
   const { redirect } = useRedirect();
 
-  const { data, loading } = useBillingPortalSessionQuery({
+  const { data, loading } = useQuery(BillingPortalSessionDocument, {
     variables: {
       returnUrlPath: getSettingsPath(SettingsPath.Billing),
     },
@@ -30,13 +31,17 @@ export const InformationBannerFailPaymentInfo = () => {
 
   return (
     <InformationBanner
-      variant="danger"
+      componentInstanceId="information-banner-fail-payment-info"
+      color="danger"
+      variant="secondary"
       message={
         hasPermissionToUpdateBillingDetails
           ? t`Last payment failed. Please update your billing details.`
           : t`Last payment failed. Please contact your admin.`
       }
-      buttonTitle={hasPermissionToUpdateBillingDetails ? t`Update` : undefined}
+      buttonTitle={
+        hasPermissionToUpdateBillingDetails ? t`Update payment` : undefined
+      }
       buttonOnClick={() => openBillingPortal()}
       isButtonDisabled={loading || !isDefined(data)}
     />

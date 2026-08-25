@@ -1,24 +1,25 @@
 import { ActivityRow } from '@/activities/components/ActivityRow';
 import { AttachmentDropdown } from '@/activities/files/components/AttachmentDropdown';
-import { type Attachment } from '@/activities/files/types/Attachment';
 import { downloadFile } from '@/activities/files/utils/downloadFile';
-import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
 import { useDestroyOneRecord } from '@/object-record/hooks/useDestroyOneRecord';
 import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
 import {
   FieldContext,
   type GenericFieldContextType,
 } from '@/object-record/record-field/ui/contexts/FieldContext';
+import { getFileCategoryFromExtension } from '@/object-record/record-field/ui/utils/getFileCategoryFromExtension';
 import { SettingsTextInput } from '@/ui/input/components/SettingsTextInput';
-import { useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
-import { useState } from 'react';
-import { isDefined } from 'twenty-shared/utils';
+import { styled } from '@linaria/react';
+import { useState, useContext } from 'react';
+import { getSafeUrl, isDefined } from 'twenty-shared/utils';
 
-import { PREVIEWABLE_EXTENSIONS } from '@/activities/files/const/previewable-extensions.const';
+import { type AttachmentWithFile } from '@/activities/files/utils/filterAttachmentsWithFile';
 import { FileIcon } from '@/file/components/FileIcon';
 import { useHasPermissionFlag } from '@/settings/roles/hooks/useHasPermissionFlag';
-import { IconCalendar, OverflowingTextWithTooltip } from 'twenty-ui/display';
+import { CoreObjectNameSingular } from 'twenty-shared/types';
+import { IconCalendar } from 'twenty-ui/icon';
+import { OverflowingTextWithTooltip } from 'twenty-ui/surfaces';
+import { ThemeContext, themeCssVariables } from 'twenty-ui/theme-constants';
 import { isNavigationModifierPressed } from 'twenty-ui/utilities';
 import { PermissionFlagType } from '~/generated-metadata/graphql';
 import { formatToHumanReadableDate } from '~/utils/date-utils';
@@ -27,22 +28,22 @@ import { getFileNameAndExtension } from '~/utils/file/getFileNameAndExtension';
 const StyledLeftContent = styled.div`
   align-items: center;
   display: flex;
-  gap: ${({ theme }) => theme.spacing(3)};
-
-  width: 100%;
-  overflow: auto;
   flex: 1;
+
+  gap: ${themeCssVariables.spacing[3]};
+  overflow: auto;
+  width: 100%;
 `;
 
 const StyledRightContent = styled.div`
   align-items: center;
   display: flex;
-  gap: ${({ theme }) => theme.spacing(0.5)};
+  gap: ${themeCssVariables.spacing['0.5']};
 `;
 
 const StyledCalendarIconContainer = styled.div`
   align-items: center;
-  color: ${({ theme }) => theme.font.color.light};
+  color: ${themeCssVariables.font.color.light};
   display: flex;
 `;
 
@@ -51,7 +52,7 @@ const StyledLink = styled.a`
   appearance: none;
   background: none;
   border: none;
-  color: ${({ theme }) => theme.font.color.primary};
+  color: ${themeCssVariables.font.color.primary};
   cursor: pointer;
   display: flex;
   font-family: inherit;
@@ -62,7 +63,7 @@ const StyledLink = styled.a`
   width: 100%;
 
   :hover {
-    color: ${({ theme }) => theme.font.color.secondary};
+    color: ${themeCssVariables.font.color.secondary};
   }
 `;
 
@@ -71,16 +72,20 @@ const StyledLinkContainer = styled.div`
   width: 100%;
 `;
 
+const StyledTextInputContainer = styled.div`
+  width: 100%;
+`;
+
 type AttachmentRowProps = {
-  attachment: Attachment;
-  onPreview?: (attachment: Attachment) => void;
+  attachment: AttachmentWithFile;
+  onPreview?: (attachment: AttachmentWithFile) => void;
 };
 
 export const AttachmentRow = ({
   attachment,
   onPreview,
 }: AttachmentRowProps) => {
-  const theme = useTheme();
+  const { theme } = useContext(ThemeContext);
   const [isEditing, setIsEditing] = useState(false);
 
   const hasDownloadPermission = useHasPermissionFlag(
@@ -88,14 +93,15 @@ export const AttachmentRow = ({
   );
 
   const { name: originalFileName, extension: attachmentFileExtension } =
-    getFileNameAndExtension(attachment.name);
-
-  const fileExtension =
-    attachmentFileExtension?.toLowerCase().replace('.', '') ?? '';
-  const isPreviewable = PREVIEWABLE_EXTENSIONS.includes(fileExtension);
+    getFileNameAndExtension(attachment.file.label);
 
   const [attachmentFileName, setAttachmentFileName] =
     useState(originalFileName);
+
+  const fileCategory = getFileCategoryFromExtension(attachment.file.extension);
+
+  const fileUrl = attachment.file.url;
+  const safeFileUrl = getSafeUrl(fileUrl);
 
   const { destroyOneRecord: destroyOneAttachment } = useDestroyOneRecord({
     objectNameSingular: CoreObjectNameSingular.Attachment,
@@ -105,9 +111,7 @@ export const AttachmentRow = ({
     destroyOneAttachment(attachment.id);
   };
 
-  const { updateOneRecord: updateOneAttachment } = useUpdateOneRecord({
-    objectNameSingular: CoreObjectNameSingular.Attachment,
-  });
+  const { updateOneRecord } = useUpdateOneRecord();
 
   const handleRename = () => {
     setIsEditing(true);
@@ -118,9 +122,18 @@ export const AttachmentRow = ({
 
     const newFileName = `${attachmentFileName}${attachmentFileExtension}`;
 
-    updateOneAttachment({
+    updateOneRecord({
+      objectNameSingular: CoreObjectNameSingular.Attachment,
       idToUpdate: attachment.id,
-      updateOneRecordInput: { name: newFileName },
+      updateOneRecordInput: {
+        name: newFileName,
+        file: [
+          {
+            fileId: attachment.file.fileId,
+            label: newFileName,
+          },
+        ],
+      },
     });
   };
 
@@ -133,27 +146,41 @@ export const AttachmentRow = ({
   };
 
   const handleOnKeyDown = (e: React.KeyboardEvent) => {
+    if (e.nativeEvent.isComposing || e.keyCode === 229) {
+      return;
+    }
     if (e.key === 'Enter') {
       saveAttachmentName();
     }
   };
 
   const handleDownload = () => {
-    downloadFile(
-      attachment.fullPath,
-      `${attachmentFileName}${attachmentFileExtension}`,
-    );
+    downloadFile(fileUrl, `${attachmentFileName}${attachmentFileExtension}`);
   };
 
-  const handleOpenDocument = (e: React.MouseEvent) => {
-    // Cmd/Ctrl+click opens new tab, right click opens context menu
-    if (isNavigationModifierPressed(e) === true) {
+  const handleRowClick = () => {
+    if (isDefined(onPreview)) {
+      onPreview(attachment);
       return;
     }
 
-    // Only prevent default and use preview if onPreview is provided
+    if (!isDefined(safeFileUrl)) {
+      return;
+    }
+
+    window.open(safeFileUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleFileLinkClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    event.stopPropagation();
+
+    // Cmd/Ctrl+click opens new tab, right click opens context menu
+    if (isNavigationModifierPressed(event) === true) {
+      return;
+    }
+
     if (isDefined(onPreview)) {
-      e.preventDefault();
+      event.preventDefault();
       onPreview(attachment);
     }
   };
@@ -166,36 +193,34 @@ export const AttachmentRow = ({
         } as GenericFieldContextType
       }
     >
-      <ActivityRow disabled>
+      <ActivityRow onClick={handleRowClick} disabled={isEditing}>
         <StyledLeftContent>
-          <FileIcon fileCategory={attachment.fileCategory} />
+          <FileIcon fileCategory={fileCategory} thumbnailUrl={fileUrl} />
           {isEditing ? (
-            <SettingsTextInput
-              instanceId={`attachment-${attachment.id}-name`}
-              value={attachmentFileName}
-              onChange={handleOnChange}
-              onBlur={handleOnBlur}
-              autoFocus
-              onKeyDown={handleOnKeyDown}
-            />
+            <StyledTextInputContainer
+              onClick={(event) => event.stopPropagation()}
+            >
+              <SettingsTextInput
+                instanceId={`attachment-${attachment.id}-name`}
+                value={attachmentFileName}
+                onChange={handleOnChange}
+                onBlur={handleOnBlur}
+                autoFocus
+                onKeyDown={handleOnKeyDown}
+              />
+            </StyledTextInputContainer>
           ) : (
             <StyledLinkContainer>
-              {isPreviewable ? (
-                <StyledLink
-                  onClick={handleOpenDocument}
-                  href={attachment.fullPath}
-                >
-                  <OverflowingTextWithTooltip text={attachment.name} />
-                </StyledLink>
-              ) : (
-                <StyledLink
-                  href={attachment.fullPath}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <OverflowingTextWithTooltip text={attachment.name} />
-                </StyledLink>
-              )}
+              <StyledLink
+                onClick={handleFileLinkClick}
+                href={safeFileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <OverflowingTextWithTooltip
+                  text={`${attachmentFileName}${attachmentFileExtension}`}
+                />
+              </StyledLink>
             </StyledLinkContainer>
           )}
         </StyledLeftContent>

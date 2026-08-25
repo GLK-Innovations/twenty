@@ -9,8 +9,9 @@ import { DropdownMenuSeparator } from '@/ui/layout/dropdown/components/DropdownM
 import { GenericDropdownContentWidth } from '@/ui/layout/dropdown/constants/GenericDropdownContentWidth';
 import { SelectableList } from '@/ui/layout/selectable-list/components/SelectableList';
 import { SelectableListItem } from '@/ui/layout/selectable-list/components/SelectableListItem';
+import { t } from '@lingui/core/macro';
 import { type MouseEvent, useMemo, useState } from 'react';
-import { type IconComponent } from 'twenty-ui/display';
+import { type IconComponent } from 'twenty-ui/icon';
 import { type SelectOption } from 'twenty-ui/input';
 import { MenuItem, MenuItemMultiSelectTag } from 'twenty-ui/navigation';
 
@@ -72,7 +73,7 @@ export const MultiSelectAddressFields = <Value extends SelectValue>({
           selectedOption={{
             label:
               values?.length === options.length
-                ? 'Default'
+                ? t`Default`
                 : values?.length.toString(),
             value: values?.length,
           }}

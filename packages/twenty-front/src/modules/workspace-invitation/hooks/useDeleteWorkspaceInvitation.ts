@@ -1,15 +1,17 @@
-import { useSetRecoilState } from 'recoil';
+import { useMutation } from '@apollo/client/react';
 import {
   type DeleteWorkspaceInvitationMutationVariables,
-  useDeleteWorkspaceInvitationMutation,
+  DeleteWorkspaceInvitationDocument,
+  GetWorkspaceInvitationsDocument,
 } from '~/generated-metadata/graphql';
-import { workspaceInvitationsState } from '../states/workspaceInvitationsStates';
+import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 
 export const useDeleteWorkspaceInvitation = () => {
-  const [deleteWorkspaceInvitationMutation] =
-    useDeleteWorkspaceInvitationMutation();
+  const [deleteWorkspaceInvitationMutation] = useMutation(
+    DeleteWorkspaceInvitationDocument,
+  );
 
-  const setWorkspaceInvitations = useSetRecoilState(workspaceInvitationsState);
+  const { enqueueErrorSnackBar } = useSnackBar();
 
   const deleteWorkspaceInvitation = async ({
     appTokenId,
@@ -18,12 +20,9 @@ export const useDeleteWorkspaceInvitation = () => {
       variables: {
         appTokenId,
       },
-      onCompleted: () => {
-        setWorkspaceInvitations((workspaceInvitations) =>
-          workspaceInvitations.filter(
-            (workspaceInvitation) => workspaceInvitation.id !== appTokenId,
-          ),
-        );
+      refetchQueries: [GetWorkspaceInvitationsDocument],
+      onError: (error) => {
+        enqueueErrorSnackBar({ apolloError: error });
       },
     });
   };

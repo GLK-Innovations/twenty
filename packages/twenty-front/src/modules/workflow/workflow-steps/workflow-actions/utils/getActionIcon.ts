@@ -12,18 +12,24 @@ export const getActionIcon = (actionType: WorkflowActionType) => {
     case 'DELETE_RECORD':
     case 'UPSERT_RECORD':
     case 'FIND_RECORDS':
+    case 'PICK_RECORD':
       return RECORD_ACTIONS.find((item) => item.type === actionType)?.icon;
     case 'AI_AGENT':
       return AI_ACTIONS.find((item) => item.type === actionType)?.icon;
     case 'CODE':
     case 'HTTP_REQUEST':
     case 'SEND_EMAIL':
+    case 'DRAFT_EMAIL':
+    case 'CREATE_CALENDAR_EVENT':
       return CORE_ACTIONS.find((item) => item.type === actionType)?.icon;
+    case 'LOGIC_FUNCTION':
+      return 'IconFunction';
     case 'FORM':
       return HUMAN_INPUT_ACTIONS.find((item) => item.type === actionType)?.icon;
     case 'ITERATOR':
     case 'DELAY':
     case 'FILTER':
+    case 'IF_ELSE':
       return FLOW_ACTIONS.find((item) => item.type === actionType)?.icon;
     case 'EMPTY':
       return 'IconSettingsAutomation';

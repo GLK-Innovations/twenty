@@ -1,11 +1,11 @@
-import { FormFieldInputContainer } from '@/object-record/record-field/ui/form-types/components/FormFieldInputContainer';
+import { t } from '@lingui/core/macro';
+import { FormFieldInputContainer } from '@/ui/input/components/FormFieldInputContainer';
 import { FormFieldInputInnerContainer } from '@/object-record/record-field/ui/form-types/components/FormFieldInputInnerContainer';
 import { FormFieldInputRowContainer } from '@/object-record/record-field/ui/form-types/components/FormFieldInputRowContainer';
 import { TextVariableEditor } from '@/object-record/record-field/ui/form-types/components/TextVariableEditor';
 import { useTextVariableEditor } from '@/object-record/record-field/ui/form-types/hooks/useTextVariableEditor';
 import { type VariablePickerComponent } from '@/object-record/record-field/ui/form-types/types/VariablePickerComponent';
-import { InputErrorHelper } from '@/ui/input/components/InputErrorHelper';
-import { InputLabel } from '@/ui/input/components/InputLabel';
+import { Field } from 'twenty-ui/input';
 import { useId } from 'react';
 import { isDefined } from 'twenty-shared/utils';
 import { turnIntoEmptyStringIfWhitespacesOnly } from '~/utils/string/turnIntoEmptyStringIfWhitespacesOnly';
@@ -19,6 +19,7 @@ type FormRawJsonFieldInputProps = {
   readonly?: boolean;
   VariablePicker?: VariablePickerComponent;
   placeholder?: string;
+  className?: string;
 };
 
 export const FormRawJsonFieldInput = ({
@@ -30,11 +31,12 @@ export const FormRawJsonFieldInput = ({
   onBlur,
   readonly,
   VariablePicker,
+  className,
 }: FormRawJsonFieldInputProps) => {
   const instanceId = useId();
 
   const editor = useTextVariableEditor({
-    placeholder: placeholder ?? 'Enter a JSON object',
+    placeholder: placeholder ?? t`Enter a JSON object`,
     multiline: true,
     readonly,
     defaultValue: defaultValue ?? undefined,
@@ -66,8 +68,8 @@ export const FormRawJsonFieldInput = ({
   }
 
   return (
-    <FormFieldInputContainer>
-      {label ? <InputLabel>{label}</InputLabel> : null}
+    <FormFieldInputContainer className={className}>
+      {label ? <Field.Label>{label}</Field.Label> : null}
 
       <FormFieldInputRowContainer multiline>
         <FormFieldInputInnerContainer
@@ -87,7 +89,7 @@ export const FormRawJsonFieldInput = ({
           />
         )}
       </FormFieldInputRowContainer>
-      <InputErrorHelper>{error}</InputErrorHelper>
+      {error && <Field.Error match>{error}</Field.Error>}
     </FormFieldInputContainer>
   );
 };

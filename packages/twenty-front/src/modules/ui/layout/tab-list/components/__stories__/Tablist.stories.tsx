@@ -1,5 +1,6 @@
-import styled from '@emotion/styled';
-import { type Meta, type StoryObj } from '@storybook/react';
+import { TabList } from '@/ui/layout/tab-list/components/TabList';
+import { styled } from '@linaria/react';
+import { type Meta, type StoryObj } from '@storybook/react-vite';
 import {
   IconCalendar,
   IconCheckbox,
@@ -8,12 +9,14 @@ import {
   IconMail,
   IconPhone,
   IconUser,
-} from 'twenty-ui/display';
-import { ComponentWithRouterDecorator } from 'twenty-ui/testing';
-import { TabList } from '../TabList';
+} from 'twenty-ui/icon';
+import {
+  AVATAR_URL_MOCK,
+  ComponentWithRouterDecorator,
+} from 'twenty-ui/testing';
 
 const tabs = [
-  { id: 'general', title: 'General', logo: 'https://picsum.photos/200' },
+  { id: 'general', title: 'General', logo: AVATAR_URL_MOCK },
   { id: 'contacts', title: 'Contacts', Icon: IconUser },
   { id: 'messages', title: 'Messages', Icon: IconMail },
   { id: 'calls', title: 'Calls', Icon: IconPhone },
@@ -23,7 +26,7 @@ const tabs = [
   {
     id: 'time',
     title: 'Time Tracking',
-    logo: 'https://picsum.photos/192/192',
+    logo: AVATAR_URL_MOCK,
   },
   {
     id: 'activity',
@@ -35,12 +38,14 @@ const tabs = [
   { id: 'reports', title: 'Reports', Icon: IconCheckbox },
 ];
 
+import { themeCssVariables } from 'twenty-ui/theme-constants';
+
 const StyledInteractiveContainer = styled.div`
-  border: 1px solid ${({ theme }) => theme.border.color.strong};
+  border: 1px solid ${themeCssVariables.border.color.strong};
   max-width: 100%;
   min-width: 300px;
   overflow: auto;
-  padding: ${({ theme }) => theme.spacing(5)};
+  padding: ${themeCssVariables.spacing[5]};
   resize: horizontal;
   width: 600px;
 `;
@@ -74,7 +79,7 @@ export const Default: Story = {
         componentInstanceId={args.componentInstanceId}
         loading={args.loading}
         behaveAsLinks={args.behaveAsLinks}
-        isInRightDrawer={args.isInRightDrawer}
+        isInSidePanel={args.isInSidePanel}
         className={args.className}
       />
     </StyledInteractiveContainer>

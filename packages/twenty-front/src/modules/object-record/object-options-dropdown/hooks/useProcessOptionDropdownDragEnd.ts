@@ -1,10 +1,10 @@
-import { type OnDragEndResponder } from '@hello-pangea/dnd';
+import { type DraggableListDropResult } from '@/ui/layout/draggable-list/types/DraggableListDropResult';
 
 import { useReorderVisibleRecordFields } from '@/object-record/record-field/hooks/useReorderVisibleRecordFields';
 
 import { useSaveCurrentViewFields } from '@/views/hooks/useSaveCurrentViewFields';
 import { mapRecordFieldToViewField } from '@/views/utils/mapRecordFieldToViewField';
-import { useRecoilCallback } from 'recoil';
+import { useCallback } from 'react';
 
 export const useProcessOptionDropdownDragEnd = (recordTableId: string) => {
   const { reorderVisibleRecordFields } =
@@ -12,8 +12,8 @@ export const useProcessOptionDropdownDragEnd = (recordTableId: string) => {
 
   const { saveViewFields } = useSaveCurrentViewFields();
 
-  const processOptionDropdownDragEnd: OnDragEndResponder = useRecoilCallback(
-    () => async (result) => {
+  const processOptionDropdownDragEnd = useCallback(
+    async (result: DraggableListDropResult) => {
       if (
         !result.destination ||
         result.destination.index === 1 ||

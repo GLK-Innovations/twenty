@@ -4,7 +4,11 @@ export type IsFilter = 'NULL' | 'NOT_NULL';
 
 export type UUIDFilter = {
   eq?: UUIDFilterValue;
+  gt?: UUIDFilterValue;
+  gte?: UUIDFilterValue;
   in?: UUIDFilterValue[];
+  lt?: UUIDFilterValue;
+  lte?: UUIDFilterValue;
   neq?: UUIDFilterValue;
   is?: IsFilter;
 };
@@ -21,7 +25,11 @@ export type BooleanFilter = {
 
 export type StringFilter = {
   eq?: string;
+  gt?: string;
+  gte?: string;
   in?: string[];
+  lt?: string;
+  lte?: string;
   neq?: string;
   startsWith?: string;
   like?: string;
@@ -35,6 +43,10 @@ export type RatingFilter = {
   eq?: string;
   in?: string[];
   is?: IsFilter;
+  gt?: string;
+  gte?: string;
+  lt?: string;
+  lte?: string;
 };
 
 export type FloatFilter = {
@@ -103,6 +115,7 @@ export type LinksFilter = {
 export type ActorFilter = {
   name?: StringFilter;
   source?: SelectFilter;
+  workspaceMemberId?: UUIDFilter;
 };
 
 export type EmailsFilter = {
@@ -121,6 +134,10 @@ export type SelectFilter = {
   in?: string[];
   eq?: string;
   neq?: string;
+  gt?: string;
+  gte?: string;
+  lt?: string;
+  lte?: string;
 };
 
 export type MultiSelectFilter = {
@@ -140,13 +157,18 @@ export type RawJsonFilter = {
   is?: IsFilter;
 };
 
-export type RichTextV2LeafFilter = {
+export type FilesFilter = {
+  like?: string;
+  is?: IsFilter;
+};
+
+export type RichTextLeafFilter = {
   ilike?: string;
 };
 
-export type RichTextV2Filter = {
-  blocknote?: RichTextV2LeafFilter;
-  markdown?: RichTextV2LeafFilter;
+export type RichTextFilter = {
+  blocknote?: RichTextLeafFilter;
+  markdown?: RichTextLeafFilter;
 };
 
 export type TSVectorFilter = {
@@ -166,10 +188,12 @@ export type LeafFilter =
   | AddressFilter
   | LinksFilter
   | ActorFilter
+  | EmailsFilter
   | PhonesFilter
   | ArrayFilter
   | RawJsonFilter
-  | RichTextV2Filter
+  | FilesFilter
+  | RichTextFilter
   | TSVectorFilter
   | undefined;
 

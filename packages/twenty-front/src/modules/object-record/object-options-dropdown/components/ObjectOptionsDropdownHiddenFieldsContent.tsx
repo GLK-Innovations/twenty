@@ -1,5 +1,4 @@
 import { useLocation } from 'react-router-dom';
-import { useSetRecoilState } from 'recoil';
 
 import { useObjectNamePluralFromSingular } from '@/object-metadata/hooks/useObjectNamePluralFromSingular';
 
@@ -10,11 +9,12 @@ import { DropdownMenuHeaderLeftComponent } from '@/ui/layout/dropdown/components
 import { DropdownMenuItemsContainer } from '@/ui/layout/dropdown/components/DropdownMenuItemsContainer';
 import { DropdownMenuSeparator } from '@/ui/layout/dropdown/components/DropdownMenuSeparator';
 import { navigationMemorizedUrlState } from '@/ui/navigation/states/navigationMemorizedUrlState';
+import { useSetAtomState } from '@/ui/utilities/state/jotai/hooks/useSetAtomState';
 import { ViewFieldsHiddenDropdownSection } from '@/views/components/ViewFieldsHiddenDropdownSection';
 import { useLingui } from '@lingui/react/macro';
 import { SettingsPath } from 'twenty-shared/types';
 import { getSettingsPath } from 'twenty-shared/utils';
-import { IconChevronLeft, IconSettings } from 'twenty-ui/display';
+import { IconChevronLeft, IconSettings } from 'twenty-ui/icon';
 import { MenuItem, UndecoratedLink } from 'twenty-ui/navigation';
 
 export const ObjectOptionsDropdownHiddenFieldsContent = () => {
@@ -31,7 +31,7 @@ export const ObjectOptionsDropdownHiddenFieldsContent = () => {
   });
 
   const location = useLocation();
-  const setNavigationMemorizedUrl = useSetRecoilState(
+  const setNavigationMemorizedUrl = useSetAtomState(
     navigationMemorizedUrlState,
   );
 

@@ -9,12 +9,13 @@ import { WorkspaceResolverBuilderService } from 'src/engine/api/graphql/workspac
 import { GqlOperation } from 'src/engine/api/graphql/workspace-schema-builder/enums/gql-operation.enum';
 import { ObjectTypeDefinitionKind } from 'src/engine/api/graphql/workspace-schema-builder/enums/object-type-definition-kind.enum';
 import { ArgsTypeGenerator } from 'src/engine/api/graphql/workspace-schema-builder/graphql-type-generators/args-type/args-type.generator';
-import { TypeMapperService } from 'src/engine/api/graphql/workspace-schema-builder/services/type-mapper.service';
 import { GqlTypesStorage } from 'src/engine/api/graphql/workspace-schema-builder/storages/gql-types.storage';
+import { applyTypeOptionsForOutputType } from 'src/engine/api/graphql/workspace-schema-builder/utils/apply-type-options-for-output-type.util';
+import { type SchemaGenerationContext } from 'src/engine/api/graphql/workspace-schema-builder/types/schema-generation-context.type';
 import { GraphQLRootTypeFieldConfigMap } from 'src/engine/api/graphql/workspace-schema-builder/types/graphql-field-config-map.types';
 import { computeObjectMetadataObjectTypeKey } from 'src/engine/api/graphql/workspace-schema-builder/utils/compute-stored-gql-type-key-utils/compute-object-metadata-object-type-key.util';
 import { getResolverArgs } from 'src/engine/api/graphql/workspace-schema-builder/utils/get-resolver-args.util';
-import { type ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
+import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
 import { getResolverName } from 'src/engine/utils/get-resolver-name.util';
 
 @Injectable()
@@ -23,13 +24,12 @@ export class RootTypeGenerator {
 
   constructor(
     private readonly gqlTypesStorage: GqlTypesStorage,
-    private readonly typeMapperService: TypeMapperService,
     private readonly argsTypeGenerator: ArgsTypeGenerator,
     private readonly workspaceResolverBuilderService: WorkspaceResolverBuilderService,
   ) {}
 
   buildAndStore(
-    objectMetadataCollection: ObjectMetadataEntity[],
+    context: SchemaGenerationContext,
     workspaceResolverMethodNames: readonly WorkspaceResolverBuilderMethodNames[],
     objectTypeName: GqlOperation,
   ) {
@@ -47,6 +47,10 @@ export class RootTypeGenerator {
       );
     }
 
+    const objectMetadataCollection = Object.values(
+      context.flatObjectMetadataMaps.byUniversalIdentifier,
+    ).filter(isDefined);
+
     this.gqlTypesStorage.addGqlType(
       objectTypeName,
       new GraphQLObjectType({
@@ -60,7 +64,7 @@ export class RootTypeGenerator {
   }
 
   private generateFields(
-    objectMetadataCollection: ObjectMetadataEntity[],
+    objectMetadataCollection: FlatObjectMetadata[],
     workspaceResolverMethodNames: readonly WorkspaceResolverBuilderMethodNames[],
   ): GraphQLRootTypeFieldConfigMap {
     const fieldConfigMap: GraphQLRootTypeFieldConfigMap = {};
@@ -110,12 +114,9 @@ export class RootTypeGenerator {
             'groupBy',
           ];
 
-          const outputType = this.typeMapperService.applyTypeOptions(
-            objectType,
-            {
-              isArray: isMethodReturningArrayObjectType.includes(methodName),
-            },
-          );
+          const outputType = applyTypeOptionsForOutputType(objectType, {
+            isArray: isMethodReturningArrayObjectType.includes(methodName),
+          });
 
           fieldConfigMap[name] = {
             type: outputType,

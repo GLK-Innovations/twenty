@@ -1,16 +1,21 @@
-import { usePageLayoutDraftState } from '@/page-layout/hooks/usePageLayoutDraftState';
+import { useObjectMetadataItems } from '@/object-metadata/hooks/useObjectMetadataItems';
+import { useCreatePendingFieldsWidgetViews } from '@/page-layout/hooks/useCreatePendingFieldsWidgetViews';
+import { useCreatePendingRecordTableWidgetViews } from '@/page-layout/hooks/useCreatePendingRecordTableWidgetViews';
+import { useUpdatePageLayoutWithTabsAndWidgets } from '@/page-layout/hooks/useUpdatePageLayoutWithTabsAndWidgets';
 import { PageLayoutComponentInstanceContext } from '@/page-layout/states/contexts/PageLayoutComponentInstanceContext';
 import { pageLayoutCurrentLayoutsComponentState } from '@/page-layout/states/pageLayoutCurrentLayoutsComponentState';
+import { pageLayoutDraftComponentState } from '@/page-layout/states/pageLayoutDraftComponentState';
 import { pageLayoutPersistedComponentState } from '@/page-layout/states/pageLayoutPersistedComponentState';
 import { type PageLayout } from '@/page-layout/types/PageLayout';
 import { convertPageLayoutDraftToUpdateInput } from '@/page-layout/utils/convertPageLayoutDraftToUpdateInput';
 import { convertPageLayoutToTabLayouts } from '@/page-layout/utils/convertPageLayoutToTabLayouts';
+import { sanitizeChartFiltersInPageLayoutDraft } from '@/page-layout/utils/sanitizeChartFiltersInPageLayoutDraft';
 import { transformPageLayout } from '@/page-layout/utils/transformPageLayout';
 import { useAvailableComponentInstanceIdOrThrow } from '@/ui/utilities/state/component-state/hooks/useAvailableComponentInstanceIdOrThrow';
-import { useRecoilComponentCallbackState } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentCallbackState';
-import { useRecoilCallback } from 'recoil';
+import { useAtomComponentStateCallbackState } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateCallbackState';
+import { useStore } from 'jotai';
+import { useCallback } from 'react';
 import { isDefined } from 'twenty-shared/utils';
-import { useUpdatePageLayoutWithTabsAndWidgetsMutation } from '~/generated/graphql';
 
 export const useSavePageLayout = (pageLayoutIdFromProps: string) => {
   const pageLayoutId = useAvailableComponentInstanceIdOrThrow(
@@ -18,55 +23,94 @@ export const useSavePageLayout = (pageLayoutIdFromProps: string) => {
     pageLayoutIdFromProps,
   );
 
-  const pageLayoutPersistedCallbackState = useRecoilComponentCallbackState(
+  const pageLayoutPersistedCallbackState = useAtomComponentStateCallbackState(
     pageLayoutPersistedComponentState,
     pageLayoutId,
   );
 
-  const pageLayoutCurrentLayoutsCallbackState = useRecoilComponentCallbackState(
-    pageLayoutCurrentLayoutsComponentState,
+  const pageLayoutCurrentLayoutsCallbackState =
+    useAtomComponentStateCallbackState(
+      pageLayoutCurrentLayoutsComponentState,
+      pageLayoutId,
+    );
+
+  const pageLayoutDraftCallbackState = useAtomComponentStateCallbackState(
+    pageLayoutDraftComponentState,
     pageLayoutId,
   );
 
-  const { pageLayoutDraft } = usePageLayoutDraftState(pageLayoutId);
+  const { updatePageLayoutWithTabsAndWidgets } =
+    useUpdatePageLayoutWithTabsAndWidgets();
 
-  const [updatePageLayoutWithTabsAndWidgets] =
-    useUpdatePageLayoutWithTabsAndWidgetsMutation();
+  const { createPendingFieldsWidgetViews } =
+    useCreatePendingFieldsWidgetViews();
 
-  const savePageLayout = useRecoilCallback(
-    ({ set }) =>
-      async () => {
-        const updateInput =
-          convertPageLayoutDraftToUpdateInput(pageLayoutDraft);
+  const { createPendingRecordTableWidgetViews } =
+    useCreatePendingRecordTableWidgetViews();
 
-        const { data } = await updatePageLayoutWithTabsAndWidgets({
-          variables: {
-            id: pageLayoutId,
-            input: updateInput,
-          },
-        });
+  const { objectMetadataItems } = useObjectMetadataItems();
 
-        const updatedPageLayout = data?.updatePageLayoutWithTabsAndWidgets;
+  const store = useStore();
 
-        if (isDefined(updatedPageLayout)) {
-          const pageLayoutToPersist: PageLayout =
-            transformPageLayout(updatedPageLayout);
+  const savePageLayout = useCallback(async () => {
+    await createPendingFieldsWidgetViews(pageLayoutId);
+    await createPendingRecordTableWidgetViews(pageLayoutId);
 
-          set(pageLayoutPersistedCallbackState, pageLayoutToPersist);
-          set(
-            pageLayoutCurrentLayoutsCallbackState,
-            convertPageLayoutToTabLayouts(pageLayoutToPersist),
-          );
-        }
-      },
-    [
-      pageLayoutCurrentLayoutsCallbackState,
+    const pageLayoutDraft = store.get(pageLayoutDraftCallbackState);
+
+    const validFieldMetadataIdsByObjectMetadataId = new Map(
+      objectMetadataItems.map((objectMetadataItem) => [
+        objectMetadataItem.id,
+        new Set(
+          objectMetadataItem.fields
+            .filter((fieldMetadataItem) => fieldMetadataItem.isActive)
+            .map((fieldMetadataItem) => fieldMetadataItem.id),
+        ),
+      ]),
+    );
+
+    const sanitizedPageLayoutDraft = sanitizeChartFiltersInPageLayoutDraft({
       pageLayoutDraft,
+      validFieldMetadataIdsByObjectMetadataId,
+    });
+
+    const updateInput = convertPageLayoutDraftToUpdateInput(
+      sanitizedPageLayoutDraft,
+    );
+
+    const result = await updatePageLayoutWithTabsAndWidgets(
       pageLayoutId,
-      pageLayoutPersistedCallbackState,
-      updatePageLayoutWithTabsAndWidgets,
-    ],
-  );
+      updateInput,
+    );
+
+    if (result.status === 'successful') {
+      const updatedPageLayout =
+        result.response.data?.updatePageLayoutWithTabsAndWidgets;
+
+      if (isDefined(updatedPageLayout)) {
+        const persistedLayout: PageLayout =
+          transformPageLayout(updatedPageLayout);
+
+        store.set(pageLayoutPersistedCallbackState, persistedLayout);
+        store.set(
+          pageLayoutCurrentLayoutsCallbackState,
+          convertPageLayoutToTabLayouts(persistedLayout),
+        );
+      }
+    }
+
+    return result;
+  }, [
+    createPendingFieldsWidgetViews,
+    createPendingRecordTableWidgetViews,
+    objectMetadataItems,
+    pageLayoutCurrentLayoutsCallbackState,
+    pageLayoutDraftCallbackState,
+    pageLayoutId,
+    pageLayoutPersistedCallbackState,
+    updatePageLayoutWithTabsAndWidgets,
+    store,
+  ]);
 
   return { savePageLayout };
 };

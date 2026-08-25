@@ -1,30 +1,31 @@
 import { SettingsPageContainer } from '@/settings/components/SettingsPageContainer';
 import { SettingsWebhooksTable } from '@/settings/developers/components/SettingsWebhooksTable';
-import { SubMenuTopBarContainer } from '@/ui/layout/page/components/SubMenuTopBarContainer';
+import { SettingsPageLayout } from '@/settings/components/layout/SettingsPageLayout';
 import { useIsMobile } from '@/ui/utilities/responsive/hooks/useIsMobile';
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
 import { Trans, useLingui } from '@lingui/react/macro';
 import { SettingsPath } from 'twenty-shared/types';
 import { getSettingsPath } from 'twenty-shared/utils';
-import { H2Title, IconPlus } from 'twenty-ui/display';
+import { IconPlus } from 'twenty-ui/icon';
+import { H2Title } from 'twenty-ui/typography';
 import { Button } from 'twenty-ui/input';
 import { Section } from 'twenty-ui/layout';
-import { MOBILE_VIEWPORT } from 'twenty-ui/theme';
+import { MOBILE_VIEWPORT, themeCssVariables } from 'twenty-ui/theme-constants';
 
 const StyledButtonContainer = styled.div`
   display: flex;
   justify-content: flex-end;
-  padding-top: ${({ theme }) => theme.spacing(2)};
+  padding-top: ${themeCssVariables.spacing[2]};
   @media (max-width: ${MOBILE_VIEWPORT}px) {
-    padding-top: ${({ theme }) => theme.spacing(5)};
+    padding-top: ${themeCssVariables.spacing[5]};
   }
 `;
 
 const StyledContainer = styled.div<{ isMobile: boolean }>`
   display: flex;
   flex-direction: column;
+  gap: ${themeCssVariables.spacing[2]};
   overflow: hidden;
-  gap: ${({ theme }) => theme.spacing(2)};
 `;
 
 export const SettingsWebhooks = () => {
@@ -32,12 +33,12 @@ export const SettingsWebhooks = () => {
   const { t } = useLingui();
 
   return (
-    <SubMenuTopBarContainer
+    <SettingsPageLayout
       title={t`Webhooks`}
       links={[
         {
           children: <Trans>Workspace</Trans>,
-          href: getSettingsPath(SettingsPath.Workspace),
+          href: getSettingsPath(SettingsPath.General),
         },
         { children: <Trans>Webhooks</Trans> },
       ]}
@@ -62,6 +63,6 @@ export const SettingsWebhooks = () => {
           </Section>
         </StyledContainer>
       </SettingsPageContainer>
-    </SubMenuTopBarContainer>
+    </SettingsPageLayout>
   );
 };

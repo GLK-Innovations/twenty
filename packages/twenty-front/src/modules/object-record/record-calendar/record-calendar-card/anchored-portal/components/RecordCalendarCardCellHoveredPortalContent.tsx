@@ -1,6 +1,6 @@
-import { RECORD_CALENDAR_CARD_INPUT_ID_PREFIX } from '@/object-record/record-calendar/record-calendar-card/constants/RecordCalendarCardInputIdPrefix';
 import { recordCalendarCardEditModePositionComponentState } from '@/object-record/record-calendar/record-calendar-card/states/recordCalendarCardEditModePositionComponentState';
 import { recordCalendarCardHoverPositionComponentState } from '@/object-record/record-calendar/record-calendar-card/states/recordCalendarCardHoverPositionComponentState';
+import { getRecordCalendarCardInstanceIdPrefix } from '@/object-record/record-calendar/record-calendar-card/utils/getRecordCalendarCardInstanceIdPrefix';
 import { FieldDisplay } from '@/object-record/record-field/ui/components/FieldDisplay';
 import { FieldInput } from '@/object-record/record-field/ui/components/FieldInput';
 import { FieldContext } from '@/object-record/record-field/ui/contexts/FieldContext';
@@ -10,21 +10,30 @@ import { RecordInlineCellDisplayMode } from '@/object-record/record-inline-cell/
 import { RecordInlineCellHoveredPortalContent } from '@/object-record/record-inline-cell/components/RecordInlineCellHoveredPortalContent';
 import { useInlineCell } from '@/object-record/record-inline-cell/hooks/useInlineCell';
 import { getRecordFieldInputInstanceId } from '@/object-record/utils/getRecordFieldInputId';
-import { useRecoilComponentState } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentState';
-import { useSetRecoilComponentState } from '@/ui/utilities/state/component-state/hooks/useSetRecoilComponentState';
+import { useAtomComponentState } from '@/ui/utilities/state/jotai/hooks/useAtomComponentState';
+import { useSetAtomComponentState } from '@/ui/utilities/state/jotai/hooks/useSetAtomComponentState';
 import { useContext } from 'react';
 
-export const RecordCalendarCardCellHoveredPortalContent = () => {
+type RecordCalendarCardCellHoveredPortalContentProps = {
+  calendarDay: string;
+};
+
+export const RecordCalendarCardCellHoveredPortalContent = ({
+  calendarDay,
+}: RecordCalendarCardCellHoveredPortalContentProps) => {
   const { editModeContentOnly, isCentered } = useRecordInlineCellContext();
 
   const { isRecordFieldReadOnly, recordId, fieldDefinition } =
     useContext(FieldContext);
 
+  const cardInstanceIdPrefix =
+    getRecordCalendarCardInstanceIdPrefix(calendarDay);
+
   const { openInlineCell } = useInlineCell(
     getRecordFieldInputInstanceId({
       recordId,
       fieldName: fieldDefinition.metadata.fieldName,
-      prefix: RECORD_CALENDAR_CARD_INPUT_ID_PREFIX,
+      prefix: cardInstanceIdPrefix,
     }),
   );
 
@@ -32,9 +41,9 @@ export const RecordCalendarCardCellHoveredPortalContent = () => {
     !isRecordFieldReadOnly && !editModeContentOnly;
 
   const [recordCalendarCardHoverPosition, setRecordCalendarCardHoverPosition] =
-    useRecoilComponentState(recordCalendarCardHoverPositionComponentState);
+    useAtomComponentState(recordCalendarCardHoverPositionComponentState);
 
-  const setRecordCalendarCardEditModePosition = useSetRecoilComponentState(
+  const setRecordCalendarCardEditModePosition = useSetAtomComponentState(
     recordCalendarCardEditModePositionComponentState,
   );
   const { openFieldInput } = useOpenFieldInputEditMode();
@@ -47,7 +56,8 @@ export const RecordCalendarCardCellHoveredPortalContent = () => {
       openFieldInput({
         fieldDefinition,
         recordId,
-        prefix: RECORD_CALENDAR_CARD_INPUT_ID_PREFIX,
+        prefix: cardInstanceIdPrefix,
+        onFileUploadClose: () => setRecordCalendarCardEditModePosition(null),
       });
     }
   };

@@ -8,7 +8,7 @@ import { getSettingsPath } from 'twenty-shared/utils';
 import {
   type FeatureFlagKey,
   type PermissionFlagType,
-} from '~/generated/graphql';
+} from '~/generated-metadata/graphql';
 
 type SettingsProtectedRouteWrapperProps = {
   children?: ReactNode;
@@ -21,13 +21,13 @@ export const SettingsProtectedRouteWrapper = ({
   settingsPermission,
   requiredFeatureFlag,
 }: SettingsProtectedRouteWrapperProps) => {
-  const isLoggedIn = useIsLogged();
+  const isLogged = useIsLogged();
   const hasPermission = useHasPermissionFlag(settingsPermission);
   const requiredFeatureFlagEnabled = useIsFeatureEnabled(
     requiredFeatureFlag || null,
   );
 
-  if (!isLoggedIn) {
+  if (!isLogged) {
     return null;
   }
 

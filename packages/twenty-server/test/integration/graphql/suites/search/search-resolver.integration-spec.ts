@@ -13,16 +13,20 @@ import {
   TEST_PERSON_5_ID,
   TEST_PERSON_6_ID,
   TEST_PERSON_7_ID,
+  TEST_PERSON_8_ID,
+  TEST_PERSON_9_ID,
 } from 'test/integration/constants/test-person-ids.constants';
 import {
   TEST_PET_ID_1,
   TEST_PET_ID_2,
   TEST_PET_ID_3,
   TEST_PET_ID_4,
+  TEST_PET_ID_5,
 } from 'test/integration/constants/test-pet-ids.constants';
-import { performCreateManyOperation } from 'test/integration/graphql/utils/perform-create-many-operation.utils';
+import { createManyOperation } from 'test/integration/graphql/utils/create-many-operation.util';
 import { search } from 'test/integration/graphql/utils/search.util';
 import { deleteAllRecords } from 'test/integration/utils/delete-all-records';
+import { waitForAllJobsToFinish } from 'test/integration/utils/wait-for-all-jobs-to-finish.util';
 import {
   eachTestingContextFilter,
   type EachTestingContext,
@@ -54,6 +58,7 @@ describe('SearchResolver', () => {
         primaryPhoneNumber: '5551234567',
         primaryPhoneCallingCode: '+1',
         primaryPhoneCountryCode: 'US',
+        additionalPhones: [],
       },
     },
     { id: TEST_PERSON_3_ID, name: { firstName: 'searchInput3' } },
@@ -86,11 +91,55 @@ describe('SearchResolver', () => {
       jobTitle: 'Manager',
       emails: { primaryEmail: 'francois@naive.com' },
     },
+    {
+      id: TEST_PERSON_8_ID,
+      name: { firstName: 'MultiEmail', lastName: 'Person' },
+      emails: {
+        primaryEmail: 'primary@example.com',
+        additionalEmails: ['secondary@example.com', 'work@company.org'],
+      },
+    },
+    {
+      id: TEST_PERSON_9_ID,
+      name: { firstName: 'MultiPhone', lastName: 'Person' },
+      emails: {
+        primaryEmail: 'empty@arrays.com',
+        additionalEmails: [],
+      },
+      phones: {
+        primaryPhoneNumber: '9998887777',
+        primaryPhoneCallingCode: '+1',
+        primaryPhoneCountryCode: 'US',
+        additionalPhones: [
+          { number: '1112223333', countryCode: 'US', callingCode: '+1' },
+          { number: '4445556666', countryCode: 'GB', callingCode: '+44' },
+        ],
+      },
+    },
   ];
 
   const companies = [
-    { id: TEST_COMPANY_1_ID, name: 'Café Corp' },
-    { id: TEST_COMPANY_2_ID, name: 'Naïve Solutions' },
+    {
+      id: TEST_COMPANY_1_ID,
+      name: 'Café Corp',
+      domainName: {
+        primaryLinkLabel: 'Main Site',
+        primaryLinkUrl: 'https://links.example.com',
+        secondaryLinks: [
+          { label: 'DocsPortal', url: 'docs.links.example.com' },
+          { label: 'SupportHub', url: 'support.links.example.com' },
+        ],
+      },
+    },
+    {
+      id: TEST_COMPANY_2_ID,
+      name: 'Naïve Solutions',
+      domainName: {
+        primaryLinkLabel: 'NaivePortal',
+        primaryLinkUrl: 'https://naive.portal.example',
+        secondaryLinks: [],
+      },
+    },
   ];
 
   const pets = [
@@ -98,6 +147,7 @@ describe('SearchResolver', () => {
     { id: TEST_PET_ID_2, name: 'searchInput2' },
     { id: TEST_PET_ID_3, name: 'Café' },
     { id: TEST_PET_ID_4, name: 'Naïve' },
+    { id: TEST_PET_ID_5, name: '示例商业线索' },
   ];
 
   const [
@@ -108,11 +158,14 @@ describe('SearchResolver', () => {
     francoisPerson,
     josePersonNoAccent,
     francoisPersonNoAccent,
+    multiEmailPerson,
+    multiPhonePerson,
   ] = persons;
   const [cafeCorp, naiveCorp] = companies;
-  const [searchInput1Pet, searchInput2Pet, cafePet, naivePet] = pets;
+  const [searchInput1Pet, searchInput2Pet, cafePet, naivePet, cjkPet] = pets;
 
   beforeAll(async () => {
+    // TODO refactor not a good practice, or should at least restore afterwards
     await deleteAllRecords('person');
     await deleteAllRecords('company');
     await deleteAllRecords('opportunity');
@@ -125,32 +178,29 @@ describe('SearchResolver', () => {
     await deleteAllRecords('_surveyResult');
     await deleteAllRecords('_rocket');
 
-    try {
-      await performCreateManyOperation(
-        'pet',
-        'pets',
-        OBJECT_MODEL_COMMON_FIELDS,
-        pets,
-      );
+    await createManyOperation({
+      objectMetadataSingularName: 'pet',
+      objectMetadataPluralName: 'pets',
+      gqlFields: OBJECT_MODEL_COMMON_FIELDS,
+      data: pets,
+    });
 
-      await performCreateManyOperation(
-        'person',
-        'people',
-        PERSON_GQL_FIELDS,
-        persons,
-      );
+    await createManyOperation({
+      objectMetadataSingularName: 'person',
+      objectMetadataPluralName: 'people',
+      gqlFields: PERSON_GQL_FIELDS,
+      data: persons,
+    });
 
-      await performCreateManyOperation(
-        'company',
-        'companies',
-        COMPANY_GQL_FIELDS,
-        companies,
-      );
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.log(error);
-      throw new Error('beforeAll failed');
-    }
+    await waitForAllJobsToFinish();
+    await deleteAllRecords('company');
+
+    await createManyOperation({
+      objectMetadataSingularName: 'company',
+      objectMetadataPluralName: 'companies',
+      gqlFields: COMPANY_GQL_FIELDS,
+      data: companies,
+    });
   });
 
   const testsUseCases: EachTestingContext<{
@@ -169,7 +219,12 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: '',
-          excludedObjectNameSingulars: ['workspaceMember'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'employmentHistory',
+            'petCareAgreement',
+            'workflow',
+          ],
           limit: 50,
         },
         eval: {
@@ -181,10 +236,13 @@ describe('SearchResolver', () => {
             francoisPerson.id,
             josePersonNoAccent.id,
             francoisPersonNoAccent.id,
+            multiEmailPerson.id,
+            multiPhonePerson.id,
             naiveCorp.id,
             cafeCorp.id,
             searchInput1Pet.id,
             searchInput2Pet.id,
+            cjkPet.id,
             cafePet.id,
             naivePet.id,
           ],
@@ -193,7 +251,7 @@ describe('SearchResolver', () => {
             decodedEndCursor: {
               lastRanks: { tsRank: 0, tsRankCD: 0 },
               lastRecordIdsPerObject: {
-                person: francoisPersonNoAccent.id,
+                person: multiPhonePerson.id,
                 company: cafeCorp.id,
                 pet: naivePet.id,
               },
@@ -207,7 +265,11 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: 'searchInput1',
-          excludedObjectNameSingulars: ['workspaceMember'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'employmentHistory',
+            'petCareAgreement',
+          ],
           limit: 50,
         },
         eval: {
@@ -230,7 +292,11 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: '',
-          excludedObjectNameSingulars: ['workspaceMember'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'employmentHistory',
+            'petCareAgreement',
+          ],
           includedObjectNameSingulars: ['pet'],
           limit: 50,
         },
@@ -238,6 +304,7 @@ describe('SearchResolver', () => {
           orderedRecordIds: [
             searchInput1Pet.id,
             searchInput2Pet.id,
+            cjkPet.id,
             cafePet.id,
             naivePet.id,
           ],
@@ -258,7 +325,13 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: '',
-          excludedObjectNameSingulars: ['workspaceMember', 'person'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'person',
+            'employmentHistory',
+            'petCareAgreement',
+            'workflow',
+          ],
           limit: 50,
         },
         eval: {
@@ -267,6 +340,7 @@ describe('SearchResolver', () => {
             cafeCorp.id,
             searchInput1Pet.id,
             searchInput2Pet.id,
+            cjkPet.id,
             cafePet.id,
             naivePet.id,
           ],
@@ -288,7 +362,11 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: '',
-          excludedObjectNameSingulars: ['workspaceMember'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'employmentHistory',
+            'petCareAgreement',
+          ],
           filter: { id: { eq: searchInput1Pet.id } },
           limit: 50,
         },
@@ -311,7 +389,11 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: '',
-          excludedObjectNameSingulars: ['workspaceMember'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'employmentHistory',
+            'petCareAgreement',
+          ],
           limit: 4,
         },
         eval: {
@@ -338,7 +420,11 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: '',
-          excludedObjectNameSingulars: ['workspaceMember'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'employmentHistory',
+            'petCareAgreement',
+          ],
           limit: 2,
         },
         eval: {
@@ -360,7 +446,11 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: '',
-          excludedObjectNameSingulars: ['workspaceMember'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'employmentHistory',
+            'petCareAgreement',
+          ],
           after: encodeCursorData({
             lastRanks: { tsRank: 0, tsRankCD: 0 },
             lastRecordIdsPerObject: {
@@ -388,7 +478,11 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: 'searchInput',
-          excludedObjectNameSingulars: ['workspaceMember'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'employmentHistory',
+            'petCareAgreement',
+          ],
           limit: 4,
         },
         eval: {
@@ -416,7 +510,11 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: 'searchInput',
-          excludedObjectNameSingulars: ['workspaceMember'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'employmentHistory',
+            'petCareAgreement',
+          ],
           limit: 2,
         },
         eval: {
@@ -439,7 +537,11 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: 'searchInput',
-          excludedObjectNameSingulars: ['workspaceMember'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'employmentHistory',
+            'petCareAgreement',
+          ],
           after: encodeCursorData({
             lastRanks: { tsRank: 0.06079271, tsRankCD: 0.1 },
             lastRecordIdsPerObject: {
@@ -469,7 +571,11 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: 'searchInput',
-          excludedObjectNameSingulars: ['workspaceMember'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'employmentHistory',
+            'petCareAgreement',
+          ],
           after: encodeCursorData({
             lastRanks: { tsRank: 0.06079271, tsRankCD: 0.1 },
             lastRecordIdsPerObject: {
@@ -499,7 +605,12 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: '',
-          excludedObjectNameSingulars: ['workspaceMember', 'person'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'person',
+            'employmentHistory',
+            'petCareAgreement',
+          ],
           limit: 1,
         },
         eval: {
@@ -521,7 +632,11 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: '',
-          excludedObjectNameSingulars: ['workspaceMember'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'employmentHistory',
+            'petCareAgreement',
+          ],
           includedObjectNameSingulars: ['pet'],
           limit: 1,
         },
@@ -544,7 +659,11 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: '',
-          excludedObjectNameSingulars: ['workspaceMember'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'employmentHistory',
+            'petCareAgreement',
+          ],
           limit: 0,
         },
         eval: {
@@ -562,7 +681,11 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: 'jose',
-          excludedObjectNameSingulars: ['workspaceMember'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'employmentHistory',
+            'petCareAgreement',
+          ],
           limit: 50,
         },
         eval: {
@@ -585,7 +708,11 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: 'garcia',
-          excludedObjectNameSingulars: ['workspaceMember'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'employmentHistory',
+            'petCareAgreement',
+          ],
           limit: 50,
         },
         eval: {
@@ -608,7 +735,11 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: 'cafe',
-          excludedObjectNameSingulars: ['workspaceMember'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'employmentHistory',
+            'petCareAgreement',
+          ],
           limit: 50,
         },
         eval: {
@@ -638,14 +769,18 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: 'naive',
-          excludedObjectNameSingulars: ['workspaceMember'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'employmentHistory',
+            'petCareAgreement',
+          ],
           limit: 50,
         },
         eval: {
           orderedRecordIds: [
+            naiveCorp.id,
             francoisPerson.id,
             francoisPersonNoAccent.id,
-            naiveCorp.id,
             naivePet.id,
           ],
           pageInfo: {
@@ -668,7 +803,11 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: 'muller',
-          excludedObjectNameSingulars: ['workspaceMember'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'employmentHistory',
+            'petCareAgreement',
+          ],
           limit: 50,
         },
         eval: {
@@ -691,7 +830,11 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: 'francois',
-          excludedObjectNameSingulars: ['workspaceMember'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'employmentHistory',
+            'petCareAgreement',
+          ],
           limit: 50,
         },
         eval: {
@@ -713,7 +856,11 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: '2071234567',
-          excludedObjectNameSingulars: ['workspaceMember'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'employmentHistory',
+            'petCareAgreement',
+          ],
           limit: 50,
         },
         eval: {
@@ -735,7 +882,11 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: '+442071234567',
-          excludedObjectNameSingulars: ['workspaceMember'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'employmentHistory',
+            'petCareAgreement',
+          ],
           limit: 50,
         },
         eval: {
@@ -757,7 +908,11 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: '442071234567',
-          excludedObjectNameSingulars: ['workspaceMember'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'employmentHistory',
+            'petCareAgreement',
+          ],
           limit: 50,
         },
         eval: {
@@ -779,7 +934,11 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: '02071234567',
-          excludedObjectNameSingulars: ['workspaceMember'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'employmentHistory',
+            'petCareAgreement',
+          ],
           limit: 50,
         },
         eval: {
@@ -801,7 +960,11 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: '0123456789',
-          excludedObjectNameSingulars: ['workspaceMember'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'employmentHistory',
+            'petCareAgreement',
+          ],
           limit: 50,
         },
         eval: {
@@ -823,7 +986,11 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: '5551234567',
-          excludedObjectNameSingulars: ['workspaceMember'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'employmentHistory',
+            'petCareAgreement',
+          ],
           limit: 50,
         },
         eval: {
@@ -845,7 +1012,11 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: '555123',
-          excludedObjectNameSingulars: ['workspaceMember'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'employmentHistory',
+            'petCareAgreement',
+          ],
           limit: 50,
         },
         eval: {
@@ -868,7 +1039,11 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: '123456789',
-          excludedObjectNameSingulars: ['workspaceMember'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'employmentHistory',
+            'petCareAgreement',
+          ],
           limit: 50,
         },
         eval: {
@@ -891,7 +1066,11 @@ describe('SearchResolver', () => {
       context: {
         input: {
           searchInput: 'searchInput1',
-          excludedObjectNameSingulars: ['workspaceMember'],
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'employmentHistory',
+            'petCareAgreement',
+          ],
           limit: 50,
         },
         eval: {
@@ -903,6 +1082,254 @@ describe('SearchResolver', () => {
               lastRecordIdsPerObject: {
                 person: searchInput1Person.id,
                 pet: searchInput1Pet.id,
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      title: 'should find person by additional email (secondary email)',
+      context: {
+        input: {
+          searchInput: 'secondary@example.com',
+          excludedObjectNameSingulars: ['workspaceMember'],
+          limit: 50,
+        },
+        eval: {
+          orderedRecordIds: [multiEmailPerson.id],
+          pageInfo: {
+            hasNextPage: false,
+            decodedEndCursor: {
+              lastRanks: { tsRank: 0.06079271, tsRankCD: 0.1 },
+              lastRecordIdsPerObject: {
+                person: multiEmailPerson.id,
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      title: 'should find person by additional email (work email)',
+      context: {
+        input: {
+          searchInput: 'work@company.org',
+          excludedObjectNameSingulars: ['workspaceMember'],
+          limit: 50,
+        },
+        eval: {
+          orderedRecordIds: [multiEmailPerson.id],
+          pageInfo: {
+            hasNextPage: false,
+            decodedEndCursor: {
+              lastRanks: { tsRank: 0.06079271, tsRankCD: 0.1 },
+              lastRecordIdsPerObject: {
+                person: multiEmailPerson.id,
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      title: 'should find person by partial additional email',
+      context: {
+        input: {
+          searchInput: 'company.org',
+          excludedObjectNameSingulars: ['workspaceMember'],
+          limit: 50,
+        },
+        eval: {
+          orderedRecordIds: [multiEmailPerson.id],
+          pageInfo: {
+            hasNextPage: false,
+            decodedEndCursor: {
+              lastRanks: { tsRank: 0.06079271, tsRankCD: 0.1 },
+              lastRecordIdsPerObject: {
+                person: multiEmailPerson.id,
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      title: 'should find person by additional phone number',
+      context: {
+        input: {
+          searchInput: '1112223333',
+          excludedObjectNameSingulars: ['workspaceMember'],
+          limit: 50,
+        },
+        eval: {
+          orderedRecordIds: [multiPhonePerson.id],
+          pageInfo: {
+            hasNextPage: false,
+            decodedEndCursor: {
+              lastRanks: { tsRank: 0.06079271, tsRankCD: 0.1 },
+              lastRecordIdsPerObject: {
+                person: multiPhonePerson.id,
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      title: 'should find person by second additional phone number',
+      context: {
+        input: {
+          searchInput: '4445556666',
+          excludedObjectNameSingulars: ['workspaceMember'],
+          limit: 50,
+        },
+        eval: {
+          orderedRecordIds: [multiPhonePerson.id],
+          pageInfo: {
+            hasNextPage: false,
+            decodedEndCursor: {
+              lastRanks: { tsRank: 0.06079271, tsRankCD: 0.1 },
+              lastRecordIdsPerObject: {
+                person: multiPhonePerson.id,
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      title: 'should find company by secondary link url',
+      context: {
+        input: {
+          searchInput: 'docs.links.example.com',
+          excludedObjectNameSingulars: ['workspaceMember'],
+          limit: 50,
+        },
+        eval: {
+          orderedRecordIds: [cafeCorp.id],
+          pageInfo: {
+            hasNextPage: false,
+            decodedEndCursor: {
+              lastRanks: { tsRank: 0.06079271, tsRankCD: 0.1 },
+              lastRecordIdsPerObject: {
+                company: cafeCorp.id,
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      title: 'should find company by secondary link label',
+      context: {
+        input: {
+          searchInput: 'DocsPortal',
+          excludedObjectNameSingulars: ['workspaceMember'],
+          limit: 50,
+        },
+        eval: {
+          orderedRecordIds: [cafeCorp.id],
+          pageInfo: {
+            hasNextPage: false,
+            decodedEndCursor: {
+              lastRanks: { tsRank: 0.06079271, tsRankCD: 0.1 },
+              lastRecordIdsPerObject: {
+                company: cafeCorp.id,
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      title: 'should handle empty additional emails array',
+      context: {
+        input: {
+          searchInput: 'empty@arrays.com',
+          excludedObjectNameSingulars: ['workspaceMember'],
+          limit: 50,
+        },
+        eval: {
+          orderedRecordIds: [multiPhonePerson.id],
+          pageInfo: {
+            hasNextPage: false,
+            decodedEndCursor: {
+              lastRanks: { tsRank: 0.06079271, tsRankCD: 0.1 },
+              lastRecordIdsPerObject: {
+                person: multiPhonePerson.id,
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      title: 'should handle empty additional phones array',
+      context: {
+        input: {
+          searchInput: '5551234567',
+          excludedObjectNameSingulars: ['workspaceMember'],
+          limit: 50,
+        },
+        eval: {
+          orderedRecordIds: [searchInput2Person.id],
+          pageInfo: {
+            hasNextPage: false,
+            decodedEndCursor: {
+              lastRanks: { tsRank: 0.06079271, tsRankCD: 0.1 },
+              lastRecordIdsPerObject: {
+                person: searchInput2Person.id,
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      title: 'should handle empty secondary links array',
+      context: {
+        input: {
+          searchInput: 'NaivePortal',
+          excludedObjectNameSingulars: ['workspaceMember'],
+          limit: 50,
+        },
+        eval: {
+          orderedRecordIds: [naiveCorp.id],
+          pageInfo: {
+            hasNextPage: false,
+            decodedEndCursor: {
+              lastRanks: { tsRank: 0.06079271, tsRankCD: 0.1 },
+              lastRecordIdsPerObject: {
+                company: naiveCorp.id,
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      title:
+        'should find CJK records via ILIKE fallback when tsvector tokenization fails',
+      context: {
+        input: {
+          searchInput: '商业',
+          excludedObjectNameSingulars: [
+            'workspaceMember',
+            'employmentHistory',
+            'petCareAgreement',
+          ],
+          includedObjectNameSingulars: ['pet'],
+          limit: 50,
+        },
+        eval: {
+          orderedRecordIds: [cjkPet.id],
+          pageInfo: {
+            hasNextPage: false,
+            decodedEndCursor: {
+              lastRanks: { tsRank: 0, tsRankCD: 0 },
+              lastRecordIdsPerObject: {
+                pet: cjkPet.id,
               },
             },
           },
@@ -949,7 +1376,11 @@ describe('SearchResolver', () => {
   it('should return cursor for each search edge', async () => {
     const response = await search({
       searchInput: 'searchInput',
-      excludedObjectNameSingulars: ['workspaceMember'],
+      excludedObjectNameSingulars: [
+        'workspaceMember',
+        'employmentHistory',
+        'petCareAgreement',
+      ],
       limit: 2,
       expectToFail: false,
     });
@@ -995,7 +1426,11 @@ describe('SearchResolver', () => {
   it('should return cursor for each search edge with after cursor input', async () => {
     const response = await search({
       searchInput: 'searchInput',
-      excludedObjectNameSingulars: ['workspaceMember'],
+      excludedObjectNameSingulars: [
+        'workspaceMember',
+        'employmentHistory',
+        'petCareAgreement',
+      ],
       limit: 2,
       after: encodeCursorData({
         lastRanks: { tsRank: 0.06079271, tsRankCD: 0.1 },

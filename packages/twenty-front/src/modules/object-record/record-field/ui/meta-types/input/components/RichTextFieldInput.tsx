@@ -1,20 +1,20 @@
 import { SKELETON_LOADER_HEIGHT_SIZES } from '@/activities/components/SkeletonLoader';
-import { useRichTextCommandMenu } from '@/command-menu/hooks/useRichTextCommandMenu';
-import { type CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
+import { useOpenRichTextInSidePanel } from '@/side-panel/hooks/useOpenRichTextInSidePanel';
+import { CoreObjectNameSingular } from 'twenty-shared/types';
 import { useRegisterInputEvents } from '@/object-record/record-field/ui/meta-types/input/hooks/useRegisterInputEvents';
 import { RecordFieldComponentInstanceContext } from '@/object-record/record-field/ui/states/contexts/RecordFieldComponentInstanceContext';
 
 import { FieldContext } from '@/object-record/record-field/ui/contexts/FieldContext';
 import { FieldInputEventContext } from '@/object-record/record-field/ui/contexts/FieldInputEventContext';
 
-import { type FieldRichTextV2Metadata } from '@/object-record/record-field/ui/types/FieldMetadata';
+import { type FieldRichTextMetadata } from '@/object-record/record-field/ui/types/FieldMetadata';
 import { useAvailableComponentInstanceIdOrThrow } from '@/ui/utilities/state/component-state/hooks/useAvailableComponentInstanceIdOrThrow';
-import { useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
 import { Suspense, lazy, useContext, useRef } from 'react';
 import Skeleton, { SkeletonTheme } from 'react-loading-skeleton';
-import { IconLayoutSidebarLeftCollapse } from 'twenty-ui/display';
+import { IconLayoutSidebarLeftCollapse } from 'twenty-ui/icon';
 import { FloatingIconButton } from 'twenty-ui/input';
+import { ThemeContext, themeCssVariables } from 'twenty-ui/theme-constants';
 
 const ActivityRichTextEditor = lazy(() =>
   import('@/activities/components/ActivityRichTextEditor').then((module) => ({
@@ -22,52 +22,73 @@ const ActivityRichTextEditor = lazy(() =>
   })),
 );
 
+const RichTextFieldEditor = lazy(() =>
+  import('@/object-record/record-field/ui/meta-types/input/components/RichTextFieldEditor').then(
+    (module) => ({
+      default: module.RichTextFieldEditor,
+    }),
+  ),
+);
+
 const StyledContainer = styled.div`
-  background-color: ${({ theme }) => theme.background.primary};
-  width: 480px;
-  padding: ${({ theme }) => theme.spacing(2)} ${({ theme }) => theme.spacing(2)}
-    ${({ theme }) => theme.spacing(2)} ${({ theme }) => theme.spacing(12)};
-  margin: 0 0 0 ${({ theme }) => theme.spacing(-5)};
-  display: flex;
+  align-items: flex-start;
+  background-color: ${themeCssVariables.background.primary};
   box-sizing: border-box;
+  display: flex;
+  margin: 0 0 0 calc(-1 * ${themeCssVariables.spacing[5]});
+  max-height: min(calc(60vh / var(--t-zoom, 1)), 500px);
+  overflow: hidden;
+  padding: ${themeCssVariables.spacing[2]} ${themeCssVariables.spacing[2]}
+    ${themeCssVariables.spacing[2]} ${themeCssVariables.spacing[12]};
   position: relative;
+  width: 480px;
+`;
+
+const StyledEditorScroll = styled.div`
+  align-self: stretch;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 `;
 
 const StyledCollapseButton = styled.div`
-  border-radius: ${({ theme }) => theme.border.radius.md};
-  color: ${({ theme }) => theme.font.color.light};
+  border-radius: ${themeCssVariables.border.radius.md};
+  color: ${themeCssVariables.font.color.light};
   cursor: pointer;
   display: flex;
 `;
 
 const LoadingSkeleton = () => {
-  const theme = useTheme();
-
+  const { theme } = useContext(ThemeContext);
   return (
     <SkeletonTheme
       baseColor={theme.background.tertiary}
       highlightColor={theme.background.transparent.lighter}
-      borderRadius={theme.border.radius.sm}
+      borderRadius={themeCssVariables.border.radius.md}
     >
       <Skeleton height={SKELETON_LOADER_HEIGHT_SIZES.standard.s} />
     </SkeletonTheme>
   );
 };
+
+const isActivityObject = (
+  objectNameSingular: string,
+): objectNameSingular is
+  | CoreObjectNameSingular.Note
+  | CoreObjectNameSingular.Task =>
+  objectNameSingular === CoreObjectNameSingular.Note ||
+  objectNameSingular === CoreObjectNameSingular.Task;
+
 export const RichTextFieldInput = () => {
   const { fieldDefinition, recordId } = useContext(FieldContext);
 
-  const targetableObject = {
-    id: recordId,
-    targetObjectNameSingular: (
-      fieldDefinition as {
-        metadata: FieldRichTextV2Metadata;
-      }
-    ).metadata.objectMetadataNameSingular as
-      | CoreObjectNameSingular.Note
-      | CoreObjectNameSingular.Task,
-  };
+  const metadata = (fieldDefinition as { metadata: FieldRichTextMetadata })
+    .metadata;
 
-  const { editRichText } = useRichTextCommandMenu();
+  const objectNameSingular = metadata.objectMetadataNameSingular ?? '';
+  const fieldName = metadata.fieldName;
+
+  const { openRichTextInSidePanel } = useOpenRichTextInSidePanel();
   const containerRef = useRef<HTMLDivElement>(null);
   const instanceId = useAvailableComponentInstanceIdOrThrow(
     RecordFieldComponentInstanceContext,
@@ -93,22 +114,29 @@ export const RichTextFieldInput = () => {
 
   return (
     <StyledContainer ref={containerRef}>
-      <Suspense fallback={<LoadingSkeleton />}>
-        <ActivityRichTextEditor
-          activityId={targetableObject.id}
-          activityObjectNameSingular={targetableObject.targetObjectNameSingular}
-        />
-      </Suspense>
+      <StyledEditorScroll>
+        <Suspense fallback={<LoadingSkeleton />}>
+          {isActivityObject(objectNameSingular) ? (
+            <ActivityRichTextEditor
+              activityId={recordId}
+              activityObjectNameSingular={objectNameSingular}
+            />
+          ) : (
+            <RichTextFieldEditor
+              recordId={recordId}
+              objectNameSingular={objectNameSingular}
+              fieldName={fieldName}
+            />
+          )}
+        </Suspense>
+      </StyledEditorScroll>
       <StyledCollapseButton>
         <FloatingIconButton
           Icon={IconLayoutSidebarLeftCollapse}
           size="small"
           onClick={() => {
             onEscape?.({ skipPersist: true });
-            editRichText(
-              targetableObject.id,
-              targetableObject.targetObjectNameSingular,
-            );
+            openRichTextInSidePanel(recordId, objectNameSingular, fieldName);
           }}
         />
       </StyledCollapseButton>

@@ -1,43 +1,32 @@
-import { RecordBoardColumnHeaderWrapper } from '@/object-record/record-board/record-board-column/components/RecordBoardColumnHeaderWrapper';
-import { visibleRecordGroupIdsComponentFamilySelector } from '@/object-record/record-group/states/selectors/visibleRecordGroupIdsComponentFamilySelector';
-import { useRecoilComponentFamilyValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentFamilyValue';
-import { ViewType } from '@/views/types/ViewType';
-import styled from '@emotion/styled';
+import { RecordBoardContext } from '@/object-record/record-board/contexts/RecordBoardContext';
+import { RecordBoardColumnDnd } from '@/object-record/record-board/record-board-column/components/RecordBoardColumnDnd';
+import { getRecordBoardHeaderHtmlId } from '@/object-record/record-board/utils/getRecordBoardHeaderHtmlId';
+import { RecordIndexGroupAggregatesDataLoader } from '@/object-record/record-index/components/RecordIndexGroupAggregatesDataLoader';
+import { styled } from '@linaria/react';
+import { useContext } from 'react';
 
 const StyledHeaderContainer = styled.div`
   display: flex;
   flex-direction: row;
   height: 40px;
-  z-index: 10;
-
   overflow: visible;
+
   width: 100%;
+  z-index: 10;
 
   &.header-sticky {
     position: sticky;
     top: 0;
   }
-
-  & > *:not(:first-of-type) {
-    border-left: 1px solid ${({ theme }) => theme.border.color.light};
-  }
 `;
 
 export const RecordBoardHeader = () => {
-  const visibleRecordGroupIds = useRecoilComponentFamilyValue(
-    visibleRecordGroupIdsComponentFamilySelector,
-    ViewType.Kanban,
-  );
+  const { recordBoardId } = useContext(RecordBoardContext);
 
   return (
-    <StyledHeaderContainer id="record-board-header">
-      {visibleRecordGroupIds.map((recordGroupId, index) => (
-        <RecordBoardColumnHeaderWrapper
-          columnId={recordGroupId}
-          columnIndex={index}
-          key={recordGroupId}
-        />
-      ))}
+    <StyledHeaderContainer id={getRecordBoardHeaderHtmlId(recordBoardId)}>
+      <RecordBoardColumnDnd />
+      <RecordIndexGroupAggregatesDataLoader />
     </StyledHeaderContainer>
   );
 };

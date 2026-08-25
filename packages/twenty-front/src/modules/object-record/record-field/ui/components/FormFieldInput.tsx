@@ -5,14 +5,19 @@ import { FormCurrencyFieldInput } from '@/object-record/record-field/ui/form-typ
 import { FormDateFieldInput } from '@/object-record/record-field/ui/form-types/components/FormDateFieldInput';
 import { FormDateTimeFieldInput } from '@/object-record/record-field/ui/form-types/components/FormDateTimeFieldInput';
 import { FormEmailsFieldInput } from '@/object-record/record-field/ui/form-types/components/FormEmailsFieldInput';
+import { FormFilesFieldInput } from '@/object-record/record-field/ui/form-types/components/FormFilesFieldInput';
 import { FormFullNameFieldInput } from '@/object-record/record-field/ui/form-types/components/FormFullNameFieldInput';
 import { FormLinksFieldInput } from '@/object-record/record-field/ui/form-types/components/FormLinksFieldInput';
+import {
+  FormMorphRelationToOneFieldInput,
+  type FormMorphRelationToOneValue,
+} from '@/object-record/record-field/ui/form-types/components/FormMorphRelationToOneFieldInput';
 import { FormMultiSelectFieldInput } from '@/object-record/record-field/ui/form-types/components/FormMultiSelectFieldInput';
 import { FormNumberFieldInput } from '@/object-record/record-field/ui/form-types/components/FormNumberFieldInput';
 import { FormPhoneFieldInput } from '@/object-record/record-field/ui/form-types/components/FormPhoneFieldInput';
 import { FormRawJsonFieldInput } from '@/object-record/record-field/ui/form-types/components/FormRawJsonFieldInput';
 import { FormRelationToOneFieldInput } from '@/object-record/record-field/ui/form-types/components/FormRelationToOneFieldInput';
-import { FormRichTextV2FieldInput } from '@/object-record/record-field/ui/form-types/components/FormRichTextV2FieldInput';
+import { FormRichTextFieldInput } from '@/object-record/record-field/ui/form-types/components/FormRichTextFieldInput';
 import { FormSelectFieldInput } from '@/object-record/record-field/ui/form-types/components/FormSelectFieldInput';
 import { FormTextFieldInput } from '@/object-record/record-field/ui/form-types/components/FormTextFieldInput';
 import { FormUuidFieldInput } from '@/object-record/record-field/ui/form-types/components/FormUuidFieldInput';
@@ -29,7 +34,7 @@ import {
   type FieldPhonesValue,
   type FieldRelationToOneValue,
   type FieldRelationValue,
-  type FieldRichTextV2Value,
+  type FieldRichTextValue,
   type FormFieldCurrencyValue,
 } from '@/object-record/record-field/ui/types/FieldMetadata';
 import { isFieldAddress } from '@/object-record/record-field/ui/types/guards/isFieldAddress';
@@ -39,14 +44,16 @@ import { isFieldCurrency } from '@/object-record/record-field/ui/types/guards/is
 import { isFieldDate } from '@/object-record/record-field/ui/types/guards/isFieldDate';
 import { isFieldDateTime } from '@/object-record/record-field/ui/types/guards/isFieldDateTime';
 import { isFieldEmails } from '@/object-record/record-field/ui/types/guards/isFieldEmails';
+import { isFieldFiles } from '@/object-record/record-field/ui/types/guards/isFieldFiles';
 import { isFieldFullName } from '@/object-record/record-field/ui/types/guards/isFieldFullName';
 import { isFieldLinks } from '@/object-record/record-field/ui/types/guards/isFieldLinks';
+import { isFieldMorphRelationManyToOne } from '@/object-record/record-field/ui/types/guards/isFieldMorphRelationManyToOne';
 import { isFieldMultiSelect } from '@/object-record/record-field/ui/types/guards/isFieldMultiSelect';
 import { isFieldNumber } from '@/object-record/record-field/ui/types/guards/isFieldNumber';
 import { isFieldPhones } from '@/object-record/record-field/ui/types/guards/isFieldPhones';
 import { isFieldRawJson } from '@/object-record/record-field/ui/types/guards/isFieldRawJson';
 import { isFieldRelationManyToOne } from '@/object-record/record-field/ui/types/guards/isFieldRelationManyToOne';
-import { isFieldRichTextV2 } from '@/object-record/record-field/ui/types/guards/isFieldRichTextV2';
+import { isFieldRichText } from '@/object-record/record-field/ui/types/guards/isFieldRichText';
 import { isFieldSelect } from '@/object-record/record-field/ui/types/guards/isFieldSelect';
 import { isFieldText } from '@/object-record/record-field/ui/types/guards/isFieldText';
 import { isFieldUuid } from '@/object-record/record-field/ui/types/guards/isFieldUuid';
@@ -57,22 +64,26 @@ type FormFieldInputProps = {
   field: Pick<FieldDefinition<FieldMetadata>, 'label' | 'metadata' | 'type'>;
   defaultValue: JsonValue;
   onChange: (value: JsonValue) => void;
+  onClear?: () => void;
   VariablePicker?: VariablePickerComponent;
   readonly?: boolean;
   placeholder?: string;
   error?: string;
   onError?: (error: string | undefined) => void;
+  timeZone?: string;
 };
 
 export const FormFieldInput = ({
   field,
   defaultValue,
   onChange,
+  onClear,
   VariablePicker,
   readonly,
   placeholder,
   error,
   onError,
+  timeZone,
 }: FormFieldInputProps) => {
   return isFieldNumber(field) || field.type === FieldMetadataType.NUMERIC ? (
     <FormNumberFieldInput
@@ -110,6 +121,7 @@ export const FormFieldInput = ({
       VariablePicker={VariablePicker}
       options={field.metadata?.options}
       readonly={readonly}
+      isNullable={field.metadata.isNullable}
     />
   ) : isFieldFullName(field) ? (
     <FormFullNameFieldInput
@@ -143,6 +155,15 @@ export const FormFieldInput = ({
       VariablePicker={VariablePicker}
       readonly={readonly}
     />
+  ) : isFieldFiles(field) ? (
+    <FormFilesFieldInput
+      label={field.label}
+      defaultValue={defaultValue as null | undefined}
+      onChange={onChange}
+      VariablePicker={VariablePicker}
+      readonly={readonly}
+      placeholder={placeholder}
+    />
   ) : isFieldPhones(field) ? (
     <FormPhoneFieldInput
       label={field.label}
@@ -167,6 +188,7 @@ export const FormFieldInput = ({
       onChange={onChange}
       VariablePicker={VariablePicker}
       readonly={readonly}
+      timeZone={timeZone}
     />
   ) : isFieldMultiSelect(field) ? (
     <FormMultiSelectFieldInput
@@ -204,10 +226,10 @@ export const FormFieldInput = ({
       VariablePicker={VariablePicker}
       readonly={readonly}
     />
-  ) : isFieldRichTextV2(field) ? (
-    <FormRichTextV2FieldInput
+  ) : isFieldRichText(field) ? (
+    <FormRichTextFieldInput
       label={field.label}
-      defaultValue={defaultValue as FieldRichTextV2Value | undefined}
+      defaultValue={defaultValue as FieldRichTextValue | undefined}
       onChange={onChange}
       VariablePicker={VariablePicker}
       readonly={readonly}
@@ -220,6 +242,17 @@ export const FormFieldInput = ({
       defaultValue={
         defaultValue as FieldRelationValue<FieldRelationToOneValue> | string
       }
+      onClear={onClear}
+      onChange={onChange}
+      VariablePicker={VariablePicker}
+      readonly={readonly}
+    />
+  ) : isFieldMorphRelationManyToOne(field) ? (
+    <FormMorphRelationToOneFieldInput
+      label={field.label}
+      morphRelations={field.metadata.morphRelations}
+      defaultValue={defaultValue as FormMorphRelationToOneValue}
+      onClear={onClear}
       onChange={onChange}
       VariablePicker={VariablePicker}
       readonly={readonly}

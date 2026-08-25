@@ -4,17 +4,23 @@ import {
   type SingleRecordAvailability,
   type workflowAiAgentActionSchema,
   type workflowCodeActionSchema,
+  type workflowCreateCalendarEventActionSchema,
   type workflowCreateRecordActionSchema,
   type workflowCronTriggerSchema,
   type workflowDatabaseEventTriggerSchema,
+  type workflowDelayActionSchema,
   type workflowDeleteRecordActionSchema,
+  type workflowDraftEmailActionSchema,
   type workflowEmptyActionSchema,
   type workflowFilterActionSchema,
   type workflowFindRecordsActionSchema,
   type workflowFormActionSchema,
   type workflowHttpRequestActionSchema,
+  type workflowIfElseActionSchema,
   type workflowIteratorActionSchema,
+  type workflowLogicFunctionActionSchema,
   type workflowManualTriggerSchema,
+  type workflowPickRecordActionSchema,
   type workflowRunSchema,
   type workflowRunStateSchema,
   type workflowRunStatusSchema,
@@ -24,13 +30,21 @@ import {
   type workflowUpdateRecordActionSchema,
   type workflowUpsertRecordActionSchema,
   type workflowWebhookTriggerSchema,
-  type workflowDelayActionSchema,
 } from 'twenty-shared/workflow';
 import { type z } from 'zod';
 
 export type WorkflowCodeAction = z.infer<typeof workflowCodeActionSchema>;
+export type WorkflowLogicFunctionAction = z.infer<
+  typeof workflowLogicFunctionActionSchema
+>;
 export type WorkflowSendEmailAction = z.infer<
   typeof workflowSendEmailActionSchema
+>;
+export type WorkflowDraftEmailAction = z.infer<
+  typeof workflowDraftEmailActionSchema
+>;
+export type WorkflowCreateCalendarEventAction = z.infer<
+  typeof workflowCreateCalendarEventActionSchema
 >;
 export type WorkflowCreateRecordAction = z.infer<
   typeof workflowCreateRecordActionSchema
@@ -47,9 +61,13 @@ export type WorkflowUpsertRecordAction = z.infer<
 export type WorkflowFindRecordsAction = z.infer<
   typeof workflowFindRecordsActionSchema
 >;
+export type WorkflowPickRecordAction = z.infer<
+  typeof workflowPickRecordActionSchema
+>;
 export type WorkflowDelayAction = z.infer<typeof workflowDelayActionSchema>;
 export type WorkflowFilterAction = z.infer<typeof workflowFilterActionSchema>;
 export type WorkflowFormAction = z.infer<typeof workflowFormActionSchema>;
+export type WorkflowIfElseAction = z.infer<typeof workflowIfElseActionSchema>;
 export type WorkflowHttpRequestAction = z.infer<
   typeof workflowHttpRequestActionSchema
 >;
@@ -61,13 +79,18 @@ export type WorkflowEmptyAction = z.infer<typeof workflowEmptyActionSchema>;
 
 export type WorkflowAction =
   | WorkflowCodeAction
+  | WorkflowLogicFunctionAction
   | WorkflowSendEmailAction
+  | WorkflowDraftEmailAction
+  | WorkflowCreateCalendarEventAction
   | WorkflowCreateRecordAction
   | WorkflowUpdateRecordAction
   | WorkflowDeleteRecordAction
   | WorkflowUpsertRecordAction
   | WorkflowFindRecordsAction
+  | WorkflowPickRecordAction
   | WorkflowFilterAction
+  | WorkflowIfElseAction
   | WorkflowFormAction
   | WorkflowHttpRequestAction
   | WorkflowAiAgentAction
@@ -107,7 +130,6 @@ export type WorkflowVersionStatus =
   | 'DEACTIVATED'
   | 'ARCHIVED';
 
-// Keep existing types that are not covered by schemas
 export type WorkflowVersion = {
   id: string;
   name: string;

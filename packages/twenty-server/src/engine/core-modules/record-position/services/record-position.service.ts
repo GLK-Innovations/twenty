@@ -4,7 +4,9 @@ import { isNumber } from '@sniptt/guards';
 import { type ObjectRecord } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 
-import { TwentyORMGlobalManager } from 'src/engine/twenty-orm/twenty-orm-global.manager';
+import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
+import { buildSystemAuthContext } from 'src/engine/twenty-orm/utils/build-system-auth-context.util';
+import { sanitizeNumber } from 'src/engine/utils/sanitize-number.utli';
 
 export type RecordPositionServiceCreateArgs = {
   value: number | 'first' | 'last';
@@ -15,9 +17,7 @@ export type RecordPositionServiceCreateArgs = {
 
 @Injectable()
 export class RecordPositionService {
-  constructor(
-    private readonly twentyORMGlobalManager: TwentyORMGlobalManager,
-  ) {}
+  constructor(private readonly workspaceOrmManager: WorkspaceOrmManager) {}
 
   async buildRecordPosition({
     objectMetadata,
@@ -25,7 +25,7 @@ export class RecordPositionService {
     workspaceId,
     index = 0,
   }: RecordPositionServiceCreateArgs): Promise<number> {
-    if (typeof value === 'number') {
+    if (isNumber(value) && !Number.isNaN(value)) {
       return value;
     }
 
@@ -95,13 +95,18 @@ export class RecordPositionService {
 
     const numericPositions = recordsWithExistingNumberPosition
       .map((record) => record.position)
-      .filter(isNumber);
+      .filter((position) => isNumber(position) && !Number.isNaN(position));
 
     const calculatePosition = (
       mathOperation: (positions: number[], existingPosition: number) => number,
       existingPosition: number | null,
     ): number => {
-      const fallback = isDefined(existingPosition) ? existingPosition : 1;
+      const sanitizedExistingPosition =
+        isDefined(existingPosition) && !Number.isNaN(existingPosition)
+          ? existingPosition
+          : null;
+
+      const fallback = sanitizedExistingPosition ?? 1;
 
       return numericPositions.length > 0
         ? mathOperation(numericPositions, fallback)
@@ -153,20 +158,22 @@ export class RecordPositionService {
     objectMetadata: { isCustom: boolean; nameSingular: string },
     workspaceId: string,
   ): Promise<{ id: string; position: number } | null> {
-    const repository =
-      await this.twentyORMGlobalManager.getRepositoryForWorkspace(
-        workspaceId,
+    const authContext = buildSystemAuthContext(workspaceId);
+
+    return this.workspaceOrmManager.executeInWorkspaceContext(async () => {
+      const repository = this.workspaceOrmManager.getRepository(
         objectMetadata.nameSingular,
         {
           shouldBypassPermissionChecks: true,
         },
       );
 
-    const record = await repository.findOneBy({
-      position: positionValue,
-    });
+      const record = await repository.findOneBy({
+        position: positionValue,
+      });
 
-    return record ? { id: record.id, position: record.position } : null;
+      return record ? { id: record.id, position: record.position } : null;
+    }, authContext);
   }
 
   async updatePosition(
@@ -175,49 +182,65 @@ export class RecordPositionService {
     objectMetadata: { isCustom: boolean; nameSingular: string },
     workspaceId: string,
   ): Promise<void> {
-    const repository =
-      await this.twentyORMGlobalManager.getRepositoryForWorkspace(
-        workspaceId,
+    const authContext = buildSystemAuthContext(workspaceId);
+
+    await this.workspaceOrmManager.executeInWorkspaceContext(async () => {
+      const repository = this.workspaceOrmManager.getRepository(
         objectMetadata.nameSingular,
         {
           shouldBypassPermissionChecks: true,
         },
       );
 
-    await repository.update(recordId, {
-      position: positionValue,
-    });
+      await repository.update(recordId, {
+        position: positionValue,
+      });
+    }, authContext);
   }
 
   private async findMinPosition(
     objectMetadata: { isCustom: boolean; nameSingular: string },
     workspaceId: string,
   ): Promise<number | null> {
-    const repository =
-      await this.twentyORMGlobalManager.getRepositoryForWorkspace(
-        workspaceId,
-        objectMetadata.nameSingular,
-        {
-          shouldBypassPermissionChecks: true,
-        },
-      );
+    const authContext = buildSystemAuthContext(workspaceId);
 
-    return await repository.minimum('position');
+    const result = await this.workspaceOrmManager.executeInWorkspaceContext(
+      async () => {
+        const repository = this.workspaceOrmManager.getRepository(
+          objectMetadata.nameSingular,
+          {
+            shouldBypassPermissionChecks: true,
+          },
+        );
+
+        return await repository.minimum('position');
+      },
+      authContext,
+    );
+
+    return sanitizeNumber(result);
   }
 
   private async findMaxPosition(
     objectMetadata: { isCustom: boolean; nameSingular: string },
     workspaceId: string,
   ): Promise<number | null> {
-    const repository =
-      await this.twentyORMGlobalManager.getRepositoryForWorkspace(
-        workspaceId,
-        objectMetadata.nameSingular,
-        {
-          shouldBypassPermissionChecks: true,
-        },
-      );
+    const authContext = buildSystemAuthContext(workspaceId);
 
-    return await repository.maximum('position');
+    const result = await this.workspaceOrmManager.executeInWorkspaceContext(
+      async () => {
+        const repository = this.workspaceOrmManager.getRepository(
+          objectMetadata.nameSingular,
+          {
+            shouldBypassPermissionChecks: true,
+          },
+        );
+
+        return await repository.maximum('position');
+      },
+      authContext,
+    );
+
+    return sanitizeNumber(result);
   }
 }

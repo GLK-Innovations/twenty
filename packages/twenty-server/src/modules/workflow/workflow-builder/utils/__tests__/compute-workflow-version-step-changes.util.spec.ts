@@ -1,8 +1,6 @@
+import { WorkflowActionType } from 'twenty-shared/workflow';
 import { computeWorkflowVersionStepChanges } from 'src/modules/workflow/workflow-builder/utils/compute-workflow-version-step-updates.util';
-import {
-  type WorkflowAction,
-  WorkflowActionType,
-} from 'src/modules/workflow/workflow-executor/workflow-actions/types/workflow-action.type';
+import { type WorkflowAction } from 'src/modules/workflow/workflow-executor/workflow-actions/types/workflow-action.type';
 import {
   type WorkflowTrigger,
   WorkflowTriggerType,
@@ -41,7 +39,11 @@ describe('computeWorkflowVersionStepChanges', () => {
       settings: {
         input: {
           connectedAccountId: '',
-          email: '',
+          recipients: {
+            to: '',
+            cc: '',
+            bcc: '',
+          },
           subject: '',
           body: '',
         },
@@ -98,9 +100,8 @@ describe('computeWorkflowVersionStepChanges', () => {
         type: WorkflowActionType.CODE,
         settings: {
           input: {
-            serverlessFunctionId: '',
-            serverlessFunctionVersion: '',
-            serverlessFunctionInput: {},
+            logicFunctionId: '',
+            logicFunctionInput: {},
           },
           errorHandlingOptions: {
             continueOnFailure: { value: false },
@@ -125,7 +126,6 @@ describe('computeWorkflowVersionStepChanges', () => {
     expect(result.triggerDiff).toBeDefined();
     expect(result.triggerDiff.length).toBe(0); // No trigger changed
 
-    // Verify the steps diff contains the new step
     const createDiff = result.stepsDiff.find((diff) => diff.type === 'CREATE');
 
     expect(createDiff).toBeDefined();
@@ -161,7 +161,6 @@ describe('computeWorkflowVersionStepChanges', () => {
     expect(result.stepsDiff).toBeDefined();
     expect(result.stepsDiff.length).toBeGreaterThan(0);
 
-    // Verify change diffs are present
     const triggerChangeDiff = result.triggerDiff.find(
       (diff) => diff.type === 'CHANGE',
     );

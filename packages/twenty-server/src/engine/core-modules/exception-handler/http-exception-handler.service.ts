@@ -14,18 +14,17 @@ import { QueryFailedError } from 'typeorm';
 import { type ExceptionHandlerUser } from 'src/engine/core-modules/exception-handler/interfaces/exception-handler-user.interface';
 import { type ExceptionHandlerWorkspace } from 'src/engine/core-modules/exception-handler/interfaces/exception-handler-workspace.interface';
 
+import { CustomError } from 'twenty-shared/utils';
+
 import { PostgresException } from 'src/engine/api/graphql/workspace-query-runner/utils/postgres-exception';
 import { ExceptionHandlerService } from 'src/engine/core-modules/exception-handler/exception-handler.service';
-import {
-  TwentyORMException,
-  TwentyORMExceptionCode,
-} from 'src/engine/twenty-orm/exceptions/twenty-orm.exception';
+import { TwentyOrmException } from 'src/engine/twenty-orm/exceptions/twenty-orm.exception';
+import { isTwentyOrmUserInputError } from 'src/engine/twenty-orm/utils/is-twenty-orm-user-input-error.util';
 import { handleException } from 'src/engine/utils/global-exception-handler.util';
 
 interface RequestAndParams {
   request: Request | null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  params: any;
+  params: Record<string, string | undefined>;
 }
 
 const getErrorNameFromStatusCode = (statusCode: number) => {
@@ -34,6 +33,8 @@ const getErrorNameFromStatusCode = (statusCode: number) => {
       return 'BadRequestException';
     case 401:
       return 'UnauthorizedException';
+    case 402:
+      return 'PaymentRequiredException';
     case 403:
       return 'ForbiddenException';
     case 404:
@@ -42,6 +43,8 @@ const getErrorNameFromStatusCode = (statusCode: number) => {
       return 'MethodNotAllowedException';
     case 409:
       return 'ConflictException';
+    case 416:
+      return 'RequestedRangeNotSatisfiableException';
     case 422:
       return 'UnprocessableEntityException';
     case 500:
@@ -66,13 +69,14 @@ export class HttpExceptionHandlerService {
 
   handleError = (
     exception: Error | HttpException,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    response: Response<any, Record<string, any>>,
+    response: Response,
     errorCode?: number,
     user?: ExceptionHandlerUser,
     workspace?: ExceptionHandlerWorkspace,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ): Response<any, Record<string, any>> | undefined => {
+    {
+      shouldBeCapturedBySentry = true,
+    }: { shouldBeCapturedBySentry?: boolean } = {},
+  ): Response | undefined => {
     const params = this.request?.params;
 
     if (params?.workspaceId) {
@@ -91,14 +95,8 @@ export class HttpExceptionHandlerService {
     }
 
     if (
-      exception instanceof TwentyORMException &&
-      [
-        TwentyORMExceptionCode.INVALID_INPUT,
-        TwentyORMExceptionCode.DUPLICATE_ENTRY_DETECTED,
-        TwentyORMExceptionCode.CONNECT_UNIQUE_CONSTRAINT_ERROR,
-        TwentyORMExceptionCode.CONNECT_NOT_ALLOWED,
-        TwentyORMExceptionCode.CONNECT_RECORD_NOT_FOUND,
-      ].includes(exception.code)
+      exception instanceof TwentyOrmException &&
+      isTwentyOrmUserInputError(exception)
     ) {
       exception = new BadRequestException(exception.message);
       statusCode = 400;
@@ -115,12 +113,14 @@ export class HttpExceptionHandlerService {
       user,
       workspace,
       statusCode,
+      shouldBeCapturedBySentry,
     });
 
     return response.status(statusCode).send({
       statusCode,
       error: exception.name ?? getErrorNameFromStatusCode(statusCode),
       messages: [exception?.message],
+      code: exception instanceof CustomError ? exception.code : undefined,
     });
   };
 }

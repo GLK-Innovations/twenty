@@ -1,14 +1,40 @@
-import { type Meta, type StoryObj } from '@storybook/react';
+import { type Meta, type StoryObj } from '@storybook/react-vite';
 
 import { WorkflowVisualizerComponentInstanceContext } from '@/workflow/workflow-diagram/states/contexts/WorkflowVisualizerComponentInstanceContext';
+import { workflowSelectedNodeComponentState } from '@/workflow/workflow-diagram/states/workflowSelectedNodeComponentState';
 import { type WorkflowDiagramStepNodeData } from '@/workflow/workflow-diagram/types/WorkflowDiagram';
+import { WorkflowDiagramStepNodeEditableContent } from '@/workflow/workflow-diagram/workflow-nodes/components/WorkflowDiagramStepNodeEditableContent';
 import '@xyflow/react/dist/style.css';
-import { RecoilRoot } from 'recoil';
+import { useStore } from 'jotai';
+import { useEffect } from 'react';
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
+import { isDefined } from 'twenty-shared/utils';
 import { CatalogDecorator, type CatalogStory } from 'twenty-ui/testing';
-import { I18nFrontDecorator } from '~/testing/decorators/I18nFrontDecorator';
 import { ReactflowDecorator } from '~/testing/decorators/ReactflowDecorator';
 import { graphqlMocks } from '~/testing/graphqlMocks';
-import { WorkflowDiagramStepNodeEditableContent } from '../../workflow-nodes/components/WorkflowDiagramStepNodeEditableContent';
+
+const JotaiInitializer = ({
+  children,
+  selectedNodeId,
+}: {
+  children: React.ReactNode;
+  selectedNodeId?: string;
+}) => {
+  const store = useStore();
+
+  useEffect(() => {
+    if (isDefined(selectedNodeId)) {
+      store.set(
+        workflowSelectedNodeComponentState.atomFamily({
+          instanceId: 'workflow-visualizer-instance-id',
+        }),
+        selectedNodeId,
+      );
+    }
+  }, [store, selectedNodeId]);
+
+  return <>{children}</>;
+};
 
 const meta: Meta<typeof WorkflowDiagramStepNodeEditableContent> = {
   title: 'Modules/Workflow/WorkflowDiagramStepNodeEditableContent',
@@ -16,12 +42,16 @@ const meta: Meta<typeof WorkflowDiagramStepNodeEditableContent> = {
   parameters: {
     msw: graphqlMocks,
   },
-  decorators: [I18nFrontDecorator],
+  decorators: [],
 };
 
 export default meta;
 
 type Story = StoryObj<typeof WorkflowDiagramStepNodeEditableContent>;
+
+const onChangeNode = fn();
+const onDuplicateNode = fn();
+const onDelete = fn();
 
 const ALL_STEPS = [
   {
@@ -122,6 +152,9 @@ export const Catalog: CatalogStory<
     id: 'story-node',
     data: ALL_STEPS[0],
     selected: false,
+    onChangeNode,
+    onDuplicateNode,
+    onDelete,
   },
   parameters: {
     pseudo: { hover: ['.hover'] },
@@ -136,7 +169,11 @@ export const Catalog: CatalogStory<
         {
           name: 'step type',
           values: ALL_STEPS,
-          props: (data: WorkflowDiagramStepNodeData) => ({ data }),
+          props: (data: WorkflowDiagramStepNodeData) => ({
+            data,
+            onDuplicateNode:
+              data.nodeType === 'action' ? onDuplicateNode : undefined,
+          }),
         },
         {
           name: 'selected',
@@ -149,18 +186,59 @@ export const Catalog: CatalogStory<
   decorators: [
     (Story, { args }) => {
       return (
-        <div className={`selectable ${args.selected ? 'selected' : ''}`}>
-          <RecoilRoot>
-            <WorkflowVisualizerComponentInstanceContext.Provider
-              value={{ instanceId: 'workflow-visualizer-instance-id' }}
+        <div>
+          <WorkflowVisualizerComponentInstanceContext.Provider
+            value={{ instanceId: 'workflow-visualizer-instance-id' }}
+          >
+            <JotaiInitializer
+              selectedNodeId={args.selected ? args.id : undefined}
             >
               <Story />
-            </WorkflowVisualizerComponentInstanceContext.Provider>
-          </RecoilRoot>
+            </JotaiInitializer>
+          </WorkflowVisualizerComponentInstanceContext.Provider>
         </div>
       );
     },
     CatalogDecorator,
     ReactflowDecorator,
   ],
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    const optionsButtons = await canvas.findAllByRole('button', {
+      name: 'Node options',
+    });
+
+    expect(optionsButtons).toHaveLength(ALL_STEPS.length);
+
+    const canvasBody = within(canvasElement.ownerDocument.body);
+
+    const triggerOptionsButton = optionsButtons[0];
+
+    await userEvent.click(triggerOptionsButton);
+
+    await canvasBody.findByText('Change node');
+    expect(canvasBody.queryByText('Duplicate node')).not.toBeInTheDocument();
+
+    await userEvent.click(triggerOptionsButton);
+
+    await waitFor(() => {
+      expect(canvasBody.queryByText('Change node')).not.toBeInTheDocument();
+    });
+
+    const firstActionStepIndex = ALL_STEPS.findIndex(
+      (step) => step.nodeType === 'action',
+    );
+
+    await userEvent.click(optionsButtons[firstActionStepIndex]);
+
+    await canvasBody.findByText('Duplicate node');
+
+    await userEvent.keyboard('{ArrowDown}{Enter}');
+
+    await waitFor(() => {
+      expect(args.onDuplicateNode).toHaveBeenCalledTimes(1);
+    });
+    expect(args.onChangeNode).not.toHaveBeenCalled();
+    expect(args.onDelete).not.toHaveBeenCalled();
+  },
 };

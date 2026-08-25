@@ -1,4 +1,4 @@
-import { FormFieldInputContainer } from '@/object-record/record-field/ui/form-types/components/FormFieldInputContainer';
+import { FormFieldInputContainer } from '@/ui/input/components/FormFieldInputContainer';
 import { FormFieldInputInnerContainer } from '@/object-record/record-field/ui/form-types/components/FormFieldInputInnerContainer';
 import { FormFieldInputRowContainer } from '@/object-record/record-field/ui/form-types/components/FormFieldInputRowContainer';
 import { FormFieldPlaceholder } from '@/object-record/record-field/ui/form-types/components/FormFieldPlaceholder';
@@ -9,7 +9,7 @@ import { MultiItemBaseInput } from '@/object-record/record-field/ui/meta-types/i
 import { type FieldArrayValue } from '@/object-record/record-field/ui/types/FieldMetadata';
 import { ArrayDisplay } from '@/ui/field/display/components/ArrayDisplay';
 import { TextInput } from '@/ui/field/input/components/TextInput';
-import { InputLabel } from '@/ui/input/components/InputLabel';
+import { Field } from 'twenty-ui/input';
 import { Dropdown } from '@/ui/layout/dropdown/components/Dropdown';
 import { DropdownContent } from '@/ui/layout/dropdown/components/DropdownContent';
 import { DropdownMenuItemsContainer } from '@/ui/layout/dropdown/components/DropdownMenuItemsContainer';
@@ -20,15 +20,15 @@ import { isDropdownOpenComponentState } from '@/ui/layout/dropdown/states/isDrop
 import { usePushFocusItemToFocusStack } from '@/ui/utilities/focus/hooks/usePushFocusItemToFocusStack';
 import { useRemoveFocusItemFromFocusStackById } from '@/ui/utilities/focus/hooks/useRemoveFocusItemFromFocusStackById';
 import { FocusComponentType } from '@/ui/utilities/focus/types/FocusComponentType';
-import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
-import { isStandaloneVariableString } from '@/workflow/utils/isStandaloneVariableString';
-import { useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import { isStandaloneVariableString } from 'twenty-shared/workflow';
+import { styled } from '@linaria/react';
 import { useLingui } from '@lingui/react/macro';
 import { isNonEmptyArray } from '@sniptt/guards';
-import { useId, useRef, useState } from 'react';
+import { useContext, useId, useRef, useState } from 'react';
 import { isDefined } from 'twenty-shared/utils';
-import { IconPlus } from 'twenty-ui/display';
+import { IconPlus } from 'twenty-ui/icon';
+import { ThemeContext, themeCssVariables } from 'twenty-ui/theme-constants';
 import { MenuItem } from 'twenty-ui/navigation';
 import { toSpliced } from '~/utils/array/toSpliced';
 
@@ -48,26 +48,33 @@ const StyledDisplayModeReadonlyContainer = styled.div`
   border: none;
   display: flex;
   font-family: inherit;
-  padding-inline: ${({ theme }) => theme.spacing(2)};
+  padding-inline: ${themeCssVariables.spacing[2]};
   width: 100%;
 `;
 
-const StyledDisplayModeContainer = styled(StyledDisplayModeReadonlyContainer)`
-  height: 30px;
-  cursor: pointer;
+const StyledDisplayModeContainer = styled.div`
+  align-items: center;
+  background: transparent;
+  border: none;
   box-sizing: border-box;
+  cursor: pointer;
+  display: flex;
+  font-family: inherit;
+  height: 30px;
+  padding-inline: ${themeCssVariables.spacing[2]};
+  width: 100%;
 
   &:hover,
   &[data-open='true'] {
-    background-color: ${({ theme }) => theme.background.transparent.lighter};
+    background-color: ${themeCssVariables.background.transparent.lighter};
   }
 `;
 
-const StyledInput = styled(TextInput)`
-  padding: ${({ theme }) => `${theme.spacing(1)} ${theme.spacing(2)}`};
+const StyledInputContainer = styled.div`
+  padding: ${themeCssVariables.spacing[1]} ${themeCssVariables.spacing[2]};
 `;
 
-const StyledPlaceholder = styled(FormFieldPlaceholder)`
+const StyledPlaceholderContainer = styled.div`
   width: 100%;
 `;
 
@@ -85,8 +92,7 @@ export const FormArrayFieldInput = ({
   testId,
 }: FormArrayFieldInputProps) => {
   const { t } = useLingui();
-  const theme = useTheme();
-
+  const { theme } = useContext(ThemeContext);
   const instanceId = useId();
 
   const { pushFocusItemToFocusStack } = usePushFocusItemToFocusStack();
@@ -128,7 +134,7 @@ export const FormArrayFieldInput = ({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const dropdownId = `dropdown-${instanceId}`;
-  const isDropdownOpen = useRecoilComponentValue(
+  const isDropdownOpen = useAtomComponentStateValue(
     isDropdownOpenComponentState,
     dropdownId,
   );
@@ -290,7 +296,7 @@ export const FormArrayFieldInput = ({
 
   return (
     <FormFieldInputContainer data-testid={testId}>
-      {label ? <InputLabel>{label}</InputLabel> : null}
+      {label ? <Field.Label>{label}</Field.Label> : null}
 
       <FormFieldInputRowContainer>
         <FormFieldInputInnerContainer
@@ -304,25 +310,29 @@ export const FormArrayFieldInput = ({
                 {draftValue.value.length > 0 ? (
                   <ArrayDisplay value={draftValue.value} />
                 ) : (
-                  <StyledPlaceholder />
+                  <StyledPlaceholderContainer>
+                    <FormFieldPlaceholder />
+                  </StyledPlaceholderContainer>
                 )}
               </StyledDisplayModeReadonlyContainer>
             ) : draftValue.value.length === 0 ? (
-              <StyledInput
-                instanceId={formFieldInputInstanceId}
-                placeholder={t`Enter an item`}
-                value={newItemDraftValue}
-                copyButton={false}
-                onChange={handleFirstItemInputChange}
-                onEnter={handleFirstItemInputEnter}
-                shouldTrim={false}
-              />
+              <StyledInputContainer>
+                <TextInput
+                  instanceId={formFieldInputInstanceId}
+                  placeholder={t`Enter an item`}
+                  value={newItemDraftValue}
+                  copyButton={false}
+                  onChange={handleFirstItemInputChange}
+                  onEnter={handleFirstItemInputEnter}
+                  shouldTrim={false}
+                />
+              </StyledInputContainer>
             ) : (
               <Dropdown
                 dropdownId={dropdownId}
                 dropdownPlacement="bottom-start"
                 dropdownOffset={{
-                  y: parseSpacingValueAsNumber(theme.spacing(1)),
+                  y: parseSpacingValueAsNumber(theme.spacing[1]),
                 }}
                 clickableComponent={
                   <StyledDisplayModeContainer data-open={isDropdownOpen}>

@@ -4,15 +4,14 @@ import { triggerUpdateGroupByQueriesOptimisticEffect } from '@/apollo/optimistic
 import { sortCachedObjectEdges } from '@/apollo/optimistic-effect/utils/sortCachedObjectEdges';
 import { triggerUpdateRelationsOptimisticEffect } from '@/apollo/optimistic-effect/utils/triggerUpdateRelationsOptimisticEffect';
 import { type CachedObjectRecordQueryVariables } from '@/apollo/types/CachedObjectRecordQueryVariables';
-import { type ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
 import { type RecordGqlRefEdge } from '@/object-record/cache/types/RecordGqlRefEdge';
-import { getEdgeTypename } from '@/object-record/cache/utils/getEdgeTypename';
 import { isObjectRecordConnectionWithRefs } from '@/object-record/cache/utils/isObjectRecordConnectionWithRefs';
 import { type RecordGqlNode } from '@/object-record/graphql/types/RecordGqlNode';
 import { isRecordMatchingFilter } from '@/object-record/record-filter/utils/isRecordMatchingFilter';
 import { type ObjectRecord } from '@/object-record/types/ObjectRecord';
 import { type ObjectPermissions } from 'twenty-shared/types';
-import { isDefined } from 'twenty-shared/utils';
+import { getEdgeTypename, isDefined } from 'twenty-shared/utils';
 import { parseApolloStoreFieldName } from '~/utils/parseApolloStoreFieldName';
 
 // TODO: add extensive unit tests for this function
@@ -26,16 +25,16 @@ export const triggerUpdateRecordOptimisticEffectByBatch = ({
   objectPermissionsByObjectMetadataId,
   upsertRecordsInStore,
 }: {
-  cache: ApolloCache<unknown>;
-  objectMetadataItem: ObjectMetadataItem;
+  cache: ApolloCache;
+  objectMetadataItem: EnrichedObjectMetadataItem;
   currentRecords: RecordGqlNode[];
   updatedRecords: RecordGqlNode[];
-  objectMetadataItems: ObjectMetadataItem[];
+  objectMetadataItems: EnrichedObjectMetadataItem[];
   objectPermissionsByObjectMetadataId: Record<
     string,
     ObjectPermissions & { objectMetadataId: string }
   >;
-  upsertRecordsInStore: (records: ObjectRecord[]) => void;
+  upsertRecordsInStore: (props: { partialRecords: ObjectRecord[] }) => void;
 }) => {
   for (const [index, currentRecord] of currentRecords.entries()) {
     triggerUpdateRelationsOptimisticEffect({
@@ -85,6 +84,7 @@ export const triggerUpdateRecordOptimisticEffectByBatch = ({
               record: updatedRecord,
               filter: rootQueryFilter ?? {},
               objectMetadataItem,
+              objectMetadataItems,
             });
 
           const updatedRecordFoundInRootQueryEdges = isDefined(
@@ -146,6 +146,7 @@ export const triggerUpdateRecordOptimisticEffectByBatch = ({
   triggerUpdateGroupByQueriesOptimisticEffect({
     cache,
     objectMetadataItem,
+    objectMetadataItems,
     operation: 'update',
     records: updatedRecords,
     shouldMatchRootQueryFilter: true,

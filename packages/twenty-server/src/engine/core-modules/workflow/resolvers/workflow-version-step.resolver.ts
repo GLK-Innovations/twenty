@@ -1,36 +1,39 @@
 import { UseFilters, UseGuards, UsePipes } from '@nestjs/common';
-import { Args, Mutation, Resolver } from '@nestjs/graphql';
+import { Args, Mutation, Query } from '@nestjs/graphql';
 
-import { FeatureFlagKey } from 'src/engine/core-modules/feature-flag/enums/feature-flag-key.enum';
-import { FeatureFlagService } from 'src/engine/core-modules/feature-flag/services/feature-flag.service';
+import { PermissionFlagType } from 'twenty-shared/constants';
+
+import { CoreResolver } from 'src/engine/api/graphql/graphql-config/decorators/core-resolver.decorator';
+import { UUIDScalarType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/scalars';
 import { PreventNestToAutoLogGraphqlErrorsFilter } from 'src/engine/core-modules/graphql/filters/prevent-nest-to-auto-log-graphql-errors.filter';
 import { ResolverValidationPipe } from 'src/engine/core-modules/graphql/pipes/resolver-validation.pipe';
-import { ToolType } from 'src/engine/core-modules/tool/enums/tool-type.enum';
-import { ToolRegistryService } from 'src/engine/core-modules/tool/services/tool-registry.service';
-import { CreateWorkflowVersionStepInput } from 'src/engine/core-modules/workflow/dtos/create-workflow-version-step-input.dto';
-import { DeleteWorkflowVersionStepInput } from 'src/engine/core-modules/workflow/dtos/delete-workflow-version-step-input.dto';
-import { DuplicateWorkflowVersionStepInput } from 'src/engine/core-modules/workflow/dtos/duplicate-workflow-version-step-input.dto';
-import { SubmitFormStepInput } from 'src/engine/core-modules/workflow/dtos/submit-form-step-input.dto';
-import { TestHttpRequestInput } from 'src/engine/core-modules/workflow/dtos/test-http-request-input.dto';
-import { TestHttpRequestOutput } from 'src/engine/core-modules/workflow/dtos/test-http-request-output.dto';
-import { UpdateWorkflowRunStepInput } from 'src/engine/core-modules/workflow/dtos/update-workflow-run-step-input.dto';
-import { UpdateWorkflowVersionStepInput } from 'src/engine/core-modules/workflow/dtos/update-workflow-version-step-input.dto';
+import { HttpTool } from 'src/engine/core-modules/tool/tools/http-tool/http-tool';
+import { CreateWorkflowVersionStepInput } from 'src/engine/core-modules/workflow/dtos/create-workflow-version-step.input';
+import { DeleteWorkflowVersionStepInput } from 'src/engine/core-modules/workflow/dtos/delete-workflow-version-step.input';
+import { DuplicateWorkflowVersionStepInput } from 'src/engine/core-modules/workflow/dtos/duplicate-workflow-version-step.input';
+import { SubmitFormStepInput } from 'src/engine/core-modules/workflow/dtos/submit-form-step.input';
+import { TestHttpRequestInput } from 'src/engine/core-modules/workflow/dtos/test-http-request.input';
+import { TestHttpRequestDTO } from 'src/engine/core-modules/workflow/dtos/test-http-request.dto';
+import { UpdateWorkflowRunStepInput } from 'src/engine/core-modules/workflow/dtos/update-workflow-run-step.input';
+import { UpdateWorkflowVersionStepInput } from 'src/engine/core-modules/workflow/dtos/update-workflow-version-step.input';
+import { UpdateWorkflowVersionTriggerInput } from 'src/engine/core-modules/workflow/dtos/update-workflow-version-trigger.input';
 import { WorkflowActionDTO } from 'src/engine/core-modules/workflow/dtos/workflow-action.dto';
 import { WorkflowVersionStepChangesDTO } from 'src/engine/core-modules/workflow/dtos/workflow-version-step-changes.dto';
+import { WorkflowVersionTriggerDTO } from 'src/engine/core-modules/workflow/dtos/workflow-version-trigger.dto';
 import { WorkflowVersionStepGraphqlApiExceptionFilter } from 'src/engine/core-modules/workflow/filters/workflow-version-step-graphql-api-exception.filter';
 import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
 import { AuthWorkspace } from 'src/engine/decorators/auth/auth-workspace.decorator';
 import { SettingsPermissionGuard } from 'src/engine/guards/settings-permission.guard';
 import { UserAuthGuard } from 'src/engine/guards/user-auth.guard';
 import { WorkspaceAuthGuard } from 'src/engine/guards/workspace-auth.guard';
-import { PermissionFlagType } from 'src/engine/metadata-modules/permissions/constants/permission-flag-type.constants';
+import { ConnectedAccountMetadataService } from 'src/engine/metadata-modules/connected-account/connected-account-metadata.service';
+import { ConnectedAccountHandleDTO } from 'src/engine/metadata-modules/connected-account/dtos/connected-account-handle.dto';
 import { PermissionsGraphqlApiExceptionFilter } from 'src/engine/metadata-modules/permissions/utils/permissions-graphql-api-exception.filter';
 import { WorkflowVersionStepWorkspaceService } from 'src/modules/workflow/workflow-builder/workflow-version-step/workflow-version-step.workspace-service';
-import { WorkflowActionType } from 'src/modules/workflow/workflow-executor/workflow-actions/types/workflow-action.type';
 import { WorkflowRunWorkspaceService } from 'src/modules/workflow/workflow-runner/workflow-run/workflow-run.workspace-service';
 import { WorkflowRunnerWorkspaceService } from 'src/modules/workflow/workflow-runner/workspace-services/workflow-runner.workspace-service';
 
-@Resolver()
+@CoreResolver()
 @UsePipes(ResolverValidationPipe)
 @UseGuards(
   WorkspaceAuthGuard,
@@ -47,9 +50,32 @@ export class WorkflowVersionStepResolver {
     private readonly workflowVersionStepWorkspaceService: WorkflowVersionStepWorkspaceService,
     private readonly workflowRunnerWorkspaceService: WorkflowRunnerWorkspaceService,
     private readonly workflowRunWorkspaceService: WorkflowRunWorkspaceService,
-    private readonly toolRegistryService: ToolRegistryService,
-    private readonly featureFlagService: FeatureFlagService,
+    private readonly httpTool: HttpTool,
+    private readonly connectedAccountMetadataService: ConnectedAccountMetadataService,
   ) {}
+
+  // Related to https://github.com/twentyhq/private-issues/issues/478
+  @Query(() => ConnectedAccountHandleDTO, { nullable: true })
+  async workflowStepConnectedAccountHandle(
+    @Args('connectedAccountId', { type: () => UUIDScalarType }) id: string,
+    @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,
+  ): Promise<ConnectedAccountHandleDTO | null> {
+    const account = await this.connectedAccountMetadataService.findById({
+      id,
+      workspaceId,
+    });
+
+    if (!account) {
+      return null;
+    }
+
+    return {
+      id: account.id,
+      handle: account.handle,
+      provider: account.provider,
+      handleAliases: account.handleAliases,
+    };
+  }
 
   @Mutation(() => WorkflowVersionStepChangesDTO)
   async createWorkflowVersionStep(
@@ -57,19 +83,6 @@ export class WorkflowVersionStepResolver {
     @Args('input')
     input: CreateWorkflowVersionStepInput,
   ): Promise<WorkflowVersionStepChangesDTO> {
-    if (input.stepType === WorkflowActionType.AI_AGENT) {
-      const isAiEnabled = await this.featureFlagService.isFeatureEnabled(
-        FeatureFlagKey.IS_AI_ENABLED,
-        workspaceId,
-      );
-
-      if (!isAiEnabled) {
-        throw new Error(
-          'AI features are not available in your current workspace. Please contact support to enable them.',
-        );
-      }
-    }
-
     return this.workflowVersionStepWorkspaceService.createWorkflowVersionStep({
       workspaceId,
       input,
@@ -87,6 +100,21 @@ export class WorkflowVersionStepResolver {
       workflowVersionId,
       step,
     });
+  }
+
+  @Mutation(() => WorkflowVersionTriggerDTO)
+  async updateWorkflowVersionTrigger(
+    @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,
+    @Args('input')
+    { trigger, workflowVersionId }: UpdateWorkflowVersionTriggerInput,
+  ): Promise<WorkflowVersionTriggerDTO> {
+    return this.workflowVersionStepWorkspaceService.updateWorkflowVersionTrigger(
+      {
+        workspaceId,
+        workflowVersionId,
+        trigger,
+      },
+    );
   }
 
   @Mutation(() => WorkflowVersionStepChangesDTO)
@@ -148,16 +176,20 @@ export class WorkflowVersionStepResolver {
     );
   }
 
-  @Mutation(() => TestHttpRequestOutput)
+  @Mutation(() => TestHttpRequestDTO)
   async testHttpRequest(
+    @AuthWorkspace() workspace: WorkspaceEntity,
     @Args('input')
     { url, method, headers, body }: TestHttpRequestInput,
-  ): Promise<TestHttpRequestOutput> {
-    return this.toolRegistryService.getTool(ToolType.HTTP_REQUEST).execute({
-      url,
-      method,
-      headers,
-      body,
-    });
+  ): Promise<TestHttpRequestDTO> {
+    return this.httpTool.execute(
+      {
+        url,
+        method,
+        headers,
+        body,
+      },
+      { workspaceId: workspace.id },
+    );
   }
 }

@@ -1,6 +1,6 @@
 import { PENDING_WIDGET_PLACEHOLDER_LAYOUT_KEY } from '@/page-layout/constants/PendingWidgetPlaceholderLayoutKey';
 import { type Layouts } from 'react-grid-layout';
-import { filterPendingPlaceholderFromLayouts } from '../filterPendingPlaceholderFromLayouts';
+import { filterPendingPlaceholderFromLayouts } from '@/page-layout/utils/filterPendingPlaceholderFromLayouts';
 
 describe('filterPendingPlaceholderFromLayouts', () => {
   it('should remove pending placeholder from both desktop and mobile layouts', () => {
@@ -53,7 +53,6 @@ describe('filterPendingPlaceholderFromLayouts', () => {
   });
 
   it('should handle missing desktop or mobile layouts', () => {
-    // Test with missing desktop property
     const layoutsWithoutDesktop = {
       mobile: [
         { i: 'widget-1', x: 0, y: 0, w: 1, h: 4 },
@@ -67,7 +66,6 @@ describe('filterPendingPlaceholderFromLayouts', () => {
     expect(result1.mobile).toHaveLength(1);
     expect(result1.mobile).toEqual([{ i: 'widget-1', x: 0, y: 0, w: 1, h: 4 }]);
 
-    // Test with missing mobile property
     const layoutsWithoutMobile = {
       desktop: [
         { i: 'widget-1', x: 0, y: 0, w: 4, h: 4 },

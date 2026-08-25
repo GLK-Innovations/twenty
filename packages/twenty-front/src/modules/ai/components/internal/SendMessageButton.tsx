@@ -1,42 +1,60 @@
-import { AI_CHAT_INPUT_ID } from '@/ai/constants/AiChatInputId';
-import { useAgentChatContextOrThrow } from '@/ai/hooks/useAgentChatContextOrThrow';
-import { type ObjectRecord } from '@/object-record/types/ObjectRecord';
-import { useHotkeysOnFocusedElement } from '@/ui/utilities/hotkey/hooks/useHotkeysOnFocusedElement';
-import { t } from '@lingui/core/macro';
-import { Key } from 'ts-key-enum';
-import { Button } from 'twenty-ui/input';
+import { AGENT_CHAT_STOP_EVENT_NAME } from '@/ai/constants/AgentChatStopEventName';
+import { agentChatInputIsEmptySelector } from '@/ai/states/selectors/agentChatInputIsEmptySelector';
+import { agentChatIsAwaitingFirstChunkComponentFamilyState } from '@/ai/states/agentChatIsAwaitingFirstChunkComponentFamilyState';
+import { agentChatIsLoadingState } from '@/ai/states/agentChatIsLoadingState';
+import { agentChatIsStreamingComponentFamilyState } from '@/ai/states/agentChatIsStreamingComponentFamilyState';
+import { currentAiChatThreadState } from '@/ai/states/currentAiChatThreadState';
+import { dispatchBrowserEvent } from '@/browser-event/utils/dispatchBrowserEvent';
+import { useAtomComponentFamilyStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentFamilyStateValue';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { IconArrowUp, IconPlayerStop } from 'twenty-ui/icon';
+import { RoundedIconButton } from 'twenty-ui/input';
+
+type SendMessageButtonProps = {
+  onSend: () => void;
+  isDisabled?: boolean;
+};
 
 export const SendMessageButton = ({
-  records,
-}: {
-  records?: ObjectRecord[];
-}) => {
-  const { handleSendMessage, isLoading, input } = useAgentChatContextOrThrow();
+  onSend,
+  isDisabled = false,
+}: SendMessageButtonProps) => {
+  const agentChatInputIsEmpty = useAtomStateValue(
+    agentChatInputIsEmptySelector,
+  );
 
-  useHotkeysOnFocusedElement({
-    keys: [Key.Enter],
-    callback: (event: KeyboardEvent) => {
-      if (!event.ctrlKey && !event.metaKey) {
-        event.preventDefault();
-        handleSendMessage(records);
-      }
-    },
-    focusId: AI_CHAT_INPUT_ID,
-    dependencies: [input, isLoading],
-    options: {
-      enableOnFormTags: true,
-    },
-  });
+  const agentChatIsLoading = useAtomStateValue(agentChatIsLoadingState);
+
+  const currentAiChatThread = useAtomStateValue(currentAiChatThreadState);
+  const agentChatIsStreaming = useAtomComponentFamilyStateValue(
+    agentChatIsStreamingComponentFamilyState,
+    { threadId: currentAiChatThread },
+  );
+  const agentChatIsAwaitingFirstChunk = useAtomComponentFamilyStateValue(
+    agentChatIsAwaitingFirstChunkComponentFamilyState,
+    { threadId: currentAiChatThread },
+  );
+
+  const handleStopClick = () => {
+    dispatchBrowserEvent(AGENT_CHAT_STOP_EVENT_NAME);
+  };
+
+  if (agentChatIsStreaming || agentChatIsAwaitingFirstChunk) {
+    return (
+      <RoundedIconButton
+        Icon={IconPlayerStop}
+        size="medium"
+        onClick={handleStopClick}
+      />
+    );
+  }
 
   return (
-    <Button
-      hotkeys={input && !isLoading ? ['⏎'] : undefined}
-      onClick={() => handleSendMessage(records)}
-      disabled={!input || isLoading}
-      variant="primary"
-      accent="blue"
-      size="small"
-      title={t`Send`}
+    <RoundedIconButton
+      Icon={IconArrowUp}
+      size="medium"
+      onClick={onSend}
+      disabled={isDisabled || agentChatInputIsEmpty || agentChatIsLoading}
     />
   );
 };

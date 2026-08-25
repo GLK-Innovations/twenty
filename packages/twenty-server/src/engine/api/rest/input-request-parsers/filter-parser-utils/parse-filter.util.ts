@@ -1,5 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 
+import { msg } from '@lingui/core/macro';
+
 import { type FieldValue } from 'src/engine/api/rest/core/types/field-value.type';
 import { formatFieldValue } from 'src/engine/api/rest/input-request-parsers/filter-parser-utils/format-field-values.util';
 import { parseBaseFilter } from 'src/engine/api/rest/input-request-parsers/filter-parser-utils/parse-base-filter.util';
@@ -15,13 +17,15 @@ export enum Conjunctions {
   not = 'not',
 }
 
+export const ROOT_FILTER_CONJUNCTION_REGEX = new RegExp(
+  `^(${Object.values(Conjunctions).join('|')})\\((.+)\\)$`,
+);
+
 export const parseFilter = (
   filterQuery: string,
 ): Record<string, FieldValue> => {
   const result = {};
-  const match = filterQuery.match(
-    `^(${Object.values(Conjunctions).join('|')})\\((.+)\\)$`,
-  );
+  const match = filterQuery.match(ROOT_FILTER_CONJUNCTION_REGEX);
 
   if (match) {
     const conjunction = match?.[1];
@@ -40,6 +44,7 @@ export const parseFilter = (
         throw new RestInputRequestParserException(
           `'filter' invalid. 'not' conjunction should contain only 1 condition. eg: not(field[eq]:1)`,
           RestInputRequestParserExceptionCode.INVALID_FILTER_QUERY_PARAM,
+          { userFriendlyMessage: msg`Invalid filter parameter.` },
         );
       }
       // @ts-expect-error legacy noImplicitAny

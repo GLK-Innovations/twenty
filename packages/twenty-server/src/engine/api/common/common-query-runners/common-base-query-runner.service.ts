@@ -1,16 +1,28 @@
 import { Inject, Injectable } from '@nestjs/common';
 
+import { type PermissionFlagType } from 'twenty-shared/constants';
+import { FieldMetadataType, type ObjectRecord } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
-import { Omit } from 'zod/v4/core/util.cjs';
+import { type ObjectLiteral } from 'typeorm';
 
-import { WorkspaceAuthContext } from 'src/engine/api/common/interfaces/workspace-auth-context.interface';
+import { type ObjectRecordFilter } from 'src/engine/api/graphql/workspace-query-builder/interfaces/object-record.interface';
+
 import { QueryResultFieldValue } from 'src/engine/api/graphql/workspace-query-runner/factories/query-result-getters/interfaces/query-result-field-value';
 
-import { CommonSelectedFieldsHandler } from 'src/engine/api/common/common-args-handlers/common-query-selected-fields/common-selected-fields.handler';
+import { DataArgProcessorService } from 'src/engine/api/common/common-args-processors/data-arg-processor/data-arg-processor.service';
+import { FilterArgProcessorService } from 'src/engine/api/common/common-args-processors/filter-arg-processor/filter-arg-processor.service';
+import { GroupByArgProcessorService } from 'src/engine/api/common/common-args-processors/group-by-arg-processor/group-by-arg-processor.service';
+import { OrderByArgProcessorService } from 'src/engine/api/common/common-args-processors/order-by-arg-processor/order-by-arg-processor.service';
+import { OrderByWithGroupByArgProcessorService } from 'src/engine/api/common/common-args-processors/order-by-with-group-by-arg-processor/order-by-with-group-by-arg-processor.service';
+import { QueryRunnerArgsFactory } from 'src/engine/api/common/common-args-processors/query-runner-args.factory';
+import { ProcessNestedRelationsHelper } from 'src/engine/api/common/common-nested-relations-processor/process-nested-relations.helper';
 import {
   CommonQueryRunnerException,
   CommonQueryRunnerExceptionCode,
 } from 'src/engine/api/common/common-query-runners/errors/common-query-runner.exception';
+import { STANDARD_ERROR_MESSAGE } from 'src/engine/api/common/common-query-runners/errors/standard-error-message.constant';
+import { buildMutationQueryBuilder } from 'src/engine/api/common/common-query-runners/utils/build-mutation-query-builder.util';
+import { isRecordFilterEmpty } from 'src/engine/api/common/common-query-runners/utils/is-record-filter-empty.util';
 import { CommonResultGettersService } from 'src/engine/api/common/common-result-getters/common-result-getters.service';
 import { CommonBaseQueryRunnerContext } from 'src/engine/api/common/types/common-base-query-runner-context.type';
 import { CommonExtendedQueryRunnerContext } from 'src/engine/api/common/types/common-extended-query-runner-context.type';
@@ -20,37 +32,44 @@ import {
   CommonQueryArgs,
   CommonQueryNames,
 } from 'src/engine/api/common/types/common-query-args.type';
-import { CommonQueryResult } from 'src/engine/api/common/types/common-query-result.type';
-import { isWorkspaceAuthContext } from 'src/engine/api/common/utils/is-workspace-auth-context.util';
+import {
+  CommonQueryExecutionResult,
+  CommonQueryResult,
+} from 'src/engine/api/common/types/common-query-result.type';
+import { CommonSelectedFieldsResult } from 'src/engine/api/common/types/common-selected-fields-result.type';
+import { type NestedRelationsReadPathOptions } from 'src/engine/api/common/types/nested-relations-read-path-options.type';
 import { OBJECTS_WITH_SETTINGS_PERMISSIONS_REQUIREMENTS } from 'src/engine/api/graphql/graphql-query-runner/constants/objects-with-settings-permissions-requirements';
 import { GraphqlQueryParser } from 'src/engine/api/graphql/graphql-query-runner/graphql-query-parsers/graphql-query.parser';
-import { ProcessNestedRelationsHelper } from 'src/engine/api/graphql/graphql-query-runner/helpers/process-nested-relations.helper';
-import { QueryResultGettersFactory } from 'src/engine/api/graphql/workspace-query-runner/factories/query-result-getters/query-result-getters.factory';
-import { QueryRunnerArgsFactory } from 'src/engine/api/graphql/workspace-query-runner/factories/query-runner-args.factory';
 import { WorkspacePreQueryHookPayload } from 'src/engine/api/graphql/workspace-query-runner/workspace-query-hook/types/workspace-query-hook.type';
 import { WorkspaceQueryHookService } from 'src/engine/api/graphql/workspace-query-runner/workspace-query-hook/workspace-query-hook.service';
-import { ApiKeyRoleService } from 'src/engine/core-modules/api-key/api-key-role.service';
-import { AuthContext } from 'src/engine/core-modules/auth/types/auth-context.type';
-import { FeatureFlagKey } from 'src/engine/core-modules/feature-flag/enums/feature-flag-key.enum';
+import { isApiKeyAuthContext } from 'src/engine/core-modules/auth/guards/is-api-key-auth-context.guard';
+import { isApplicationAuthContext } from 'src/engine/core-modules/auth/guards/is-application-auth-context.guard';
+import { isUserAuthContext } from 'src/engine/core-modules/auth/guards/is-user-auth-context.guard';
+import { WorkspaceAuthContext } from 'src/engine/core-modules/auth/types/workspace-auth-context.type';
 import { FeatureFlagService } from 'src/engine/core-modules/feature-flag/services/feature-flag.service';
 import { MetricsService } from 'src/engine/core-modules/metrics/metrics.service';
 import { MetricsKeys } from 'src/engine/core-modules/metrics/types/metrics-keys.type';
+import { ThrottlerException } from 'src/engine/core-modules/throttler/throttler.exception';
 import { ThrottlerService } from 'src/engine/core-modules/throttler/throttler.service';
 import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
-import { type PermissionFlagType } from 'src/engine/metadata-modules/permissions/constants/permission-flag-type.constants';
+import { FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/flat-entity-maps.type';
+import { findFlatEntityByIdInFlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/utils/find-flat-entity-by-id-in-flat-entity-maps.util';
+import { FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
+import { buildFieldMapsFromFlatObjectMetadata } from 'src/engine/metadata-modules/flat-field-metadata/utils/build-field-maps-from-flat-object-metadata.util';
+import { FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
 import {
   PermissionsException,
   PermissionsExceptionCode,
   PermissionsExceptionMessage,
 } from 'src/engine/metadata-modules/permissions/permissions.exception';
 import { PermissionsService } from 'src/engine/metadata-modules/permissions/permissions.service';
-import { ObjectMetadataItemWithFieldMaps } from 'src/engine/metadata-modules/types/object-metadata-item-with-field-maps';
-import { ObjectMetadataMaps } from 'src/engine/metadata-modules/types/object-metadata-maps';
-import { UserRoleService } from 'src/engine/metadata-modules/user-role/user-role.service';
-import { WorkspacePermissionsCacheService } from 'src/engine/metadata-modules/workspace-permissions-cache/workspace-permissions-cache.service';
-import { WorkspaceDataSource } from 'src/engine/twenty-orm/datasource/workspace.datasource';
-import { GlobalWorkspaceOrmManager } from 'src/engine/twenty-orm/global-workspace-datasource/global-workspace-orm.manager';
-import { TwentyORMGlobalManager } from 'src/engine/twenty-orm/twenty-orm-global.manager';
+import { RelationNestedQueries } from 'src/engine/twenty-orm/field-operations/relation-nested-queries/relation-nested-queries';
+import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
+import { getWorkspaceContext } from 'src/engine/twenty-orm/storage/orm-workspace-context.storage';
+import { resolveRolePermissionConfig } from 'src/engine/twenty-orm/utils/resolve-role-permission-config.util';
+import { type WorkspaceRepository } from 'src/engine/twenty-orm/repository/workspace-repository';
+import { type MutationKind } from 'src/engine/twenty-orm/sql/utils/build-mutation-statement.util';
+import { WorkspaceCacheService } from 'src/engine/workspace-cache/services/workspace-cache.service';
 
 @Injectable()
 export abstract class CommonBaseQueryRunnerService<
@@ -62,23 +81,23 @@ export abstract class CommonBaseQueryRunnerService<
   @Inject()
   protected readonly queryRunnerArgsFactory: QueryRunnerArgsFactory;
   @Inject()
-  protected readonly queryResultGettersFactory: QueryResultGettersFactory;
+  protected readonly dataArgProcessor: DataArgProcessorService;
   @Inject()
-  protected readonly twentyORMGlobalManager: TwentyORMGlobalManager;
+  protected readonly filterArgProcessor: FilterArgProcessorService;
   @Inject()
-  protected readonly globalWorkspaceOrmManager: GlobalWorkspaceOrmManager;
+  protected readonly groupByArgProcessor: GroupByArgProcessorService;
+  @Inject()
+  protected readonly orderByArgProcessor: OrderByArgProcessorService;
+  @Inject()
+  protected readonly orderByWithGroupByArgProcessor: OrderByWithGroupByArgProcessorService;
+  @Inject()
+  protected readonly workspaceOrmManager: WorkspaceOrmManager;
   @Inject()
   protected readonly processNestedRelationsHelper: ProcessNestedRelationsHelper;
   @Inject()
   protected readonly permissionsService: PermissionsService;
   @Inject()
-  protected readonly userRoleService: UserRoleService;
-  @Inject()
-  protected readonly apiKeyRoleService: ApiKeyRoleService;
-  @Inject()
-  protected readonly selectedFieldsHandler: CommonSelectedFieldsHandler;
-  @Inject()
-  protected readonly workspacePermissionsCacheService: WorkspacePermissionsCacheService;
+  protected readonly workspaceCacheService: WorkspaceCacheService;
   @Inject()
   protected readonly commonResultGettersService: CommonResultGettersService;
   @Inject()
@@ -92,25 +111,24 @@ export abstract class CommonBaseQueryRunnerService<
 
   protected abstract readonly operationName: CommonQueryNames;
 
+  protected readonly isReadOnly: boolean = false;
+
   public async execute(
     args: CommonInput<Args>,
     queryRunnerContext: CommonBaseQueryRunnerContext,
-  ): Promise<Output> {
-    const { authContext, objectMetadataItemWithFieldMaps, objectMetadataMaps } =
-      queryRunnerContext;
-
-    if (!isWorkspaceAuthContext(authContext)) {
-      throw new CommonQueryRunnerException(
-        `Invalid auth context: ${JSON.stringify(authContext)}`,
-        CommonQueryRunnerExceptionCode.INVALID_AUTH_CONTEXT,
-      );
-    }
+  ): Promise<CommonQueryExecutionResult<Output, Args>> {
+    const {
+      authContext,
+      flatObjectMetadata,
+      flatObjectMetadataMaps,
+      flatFieldMetadataMaps,
+    } = queryRunnerContext;
 
     await this.throttleQueryExecution(authContext);
 
     await this.validate(args, queryRunnerContext);
 
-    if (objectMetadataItemWithFieldMaps.isSystem === true) {
+    if (flatObjectMetadata.isSystem === true) {
       await this.validateSettingsPermissionsOnObjectOrThrow(
         authContext,
         queryRunnerContext,
@@ -118,44 +136,40 @@ export abstract class CommonBaseQueryRunnerService<
     }
 
     const commonQueryParser = new GraphqlQueryParser(
-      objectMetadataItemWithFieldMaps,
-      objectMetadataMaps,
+      flatObjectMetadata,
+      flatObjectMetadataMaps,
+      flatFieldMetadataMaps,
     );
 
-    const processedArgs = await this.processArgs(
-      args,
-      queryRunnerContext,
-      this.operationName,
-      commonQueryParser,
+    const selectedFieldsResult = commonQueryParser.parseSelectedFields(
+      args.selectedFields,
     );
 
-    const isGlobalDatasourceEnabled =
-      await this.featureFlagService.isFeatureEnabled(
-        FeatureFlagKey.IS_GLOBAL_WORKSPACE_DATASOURCE_ENABLED,
-        authContext.workspace.id,
-      );
+    const processedArgs = {
+      ...(await this.processArgs(args, queryRunnerContext, this.operationName)),
+      selectedFieldsResult,
+    } as CommonExtendedInput<Args>;
 
-    if (isGlobalDatasourceEnabled) {
-      return this.globalWorkspaceOrmManager.executeInWorkspaceContext(
-        authContext,
-        async () =>
-          this.executeQueryAndEnrichResults(
-            processedArgs,
-            authContext,
-            queryRunnerContext,
-            commonQueryParser,
-            isGlobalDatasourceEnabled,
-          ),
-      );
-    }
-
-    return this.executeQueryAndEnrichResults(
+    this.validateQueryComplexity(
+      selectedFieldsResult,
       processedArgs,
-      authContext,
       queryRunnerContext,
-      commonQueryParser,
-      isGlobalDatasourceEnabled,
     );
+
+    const results = await this.workspaceOrmManager.executeInWorkspaceContext(
+      async () =>
+        this.executeQueryAndEnrichResults(
+          processedArgs,
+          queryRunnerContext,
+          commonQueryParser,
+        ),
+      authContext,
+    );
+
+    return {
+      results,
+      args: processedArgs,
+    };
   }
 
   protected abstract run(
@@ -175,54 +189,53 @@ export abstract class CommonBaseQueryRunnerService<
 
   protected abstract processQueryResult(
     queryResult: Output,
-    objectMetadataItemId: string,
-    objectMetadataMaps: ObjectMetadataMaps,
+    flatObjectMetadata: FlatObjectMetadata,
+    flatObjectMetadataMaps: FlatEntityMaps<FlatObjectMetadata>,
+    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>,
     authContext: WorkspaceAuthContext,
   ): Promise<Output>;
+
+  protected computeQueryComplexity(
+    selectedFieldsResult: CommonSelectedFieldsResult,
+    _args: CommonExtendedInput<Args>,
+    _queryRunnerContext: CommonBaseQueryRunnerContext,
+  ): number {
+    const simpleFieldsComplexity = 1;
+    const selectedFieldsComplexity =
+      simpleFieldsComplexity + (selectedFieldsResult.relationFieldsCount ?? 0);
+
+    return selectedFieldsComplexity;
+  }
 
   private async processArgs(
     args: CommonInput<Args>,
     queryRunnerContext: CommonBaseQueryRunnerContext,
     operationName: CommonQueryNames,
-    commonQueryParser: GraphqlQueryParser,
-  ): Promise<CommonExtendedInput<Args>> {
-    const selectedFieldsResult = commonQueryParser.parseSelectedFields(
-      args.selectedFields,
-    );
+  ): Promise<CommonInput<Args>> {
+    const { authContext, flatObjectMetadata } = queryRunnerContext;
 
-    const { authContext, objectMetadataItemWithFieldMaps } = queryRunnerContext;
+    const computedArgs = await this.computeArgs(args, queryRunnerContext);
+
     const hookedArgs =
       (await this.workspaceQueryHookService.executePreQueryHooks(
         authContext,
-        objectMetadataItemWithFieldMaps.nameSingular,
+        flatObjectMetadata.nameSingular,
         operationName,
-        args as WorkspacePreQueryHookPayload<CommonQueryNames>,
+        computedArgs as WorkspacePreQueryHookPayload<CommonQueryNames>,
       )) as CommonInput<Args>;
 
-    const computedArgs = await this.computeArgs(hookedArgs, queryRunnerContext);
-
-    return {
-      ...computedArgs,
-      selectedFieldsResult,
-    };
+    return hookedArgs;
   }
 
   private async executeQueryAndEnrichResults(
     processedArgs: CommonExtendedInput<Args>,
-    authContext: WorkspaceAuthContext,
     queryRunnerContext: CommonBaseQueryRunnerContext,
     commonQueryParser: GraphqlQueryParser,
-    isGlobalDatasourceEnabled: boolean,
   ): Promise<Output> {
-    const extendedQueryRunnerContext = isGlobalDatasourceEnabled
-      ? await this.prepareExtendedQueryRunnerContextWithGlobalDatasource(
-          authContext,
-          queryRunnerContext,
-        )
-      : await this.prepareExtendedQueryRunnerContext(
-          authContext,
-          queryRunnerContext,
-        );
+    const extendedQueryRunnerContext =
+      await this.prepareExtendedQueryRunnerContextWithGlobalDatasource(
+        queryRunnerContext,
+      );
 
     const results = await this.run(processedArgs, {
       ...extendedQueryRunnerContext,
@@ -232,10 +245,10 @@ export abstract class CommonBaseQueryRunnerService<
     return this.enrichResultsWithGettersAndHooks({
       results,
       operationName: this.operationName,
-      authContext,
-      objectMetadataItemWithFieldMaps:
-        queryRunnerContext.objectMetadataItemWithFieldMaps,
-      objectMetadataMaps: queryRunnerContext.objectMetadataMaps,
+      authContext: extendedQueryRunnerContext.authContext,
+      flatObjectMetadata: queryRunnerContext.flatObjectMetadata,
+      flatObjectMetadataMaps: queryRunnerContext.flatObjectMetadataMaps,
+      flatFieldMetadataMaps: queryRunnerContext.flatFieldMetadataMaps,
     });
   }
 
@@ -243,25 +256,28 @@ export abstract class CommonBaseQueryRunnerService<
     results,
     operationName,
     authContext,
-    objectMetadataItemWithFieldMaps,
-    objectMetadataMaps,
+    flatObjectMetadata,
+    flatObjectMetadataMaps,
+    flatFieldMetadataMaps,
   }: {
     results: Output;
     operationName: CommonQueryNames;
     authContext: WorkspaceAuthContext;
-    objectMetadataItemWithFieldMaps: ObjectMetadataItemWithFieldMaps;
-    objectMetadataMaps: ObjectMetadataMaps;
+    flatObjectMetadata: FlatObjectMetadata;
+    flatObjectMetadataMaps: FlatEntityMaps<FlatObjectMetadata>;
+    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
   }): Promise<Output> {
     const resultWithGetters = await this.processQueryResult(
       results,
-      objectMetadataItemWithFieldMaps.id,
-      objectMetadataMaps,
+      flatObjectMetadata,
+      flatObjectMetadataMaps,
+      flatFieldMetadataMaps,
       authContext,
     );
 
     await this.workspaceQueryHookService.executePostQueryHooks(
       authContext,
-      objectMetadataItemWithFieldMaps.nameSingular,
+      flatObjectMetadata.nameSingular,
       operationName,
       resultWithGetters as QueryResultFieldValue,
     );
@@ -273,26 +289,30 @@ export abstract class CommonBaseQueryRunnerService<
     authContext: WorkspaceAuthContext,
     queryRunnerContext: CommonBaseQueryRunnerContext,
   ) {
-    const { objectMetadataItemWithFieldMaps } = queryRunnerContext;
+    const { flatObjectMetadata } = queryRunnerContext;
 
     const workspace = authContext.workspace;
 
     if (
       Object.keys(OBJECTS_WITH_SETTINGS_PERMISSIONS_REQUIREMENTS).includes(
-        objectMetadataItemWithFieldMaps.nameSingular,
+        flatObjectMetadata.nameSingular,
       )
     ) {
       const permissionRequired: PermissionFlagType =
         OBJECTS_WITH_SETTINGS_PERMISSIONS_REQUIREMENTS[
-          objectMetadataItemWithFieldMaps.nameSingular as keyof typeof OBJECTS_WITH_SETTINGS_PERMISSIONS_REQUIREMENTS
+          flatObjectMetadata.nameSingular as keyof typeof OBJECTS_WITH_SETTINGS_PERMISSIONS_REQUIREMENTS
         ];
 
       const userHasPermission =
         await this.permissionsService.userHasWorkspaceSettingPermission({
-          userWorkspaceId: authContext.userWorkspaceId,
+          userWorkspaceId: isUserAuthContext(authContext)
+            ? authContext.userWorkspaceId
+            : undefined,
           setting: permissionRequired,
           workspaceId: workspace.id,
-          apiKeyId: authContext.apiKey?.id,
+          apiKeyId: isApiKeyAuthContext(authContext)
+            ? authContext.apiKey.id
+            : undefined,
         });
 
       if (!userHasPermission) {
@@ -304,121 +324,245 @@ export abstract class CommonBaseQueryRunnerService<
     }
   }
 
-  private async getRoleIdAndObjectsPermissions(
-    authContext: AuthContext,
-    workspaceId: string,
-  ) {
-    let roleId: string;
-
-    if (
-      !isDefined(authContext.apiKey) &&
-      !isDefined(authContext.userWorkspaceId)
-    ) {
-      throw new PermissionsException(
-        PermissionsExceptionMessage.NO_AUTHENTICATION_CONTEXT,
-        PermissionsExceptionCode.NO_AUTHENTICATION_CONTEXT,
-      );
-    }
-
-    if (isDefined(authContext.apiKey)) {
-      roleId = await this.apiKeyRoleService.getRoleIdForApiKey(
-        authContext.apiKey.id,
-        workspaceId,
-      );
-    } else {
-      const userWorkspaceRoleId =
-        await this.userRoleService.getRoleIdForUserWorkspace({
-          userWorkspaceId: authContext.userWorkspaceId,
-          workspaceId,
-        });
-
-      if (!isDefined(userWorkspaceRoleId)) {
-        throw new PermissionsException(
-          PermissionsExceptionMessage.NO_ROLE_FOUND_FOR_USER_WORKSPACE,
-          PermissionsExceptionCode.NO_ROLE_FOUND_FOR_USER_WORKSPACE,
-        );
-      }
-
-      roleId = userWorkspaceRoleId;
-    }
-
-    const objectMetadataPermissions =
-      await this.workspacePermissionsCacheService.getObjectRecordPermissionsForRoles(
-        {
-          workspaceId: workspaceId,
-          roleIds: [roleId],
-        },
-      );
-
-    return { roleId, objectsPermissions: objectMetadataPermissions[roleId] };
-  }
-
-  private async prepareExtendedQueryRunnerContext(
-    authContext: WorkspaceAuthContext,
+  private async prepareExtendedQueryRunnerContextWithGlobalDatasource(
     queryRunnerContext: CommonBaseQueryRunnerContext,
   ): Promise<Omit<CommonExtendedQueryRunnerContext, 'commonQueryParser'>> {
-    const workspaceDataSource =
-      await this.twentyORMGlobalManager.getDataSourceForWorkspace({
-        workspaceId: authContext.workspace.id,
+    const context = getWorkspaceContext();
+
+    const rolePermissionConfig =
+      queryRunnerContext.rolePermissionConfig ??
+      resolveRolePermissionConfig({
+        authContext: context.authContext,
+        userWorkspaceRoleMap: context.userWorkspaceRoleMap,
+        apiKeyRoleMap: context.apiKeyRoleMap,
       });
 
-    const { roleId } = await this.getRoleIdAndObjectsPermissions(
-      authContext,
-      authContext.workspace.id,
-    );
+    if (!rolePermissionConfig) {
+      throw new CommonQueryRunnerException(
+        'Invalid auth context',
+        CommonQueryRunnerExceptionCode.INVALID_AUTH_CONTEXT,
+        { userFriendlyMessage: STANDARD_ERROR_MESSAGE },
+      );
+    }
 
-    const rolePermissionConfig = { unionOf: [roleId] };
-
-    const repository = workspaceDataSource.getRepository(
-      queryRunnerContext.objectMetadataItemWithFieldMaps.nameSingular,
+    const repository = this.workspaceOrmManager.getRepository<ObjectLiteral>(
+      queryRunnerContext.flatObjectMetadata.nameSingular,
       rolePermissionConfig,
-      authContext,
+      { useReplica: this.isReadOnly },
     );
 
     return {
       ...queryRunnerContext,
-      authContext,
-      workspaceDataSource,
+      authContext: context.authContext,
       rolePermissionConfig,
       repository,
+      featureFlagsMap: context.featureFlagsMap,
     };
   }
 
-  private async prepareExtendedQueryRunnerContextWithGlobalDatasource(
-    authContext: WorkspaceAuthContext,
-    queryRunnerContext: CommonBaseQueryRunnerContext,
-  ): Promise<Omit<CommonExtendedQueryRunnerContext, 'commonQueryParser'>> {
-    const workspaceId = authContext.workspace.id;
+  // useReplica follows isReadOnly so reads on read-only runners hit the replica
+  // and everything else the primary, keeping root read and nested-relation
+  // loading consistent.
+  protected getReadRepository({
+    rolePermissionConfig,
+    flatObjectMetadata,
+  }: Pick<
+    CommonExtendedQueryRunnerContext,
+    'rolePermissionConfig' | 'flatObjectMetadata'
+  >): WorkspaceRepository {
+    this.metricsService.incrementCounterBy({
+      key: MetricsKeys.OrmV2ReadPathUsed,
+      amount: 1,
+      attributes: { operation: this.operationName },
+    });
 
-    const { roleId } = await this.getRoleIdAndObjectsPermissions(
-      authContext,
-      workspaceId,
+    return this.workspaceOrmManager.getRepository(
+      flatObjectMetadata.nameSingular,
+      rolePermissionConfig,
+      { useReplica: this.isReadOnly },
     );
+  }
 
-    const rolePermissionConfig = { unionOf: [roleId] };
+  // Writes always hit the primary, so useReplica is pinned false regardless of isReadOnly.
+  protected getWriteRepository({
+    rolePermissionConfig,
+    flatObjectMetadata,
+  }: Pick<
+    CommonExtendedQueryRunnerContext,
+    'rolePermissionConfig' | 'flatObjectMetadata'
+  >): WorkspaceRepository {
+    this.metricsService.incrementCounterBy({
+      key: MetricsKeys.OrmV2WritePathUsed,
+      amount: 1,
+      attributes: { operation: this.operationName },
+    });
 
-    const repository = await this.globalWorkspaceOrmManager.getRepository(
-      workspaceId,
-      queryRunnerContext.objectMetadataItemWithFieldMaps.nameSingular,
+    return this.workspaceOrmManager.getRepository(
+      flatObjectMetadata.nameSingular,
+      rolePermissionConfig,
+    );
+  }
+
+  protected async runFilteredMutation({
+    queryRunnerContext,
+    filter,
+    columnsToReturn,
+    kind,
+    data,
+  }: {
+    queryRunnerContext: CommonExtendedQueryRunnerContext;
+    filter: Partial<ObjectRecordFilter>;
+    columnsToReturn: string[];
+    kind: MutationKind;
+    data?: Partial<ObjectRecord>;
+  }): Promise<ObjectRecord[]> {
+    const { flatObjectMetadata, commonQueryParser } = queryRunnerContext;
+    const alias = flatObjectMetadata.nameSingular;
+
+    if (isRecordFilterEmpty(filter)) {
+      throw new CommonQueryRunnerException(
+        'A non-empty filter is required for a bulk mutation',
+        CommonQueryRunnerExceptionCode.INVALID_ARGS_FILTER,
+        { userFriendlyMessage: STANDARD_ERROR_MESSAGE },
+      );
+    }
+
+    const writeRepository = this.getWriteRepository(queryRunnerContext);
+
+    const resolvedData =
+      kind === 'update' && isDefined(data)
+        ? (
+            await this.resolveNestedRelations({
+              records: [data],
+              queryRunnerContext,
+              writeRepository,
+            })
+          )[0]
+        : data;
+
+    const { selectQueryBuilder, rowLevelPermissionsApplied } =
+      buildMutationQueryBuilder({
+        repository: writeRepository,
+        alias,
+        filter,
+        commonQueryParser,
+      });
+
+    return writeRepository.runMutation({
+      selectQueryBuilder,
+      rowLevelPermissionsApplied,
+      kind,
+      columnsToReturn,
+      data: resolvedData,
+    });
+  }
+
+  protected async resolveNestedRelations({
+    records,
+    queryRunnerContext,
+    writeRepository,
+  }: {
+    records: Partial<ObjectRecord>[];
+    queryRunnerContext: CommonExtendedQueryRunnerContext;
+    writeRepository: WorkspaceRepository;
+  }): Promise<Partial<ObjectRecord>[]> {
+    const { flatObjectMetadata, flatFieldMetadataMaps, rolePermissionConfig } =
+      queryRunnerContext;
+    const nameSingular = flatObjectMetadata.nameSingular;
+
+    const relationNestedQueries = new RelationNestedQueries(
+      writeRepository.getInternalContext(),
+      this.workspaceOrmManager,
       rolePermissionConfig,
     );
 
-    const globalWorkspaceDataSource =
-      await this.globalWorkspaceOrmManager.getGlobalWorkspaceDataSource();
+    const relationNestedConfig =
+      relationNestedQueries.prepareNestedRelationQueries(records, nameSingular);
 
+    if (!isDefined(relationNestedConfig)) {
+      return records;
+    }
+
+    const resolvedRecords =
+      await relationNestedQueries.processRelationNestedQueries({
+        entities: records,
+        relationNestedConfig,
+      });
+
+    const { fieldIdByName } = buildFieldMapsFromFlatObjectMetadata(
+      flatFieldMetadataMaps,
+      flatObjectMetadata,
+    );
+
+    return resolvedRecords.map((record) => {
+      const columnKeyedRecord: Partial<ObjectRecord> = {};
+
+      for (const [fieldName, value] of Object.entries(record)) {
+        const fieldMetadata = findFlatEntityByIdInFlatEntityMaps({
+          flatEntityId: fieldIdByName[fieldName],
+          flatEntityMaps: flatFieldMetadataMaps,
+        });
+
+        if (
+          isDefined(fieldMetadata) &&
+          (fieldMetadata.type === FieldMetadataType.RELATION ||
+            fieldMetadata.type === FieldMetadataType.MORPH_RELATION)
+        ) {
+          continue;
+        }
+
+        columnKeyedRecord[fieldName] = value;
+      }
+
+      return columnKeyedRecord;
+    });
+  }
+
+  protected getNestedRelationsReadPathOptions(): NestedRelationsReadPathOptions {
     return {
-      ...queryRunnerContext,
-      authContext,
-      workspaceDataSource:
-        globalWorkspaceDataSource as unknown as WorkspaceDataSource,
-      rolePermissionConfig,
-      repository,
+      useReplica: this.isReadOnly,
     };
   }
 
   private async throttleQueryExecution(authContext: WorkspaceAuthContext) {
+    await this.throttleApiKeyQueryExecution(authContext);
+    await this.throttleApplicationQueryExecution(authContext);
+  }
+
+  private async throttleApplicationQueryExecution(
+    authContext: WorkspaceAuthContext,
+  ) {
+    if (!isApplicationAuthContext(authContext)) return;
+
     try {
-      if (!isDefined(authContext.apiKey)) return;
+      await this.throttlerService.tokenBucketThrottleOrThrow(
+        `api:throttler:application:${authContext.application.universalIdentifier}`,
+        1,
+        this.twentyConfigService.get('APPLICATION_API_RATE_LIMITING_LIMIT'),
+        this.twentyConfigService.get('APPLICATION_API_RATE_LIMITING_TTL_IN_MS'),
+      );
+    } catch (error) {
+      if (error instanceof ThrottlerException) {
+        await this.metricsService.incrementCounterForEvent({
+          key: MetricsKeys.CommonApiApplicationQueryRateLimited,
+          shouldStoreInCache: false,
+          attributes: {
+            universal_identifier: authContext.application.universalIdentifier,
+            app_name: authContext.application.name,
+            source_type: authContext.application.sourceType,
+          },
+        });
+      }
+
+      throw error;
+    }
+  }
+
+  private async throttleApiKeyQueryExecution(
+    authContext: WorkspaceAuthContext,
+  ) {
+    try {
+      if (!isApiKeyAuthContext(authContext)) return;
 
       const workspaceId = authContext.workspace.id;
 
@@ -454,12 +598,48 @@ export abstract class CommonBaseQueryRunnerService<
         longConfig.timeWindow,
       );
     } catch (error) {
-      await this.metricsService.incrementCounter({
+      await this.metricsService.incrementCounterForEvent({
         key: MetricsKeys.CommonApiQueryRateLimited,
         shouldStoreInCache: false,
       });
 
       throw error;
+    }
+  }
+
+  private validateQueryComplexity(
+    selectedFieldsResult: CommonSelectedFieldsResult,
+    args: CommonExtendedInput<Args>,
+    queryRunnerContext: CommonBaseQueryRunnerContext,
+  ) {
+    const maximumComplexity = this.twentyConfigService.get(
+      'COMMON_QUERY_COMPLEXITY_LIMIT',
+    );
+
+    if (selectedFieldsResult.hasAtLeastTwoNestedOneToManyRelations) {
+      throw new CommonQueryRunnerException(
+        `Query complexity is too high. One-to-Many relation cannot be nested in another One-to-Many relation.`,
+        CommonQueryRunnerExceptionCode.TOO_COMPLEX_QUERY,
+        {
+          userFriendlyMessage: STANDARD_ERROR_MESSAGE,
+        },
+      );
+    }
+
+    const queryComplexity = this.computeQueryComplexity(
+      selectedFieldsResult,
+      args,
+      queryRunnerContext,
+    );
+
+    if (queryComplexity > maximumComplexity) {
+      throw new CommonQueryRunnerException(
+        `Query complexity is too high. Please, reduce the amount of relation fields requested. Query complexity: ${queryComplexity}. Maximum complexity: ${maximumComplexity}.`,
+        CommonQueryRunnerExceptionCode.TOO_COMPLEX_QUERY,
+        {
+          userFriendlyMessage: STANDARD_ERROR_MESSAGE,
+        },
+      );
     }
   }
 }

@@ -1,15 +1,19 @@
 import { PENDING_WIDGET_PLACEHOLDER_LAYOUT_KEY } from '@/page-layout/constants/PendingWidgetPlaceholderLayoutKey';
+import { prepareGridLayoutItemsWithPlaceholders } from '@/page-layout/utils/prepareGridLayoutItemsWithPlaceholders';
 import {
   AggregateOperations,
-  GraphType,
+  WidgetConfigurationType,
   WidgetType,
   type PageLayoutWidget,
-} from '~/generated/graphql';
-import { prepareGridLayoutItemsWithPlaceholders } from '../prepareGridLayoutItemsWithPlaceholders';
+} from '~/generated-metadata/graphql';
 
 describe('prepareGridLayoutItemsWithPlaceholders', () => {
   const createMockWidget = (id: string): PageLayoutWidget => ({
+    isSystemSideEffect: false,
+    universalIdentifier: 'universal-identifier-mock',
     id,
+    applicationId: '',
+    isActive: true,
     pageLayoutTabId: 'tab-1',
     title: `Test Widget ${id}`,
     type: WidgetType.GRAPH,
@@ -22,7 +26,7 @@ describe('prepareGridLayoutItemsWithPlaceholders', () => {
     },
     configuration: {
       __typename: 'AggregateChartConfiguration',
-      graphType: GraphType.AGGREGATE,
+      configurationType: WidgetConfigurationType.AGGREGATE_CHART,
       aggregateOperation: AggregateOperations.COUNT,
       aggregateFieldMetadataId: 'field-id',
       displayDataLabel: false,
@@ -153,13 +157,11 @@ describe('prepareGridLayoutItemsWithPlaceholders', () => {
       const result = prepareGridLayoutItemsWithPlaceholders(widgets, true);
 
       expect(result).toHaveLength(6);
-      // Check that the last item is the pending placeholder
       const lastItem = result[result.length - 1];
       expect(lastItem).toEqual({
         id: PENDING_WIDGET_PLACEHOLDER_LAYOUT_KEY,
         type: 'placeholder',
       });
-      // Check that all other items are widgets
       for (let i = 0; i < result.length - 1; i++) {
         expect(result[i].type).toBe('widget');
       }
@@ -215,6 +217,7 @@ describe('prepareGridLayoutItemsWithPlaceholders', () => {
         expect(resultWidget.createdAt).toBe(widget.createdAt);
         expect(resultWidget.updatedAt).toBe(widget.updatedAt);
         expect(resultWidget.deletedAt).toBe(widget.deletedAt);
+        expect(resultWidget.isActive).toBe(widget.isActive);
       }
     });
   });
@@ -228,7 +231,6 @@ describe('prepareGridLayoutItemsWithPlaceholders', () => {
 
       prepareGridLayoutItemsWithPlaceholders(originalWidgets, true);
 
-      // Check that the array wasn't mutated
       expect(originalWidgets).toHaveLength(2);
       expect(originalWidgets).toEqual(widgetsCopy);
       expect(originalWidgets[0]).toBe(widget1);

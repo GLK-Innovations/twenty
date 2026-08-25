@@ -32,6 +32,7 @@ import {
   graphQLErrorCodesToFilter,
   shouldCaptureException,
 } from 'src/engine/utils/global-exception-handler.util';
+import { translateUserFriendlyMessageDescriptors } from 'src/engine/core-modules/i18n/utils/translate-user-friendly-message-descriptors.util';
 
 const DEFAULT_EVENT_ID_KEY = 'exceptionEventId';
 const SCHEMA_VERSION_HEADER = 'x-schema-version';
@@ -43,9 +44,6 @@ const APP_VERSION_MISMATCH_CODE = 'APP_VERSION_MISMATCH';
 type GraphQLErrorHandlerHookOptions = {
   metricsService: MetricsService;
 
-  /**
-   * The exception handler service to use.
-   */
   exceptionHandlerService: ExceptionHandlerService;
 
   i18nService: I18nService;
@@ -73,12 +71,13 @@ export const useGraphQLErrorHandlerHook = <
     return {
       id: req.workspace.id,
       displayName: req.workspace.displayName,
-      createdAt: req.workspace.createdAt?.toISOString() ?? null,
+      createdAt: req.workspace.createdAt ?? null,
       activationStatus: req.workspace.activationStatus,
     };
   }
 
   return {
+    // TODO: define onSubscribe here to handle subscription errors too
     async onExecute({ args }) {
       const exceptionHandlerService = options.exceptionHandlerService;
       const rootOperation = args.document.definitions.find(
@@ -91,7 +90,15 @@ export const useGraphQLErrorHandlerHook = <
       }
 
       const operationType = rootOperation.operation;
-      const user = args.contextValue.req.user;
+      const rawUser = args.contextValue.req.user;
+      const user = rawUser
+        ? {
+            id: rawUser.id,
+            email: rawUser.email,
+            firstName: rawUser.firstName,
+            lastName: rawUser.lastName,
+          }
+        : undefined;
       const document = getDocumentString(args.document, print);
       const opName =
         args.operationName ||
@@ -106,14 +113,13 @@ export const useGraphQLErrorHandlerHook = <
             setResult,
           }) => {
             if (!result.errors || result.errors.length === 0) {
-              options.metricsService.incrementCounter({
+              void options.metricsService.incrementCounterForEvent({
                 key: MetricsKeys.GraphqlOperation200,
               });
 
               return;
             }
 
-            // Step 1: Process errors - extract original errors and convert to BaseGraphQLError
             const processedErrors = result.errors.map((error) => {
               const originalError = error.originalError || error;
 
@@ -134,7 +140,6 @@ export const useGraphQLErrorHandlerHook = <
               return originalError;
             });
 
-            // Error metrics
             const codeToMetricKey: Partial<Record<ErrorCode, MetricsKeys>> = {
               [ErrorCode.UNAUTHENTICATED]: MetricsKeys.GraphqlOperation401,
               [ErrorCode.FORBIDDEN]: MetricsKeys.GraphqlOperation403,
@@ -168,15 +173,16 @@ export const useGraphQLErrorHandlerHook = <
               }
 
               if (metricKey) {
-                options.metricsService.incrementCounter({ key: metricKey });
+                void options.metricsService.incrementCounterForEvent({
+                  key: metricKey,
+                });
               } else {
-                options.metricsService.incrementCounter({
+                void options.metricsService.incrementCounterForEvent({
                   key: MetricsKeys.GraphqlOperationUnknown,
                 });
               }
             });
 
-            // Step 2: Send errors to monitoring service (with stack traces)
             const errorsToCapture = processedErrors.filter(
               shouldCaptureException,
             );
@@ -204,7 +210,6 @@ export const useGraphQLErrorHandlerHook = <
               });
             }
 
-            // Step 3: Transform errors for GraphQL response (clean GraphQL errors)
             const userLocale = args.contextValue.req.locale ?? SOURCE_LOCALE;
             const i18n = options.i18nService.getI18nInstance(userLocale);
             const defaultErrorMessage = msg`An error occurred.`;
@@ -214,13 +219,15 @@ export const useGraphQLErrorHandlerHook = <
                 error instanceof BaseGraphQLError
                   ? {
                       ...error,
-                      extensions: {
-                        ...error.extensions,
-                        userFriendlyMessage: i18n._(
-                          error.extensions.userFriendlyMessage ??
+                      extensions: translateUserFriendlyMessageDescriptors(
+                        {
+                          ...error.extensions,
+                          userFriendlyMessage:
+                            error.extensions.userFriendlyMessage ??
                             defaultErrorMessage,
-                        ),
-                      },
+                        },
+                        i18n,
+                      ),
                     }
                   : generateGraphQLErrorFromError(error, i18n);
 
@@ -265,9 +272,10 @@ export const useGraphQLErrorHandlerHook = <
 
         if (
           requestMetadataVersion &&
+          isDefined(currentMetadataVersion) &&
           requestMetadataVersion !== `${currentMetadataVersion}`
         ) {
-          options.metricsService.incrementCounter({
+          void options.metricsService.incrementCounterForEvent({
             key: MetricsKeys.SchemaVersionMismatch,
           });
 
@@ -281,23 +289,16 @@ export const useGraphQLErrorHandlerHook = <
         }
 
         if (
-          !frontEndAppVersion ||
-          !backendAppVersion ||
+          !isDefined(frontEndAppVersion) ||
+          !isDefined(backendAppVersion) ||
           !semver.valid(frontEndAppVersion) ||
           !semver.valid(backendAppVersion)
         ) {
           return;
         }
 
-        const frontEndMajor = semver.parse(frontEndAppVersion)?.major;
-        const backendMajor = semver.parse(backendAppVersion)?.major;
-
-        if (
-          isDefined(frontEndMajor) &&
-          isDefined(backendMajor) &&
-          frontEndMajor < backendMajor
-        ) {
-          options.metricsService.incrementCounter({
+        if (semver.lt(frontEndAppVersion, backendAppVersion)) {
+          void options.metricsService.incrementCounterForEvent({
             key: MetricsKeys.AppVersionMismatch,
           });
           throw new GraphQLError(APP_VERSION_MISMATCH_ERROR, {

@@ -1,18 +1,18 @@
-import { useRecordIndexContextOrThrow } from '@/object-record/record-index/contexts/RecordIndexContext';
-import { type CoreViewFilter } from '~/generated/graphql';
-import { type ViewFilter } from '../types/ViewFilter';
-import { getFilterableFieldsWithVectorSearch } from '../utils/getFilterableFieldsWithVectorSearch';
-import { mapViewFiltersToFilters } from '../utils/mapViewFiltersToFilters';
+import { flattenedFieldMetadataItemsSelector } from '@/object-metadata/states/flattenedFieldMetadataItemsSelector';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { type ViewFilter as GqlViewFilter } from '~/generated-metadata/graphql';
+import { type ViewFilter } from '@/views/types/ViewFilter';
+import { mapViewFiltersToFilters } from '@/views/utils/mapViewFiltersToFilters';
 
 export const useMapViewFiltersToFilters = () => {
-  const { objectMetadataItem } = useRecordIndexContextOrThrow();
+  const flattenedFieldMetadataItems = useAtomStateValue(
+    flattenedFieldMetadataItemsSelector,
+  );
 
   const mapViewFiltersToRecordFilters = (
-    viewFilters: ViewFilter[] | CoreViewFilter[],
+    viewFilters: ViewFilter[] | GqlViewFilter[],
   ) => {
-    const filterableFieldMetadataItems =
-      getFilterableFieldsWithVectorSearch(objectMetadataItem);
-    return mapViewFiltersToFilters(viewFilters, filterableFieldMetadataItems);
+    return mapViewFiltersToFilters(viewFilters, flattenedFieldMetadataItems);
   };
 
   return { mapViewFiltersToRecordFilters };

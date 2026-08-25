@@ -1,5 +1,5 @@
-import { type Meta, type StoryObj } from '@storybook/react';
-import { within } from '@storybook/test';
+import { type Meta, type StoryObj } from '@storybook/react-vite';
+import { within } from 'storybook/test';
 
 import {
   PageDecorator,
@@ -7,7 +7,7 @@ import {
 } from '~/testing/decorators/PageDecorator';
 import { graphqlMocks } from '~/testing/graphqlMocks';
 
-import { SettingsObjects } from '../SettingsObjects';
+import { SettingsObjects } from '~/pages/settings/data-model/SettingsObjects';
 
 const meta: Meta<PageDecoratorArgs> = {
   title: 'Pages/Settings/DataModel/SettingsObjects',
@@ -27,6 +27,6 @@ export const Default: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
 
-    await canvas.findByText('Existing objects', undefined, { timeout: 5000 });
+    await canvas.findByRole('heading', { name: 'Objects' }, { timeout: 5000 });
   },
 };

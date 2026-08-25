@@ -1,7 +1,8 @@
-import { type ViewSortDirection } from '~/generated/graphql';
+import { type ViewSortDirection } from '~/generated-metadata/graphql';
 
 export type RecordSort = {
   id: string;
   fieldMetadataId: string;
   direction: ViewSortDirection;
+  subFieldName?: string | null;
 };

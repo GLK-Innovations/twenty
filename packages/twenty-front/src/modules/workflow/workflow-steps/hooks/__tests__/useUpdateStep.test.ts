@@ -1,5 +1,5 @@
 import { useUpdateStep } from '@/workflow/workflow-steps/hooks/useUpdateStep';
-import { renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 
 const mockUpdateWorkflowVersionStep = jest.fn();
 const mockGetUpdatableWorkflowVersion = jest.fn();
@@ -33,9 +33,8 @@ describe('useUpdateStep', () => {
       type: 'CODE' as const,
       settings: {
         input: {
-          serverlessFunctionId: 'id',
-          serverlessFunctionVersion: '1',
-          serverlessFunctionInput: {},
+          logicFunctionId: 'id',
+          logicFunctionInput: {},
         },
         outputSchema: {},
         errorHandlingOptions: {
@@ -52,7 +51,9 @@ describe('useUpdateStep', () => {
     mockGetUpdatableWorkflowVersion.mockResolvedValue(mockWorkflowVersionId);
 
     const { result } = renderHook(() => useUpdateStep());
-    await result.current.updateStep(mockStep);
+    await act(async () => {
+      await result.current.updateStep(mockStep);
+    });
 
     expect(mockGetUpdatableWorkflowVersion).toHaveBeenCalled();
     expect(mockUpdateWorkflowVersionStep).toHaveBeenCalledWith({

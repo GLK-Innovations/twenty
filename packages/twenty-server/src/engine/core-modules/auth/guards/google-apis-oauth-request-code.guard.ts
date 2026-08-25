@@ -3,7 +3,6 @@ import { AuthGuard } from '@nestjs/passport';
 import { InjectRepository } from '@nestjs/typeorm';
 
 import { Repository } from 'typeorm';
-
 import {
   AuthException,
   AuthExceptionCode,
@@ -51,6 +50,8 @@ export class GoogleAPIsOauthRequestCodeGuard extends AuthGuard('google-apis') {
         redirectLocation: request.query.redirectLocation,
         calendarVisibility: request.query.calendarVisibility,
         messageVisibility: request.query.messageVisibility,
+        skipMessageChannelConfiguration:
+          request.query.skipMessageChannelConfiguration,
         loginHint: request.query.loginHint,
         userId: userId,
         workspaceId: workspaceId,

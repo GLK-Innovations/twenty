@@ -1,45 +1,53 @@
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
+import { useLingui } from '@lingui/react/macro';
 import { useState } from 'react';
-import { useRecoilValue } from 'recoil';
 
 import { currentUserState } from '@/auth/states/currentUserState';
 import { useCanEditProfileField } from '@/settings/profile/hooks/useCanEditProfileField';
 import { useUpdateEmail } from '@/settings/profile/hooks/useUpdateEmail';
 import { SettingsTextInput } from '@/ui/input/components/SettingsTextInput';
-import { IconCheck, IconPencil, IconX } from 'twenty-ui/display';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { IconCheck, IconPencil, IconX } from 'twenty-ui/icon';
+import { AppTooltip, TooltipDelay } from 'twenty-ui/surfaces';
 import { Button } from 'twenty-ui/input';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 const StyledContainer = styled.div`
   display: flex;
   flex-direction: column;
-  gap: ${({ theme }) => theme.spacing(2)};
+  gap: ${themeCssVariables.spacing[2]};
 `;
 
 const StyledFieldRow = styled.div`
-  display: flex;
   align-items: stretch;
-  gap: ${({ theme }) => theme.spacing(2)};
+  display: flex;
+  gap: ${themeCssVariables.spacing[2]};
 `;
 
 const StyledActionWrapper = styled.div`
-  display: flex;
   align-items: stretch;
+  display: flex;
 
   & > button + button {
     border-left: none;
   }
 `;
 
-const StyledActionButton = styled(Button)`
-  height: 100%;
+const StyledActionButtonContainer = styled.div`
+  align-items: stretch;
   display: inline-flex;
-  align-items: center;
+  height: 100%;
   justify-content: center;
 `;
 
+const EMAIL_EDIT_DISABLED_TOOLTIP_ANCHOR_ID =
+  'profile-email-edit-disabled-tooltip-anchor';
+
 export const EmailField = () => {
-  const currentUser = useRecoilValue(currentUserState);
-  const { canEdit } = useCanEditProfileField('email');
+  const { t } = useLingui();
+  const currentUser = useAtomStateValue(currentUserState);
+  const { canEdit, isBlockedByWorkspaceLimit } =
+    useCanEditProfileField('email');
   const { updateEmail } = useUpdateEmail();
 
   const [draftEmail, setDraftEmail] = useState('');
@@ -80,6 +88,8 @@ export const EmailField = () => {
   };
 
   const currentUserId = currentUser?.id;
+  const shouldShowWorkspaceLimitTooltip =
+    !isEditing && isBlockedByWorkspaceLimit;
 
   return (
     <StyledContainer>
@@ -95,34 +105,54 @@ export const EmailField = () => {
         />
         {isEditing ? (
           <StyledActionWrapper key="editing">
-            <StyledActionButton
-              Icon={IconCheck}
-              variant="secondary"
-              position="left"
-              size="small"
-              onClick={handleSave}
-              disabled={isSaveDisabled}
-              type="button"
-            />
-            <StyledActionButton
-              Icon={IconX}
-              variant="secondary"
-              position="right"
-              size="small"
-              onClick={handleCancelEditing}
-              type="button"
-            />
+            <StyledActionButtonContainer>
+              <Button
+                Icon={IconCheck}
+                variant="secondary"
+                position="left"
+                size="medium"
+                onClick={handleSave}
+                disabled={isSaveDisabled}
+                type="button"
+              />
+            </StyledActionButtonContainer>
+            <StyledActionButtonContainer>
+              <Button
+                Icon={IconX}
+                variant="secondary"
+                position="right"
+                size="medium"
+                onClick={handleCancelEditing}
+                type="button"
+              />
+            </StyledActionButtonContainer>
           </StyledActionWrapper>
         ) : (
           <StyledActionWrapper key="view">
-            <StyledActionButton
-              Icon={IconPencil}
-              variant="secondary"
-              size="small"
-              onClick={handleStartEditing}
-              disabled={!canEdit}
-              type="button"
-            />
+            <StyledActionButtonContainer
+              id={
+                shouldShowWorkspaceLimitTooltip
+                  ? EMAIL_EDIT_DISABLED_TOOLTIP_ANCHOR_ID
+                  : undefined
+              }
+            >
+              <Button
+                Icon={IconPencil}
+                variant="secondary"
+                size="medium"
+                onClick={handleStartEditing}
+                disabled={!canEdit}
+                type="button"
+              />
+            </StyledActionButtonContainer>
+            {shouldShowWorkspaceLimitTooltip && (
+              <AppTooltip
+                anchorSelect={`#${EMAIL_EDIT_DISABLED_TOOLTIP_ANCHOR_ID}`}
+                content={t`You can't change your email because you belong to 2 or more workspaces.`}
+                delay={TooltipDelay.noDelay}
+                place="top"
+              />
+            )}
           </StyledActionWrapper>
         )}
       </StyledFieldRow>

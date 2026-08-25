@@ -1,5 +1,7 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 
+import { msg } from '@lingui/core/macro';
+import { isDefined } from 'twenty-shared/utils';
 import { z } from 'zod';
 
 import {
@@ -7,8 +9,12 @@ import {
   type UpdateOneResolverArgs,
 } from 'src/engine/api/graphql/workspace-resolver-builder/interfaces/workspace-resolvers-builder.interface';
 
-import { InjectObjectMetadataRepository } from 'src/engine/object-metadata-repository/object-metadata-repository.decorator';
-import { TwentyORMGlobalManager } from 'src/engine/twenty-orm/twenty-orm-global.manager';
+import {
+  CommonQueryRunnerException,
+  CommonQueryRunnerExceptionCode,
+} from 'src/engine/api/common/common-query-runners/errors/common-query-runner.exception';
+import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
+import { buildSystemAuthContext } from 'src/engine/twenty-orm/utils/build-system-auth-context.util';
 import { isDomain } from 'src/engine/utils/is-domain';
 import { BlocklistRepository } from 'src/modules/blocklist/repositories/blocklist.repository';
 import { BlocklistWorkspaceEntity } from 'src/modules/blocklist/standard-objects/blocklist.workspace-entity';
@@ -26,9 +32,8 @@ export type BlocklistItem = Omit<
 @Injectable()
 export class BlocklistValidationService {
   constructor(
-    @InjectObjectMetadataRepository(BlocklistWorkspaceEntity)
     private readonly blocklistRepository: BlocklistRepository,
-    private readonly twentyORMGlobalManager: TwentyORMGlobalManager,
+    private readonly workspaceOrmManager: WorkspaceOrmManager,
   ) {}
 
   public async validateBlocklistForCreateMany(
@@ -67,13 +72,21 @@ export class BlocklistValidationService {
 
     for (const handle of blocklist.map((item) => item.handle)) {
       if (!handle) {
-        throw new BadRequestException('Blocklist handle is required');
+        throw new CommonQueryRunnerException(
+          'Blocklist handle is required',
+          CommonQueryRunnerExceptionCode.BAD_REQUEST,
+          { userFriendlyMessage: msg`Blocklist handle is required.` },
+        );
       }
 
       const result = emailOrDomainSchema.safeParse(handle);
 
       if (!result.success) {
-        throw new BadRequestException(result.error.issues[0].message);
+        throw new CommonQueryRunnerException(
+          result.error.issues[0].message,
+          CommonQueryRunnerExceptionCode.BAD_REQUEST,
+          { userFriendlyMessage: msg`Invalid email or domain.` },
+        );
       }
     }
   }
@@ -83,15 +96,36 @@ export class BlocklistValidationService {
     userId: string,
     workspaceId: string,
   ) {
-    const workspaceMemberRepository =
-      await this.twentyORMGlobalManager.getRepositoryForWorkspace(
-        workspaceId,
-        WorkspaceMemberWorkspaceEntity,
-      );
+    const authContext = buildSystemAuthContext(workspaceId);
+
     const currentWorkspaceMember =
-      await workspaceMemberRepository.findOneByOrFail({
-        userId,
-      });
+      await this.workspaceOrmManager.executeInWorkspaceContext(async () => {
+        const workspaceMemberRepository =
+          this.workspaceOrmManager.getRepository(
+            WorkspaceMemberWorkspaceEntity,
+            { shouldBypassPermissionChecks: true },
+          );
+
+        return workspaceMemberRepository.findOneByOrFail({
+          userId,
+        });
+      }, authContext);
+
+    if (
+      payload.data.some(
+        (item) =>
+          isDefined(item.workspaceMemberId) &&
+          item.workspaceMemberId !== currentWorkspaceMember.id,
+      )
+    ) {
+      throw new CommonQueryRunnerException(
+        'Cannot create blocklist entry for another workspace member',
+        CommonQueryRunnerExceptionCode.BAD_REQUEST,
+        {
+          userFriendlyMessage: msg`Cannot create blocklist entry for another workspace member.`,
+        },
+      );
+    }
 
     const currentBlocklist =
       await this.blocklistRepository.getByWorkspaceMemberId(
@@ -106,7 +140,11 @@ export class BlocklistValidationService {
     if (
       payload.data.some((item) => currentBlocklistHandles.includes(item.handle))
     ) {
-      throw new BadRequestException('Blocklist handle already exists');
+      throw new CommonQueryRunnerException(
+        'Blocklist handle already exists',
+        CommonQueryRunnerExceptionCode.BAD_REQUEST,
+        { userFriendlyMessage: msg`Blocklist handle already exists.` },
+      );
     }
   }
 
@@ -121,27 +159,39 @@ export class BlocklistValidationService {
     );
 
     if (!existingRecord) {
-      throw new BadRequestException('Blocklist item not found');
+      throw new CommonQueryRunnerException(
+        'Blocklist item not found',
+        CommonQueryRunnerExceptionCode.RECORD_NOT_FOUND,
+        { userFriendlyMessage: msg`Blocklist item not found.` },
+      );
     }
 
     if (existingRecord.workspaceMemberId !== payload.data.workspaceMemberId) {
-      throw new BadRequestException('Workspace member cannot be updated');
+      throw new CommonQueryRunnerException(
+        'Workspace member cannot be updated',
+        CommonQueryRunnerExceptionCode.BAD_REQUEST,
+        { userFriendlyMessage: msg`Workspace member cannot be updated.` },
+      );
     }
 
     if (existingRecord.handle === payload.data.handle) {
       return;
     }
 
-    const workspaceMemberRepository =
-      await this.twentyORMGlobalManager.getRepositoryForWorkspace(
-        workspaceId,
-        WorkspaceMemberWorkspaceEntity,
-      );
+    const authContext = buildSystemAuthContext(workspaceId);
 
     const currentWorkspaceMember =
-      await workspaceMemberRepository.findOneByOrFail({
-        userId,
-      });
+      await this.workspaceOrmManager.executeInWorkspaceContext(async () => {
+        const workspaceMemberRepository =
+          this.workspaceOrmManager.getRepository(
+            WorkspaceMemberWorkspaceEntity,
+            { shouldBypassPermissionChecks: true },
+          );
+
+        return workspaceMemberRepository.findOneByOrFail({
+          userId,
+        });
+      }, authContext);
 
     const currentBlocklist =
       await this.blocklistRepository.getByWorkspaceMemberId(
@@ -154,7 +204,11 @@ export class BlocklistValidationService {
       .map((blocklist) => blocklist.handle);
 
     if (currentBlocklistHandles.includes(payload.data.handle)) {
-      throw new BadRequestException('Blocklist handle already exists');
+      throw new CommonQueryRunnerException(
+        'Blocklist handle already exists',
+        CommonQueryRunnerExceptionCode.BAD_REQUEST,
+        { userFriendlyMessage: msg`Blocklist handle already exists.` },
+      );
     }
   }
 }

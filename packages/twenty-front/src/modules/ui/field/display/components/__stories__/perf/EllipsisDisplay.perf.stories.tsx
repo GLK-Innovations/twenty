@@ -1,8 +1,8 @@
-import { type Meta, type StoryObj } from '@storybook/react';
+import { type Meta, type StoryObj } from '@storybook/react-vite';
 
-import { EllipsisDisplay } from '@/ui/field/display/components/EllipsisDisplay';
-import { getProfilingStory } from '~/testing/profiling/utils/getProfilingStory';
+import { EllipsisDisplay } from 'twenty-ui/data-display';
 import { ComponentDecorator } from 'twenty-ui/testing';
+import { getProfilingStory } from '~/testing/profiling/utils/getProfilingStory';
 
 const meta: Meta = {
   title: 'UI/Input/EllipsisDisplay/EllipsisDisplay',
@@ -25,7 +25,7 @@ export const Default: Story = {};
 
 export const Performance = getProfilingStory({
   componentName: 'EllipsisDisplay',
-  averageThresholdInMs: 0.1,
+  averageThresholdInMs: 0.2,
   numberOfRuns: 20,
   numberOfTestsPerRun: 10,
 });

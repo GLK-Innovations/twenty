@@ -1,4 +1,3 @@
-import { type I18n } from '@lingui/core';
 import { assertUnreachable } from 'twenty-shared/utils';
 
 import {
@@ -12,15 +11,12 @@ import {
   FieldMetadataExceptionCode,
 } from 'src/engine/metadata-modules/field-metadata/field-metadata.exception';
 import { InvalidMetadataException } from 'src/engine/metadata-modules/utils/exceptions/invalid-metadata.exception';
-import { WorkspaceMigrationBuilderExceptionV2 } from 'src/engine/workspace-manager/workspace-migration-v2/exceptions/workspace-migration-builder-exception-v2';
-import { workspaceMigrationBuilderExceptionV2Formatter } from 'src/engine/workspace-manager/workspace-migration-v2/interceptors/workspace-migration-builder-exception-v2-formatter';
+import { WorkspaceMigrationBuilderException } from 'src/engine/workspace-manager/workspace-migration/exceptions/workspace-migration-builder-exception';
+import { workspaceMigrationBuilderGraphqlApiExceptionHandler } from 'src/engine/workspace-manager/workspace-migration/interceptors/utils/workspace-migration-builder-graphql-api-exception-handler.util';
 
-export const fieldMetadataGraphqlApiExceptionHandler = (
-  error: Error,
-  i18n: I18n,
-) => {
-  if (error instanceof WorkspaceMigrationBuilderExceptionV2) {
-    workspaceMigrationBuilderExceptionV2Formatter(error, i18n);
+export const fieldMetadataGraphqlApiExceptionHandler = (error: unknown) => {
+  if (error instanceof WorkspaceMigrationBuilderException) {
+    return workspaceMigrationBuilderGraphqlApiExceptionHandler(error);
   }
 
   if (error instanceof InvalidMetadataException) {
@@ -38,6 +34,7 @@ export const fieldMetadataGraphqlApiExceptionHandler = (
       case FieldMetadataExceptionCode.FIELD_ALREADY_EXISTS:
         throw new ConflictError(error);
       case FieldMetadataExceptionCode.OBJECT_METADATA_NOT_FOUND:
+      case FieldMetadataExceptionCode.APPLICATION_NOT_FOUND:
       case FieldMetadataExceptionCode.INTERNAL_SERVER_ERROR:
       case FieldMetadataExceptionCode.FIELD_METADATA_RELATION_NOT_ENABLED:
       case FieldMetadataExceptionCode.FIELD_METADATA_RELATION_MALFORMED:

@@ -1,19 +1,28 @@
-import { Field, ObjectType, registerEnumType } from '@nestjs/graphql';
+import {
+  Field,
+  HideField,
+  Int,
+  ObjectType,
+  registerEnumType,
+} from '@nestjs/graphql';
+import {
+  AggregateOperations,
+  ViewCalendarLayout,
+  ViewOpenRecordIn,
+  ViewType,
+  ViewVisibility,
+  ViewKey,
+} from 'twenty-shared/types';
 
-import { IDField } from '@ptc-org/nestjs-query-graphql';
-
-import { AggregateOperations } from 'src/engine/api/graphql/graphql-query-runner/constants/aggregate-operations.constant';
 import { UUIDScalarType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/scalars';
+import { ViewFieldGroupDTO } from 'src/engine/metadata-modules/view-field-group/dtos/view-field-group.dto';
+import { type ViewOverrides } from 'src/engine/metadata-modules/view/entities/view.entity';
 import { ViewFieldDTO } from 'src/engine/metadata-modules/view-field/dtos/view-field.dto';
 import { ViewFilterGroupDTO } from 'src/engine/metadata-modules/view-filter-group/dtos/view-filter-group.dto';
 import { ViewFilterDTO } from 'src/engine/metadata-modules/view-filter/dtos/view-filter.dto';
 import { ViewGroupDTO } from 'src/engine/metadata-modules/view-group/dtos/view-group.dto';
 import { ViewSortDTO } from 'src/engine/metadata-modules/view-sort/dtos/view-sort.dto';
-import { ViewCalendarLayout } from 'src/engine/metadata-modules/view/enums/view-calendar-layout.enum';
-import { ViewKey } from 'src/engine/metadata-modules/view/enums/view-key.enum';
-import { ViewOpenRecordIn } from 'src/engine/metadata-modules/view/enums/view-open-record-in';
-import { ViewType } from 'src/engine/metadata-modules/view/enums/view-type.enum';
-import { ViewVisibility } from 'src/engine/metadata-modules/view/enums/view-visibility.enum';
+import { VIEW_OPEN_RECORD_IN_DEPRECATION } from 'src/engine/metadata-modules/view/constants/view-open-record-in-deprecation.constant';
 
 registerEnumType(ViewOpenRecordIn, { name: 'ViewOpenRecordIn' });
 registerEnumType(ViewType, { name: 'ViewType' });
@@ -21,10 +30,19 @@ registerEnumType(ViewKey, { name: 'ViewKey' });
 registerEnumType(ViewCalendarLayout, { name: 'ViewCalendarLayout' });
 registerEnumType(ViewVisibility, { name: 'ViewVisibility' });
 
-@ObjectType('CoreView')
+@ObjectType('View')
 export class ViewDTO {
-  @IDField(() => UUIDScalarType)
+  @Field(() => UUIDScalarType)
   id: string;
+
+  @Field(() => UUIDScalarType, { nullable: false })
+  universalIdentifier: string;
+
+  @Field(() => UUIDScalarType, { nullable: false })
+  applicationId: string;
+
+  @Field({ nullable: false })
+  isSystemSideEffect: boolean;
 
   @Field({ nullable: false })
   name: string;
@@ -53,6 +71,7 @@ export class ViewDTO {
   @Field(() => ViewOpenRecordIn, {
     nullable: false,
     defaultValue: ViewOpenRecordIn.SIDE_PANEL,
+    deprecationReason: VIEW_OPEN_RECORD_IN_DEPRECATION,
   })
   openRecordIn: ViewOpenRecordIn;
 
@@ -63,7 +82,19 @@ export class ViewDTO {
   kanbanAggregateOperationFieldMetadataId?: string | null;
 
   @Field(() => UUIDScalarType, { nullable: true })
+  mainGroupByFieldMetadataId?: string | null;
+
+  @Field({ nullable: false, defaultValue: false })
+  shouldHideEmptyGroups: boolean;
+
+  @Field(() => Int, { nullable: true })
+  kanbanColumnWidth?: number | null;
+
+  @Field(() => UUIDScalarType, { nullable: true })
   calendarFieldMetadataId?: string | null;
+
+  @Field(() => UUIDScalarType, { nullable: true })
+  calendarEndFieldMetadataId?: string | null;
 
   @Field(() => UUIDScalarType, { nullable: false })
   workspaceId: string;
@@ -98,6 +129,9 @@ export class ViewDTO {
   @Field(() => [ViewGroupDTO])
   viewGroups?: ViewGroupDTO[];
 
+  @Field(() => [ViewFieldGroupDTO])
+  viewFieldGroups?: ViewFieldGroupDTO[];
+
   @Field(() => ViewVisibility, {
     nullable: false,
   })
@@ -105,4 +139,10 @@ export class ViewDTO {
 
   @Field(() => UUIDScalarType, { nullable: true })
   createdByUserWorkspaceId?: string | null;
+
+  @Field(() => Boolean, { nullable: false })
+  isActive: boolean;
+
+  @HideField()
+  overrides?: ViewOverrides | null;
 }

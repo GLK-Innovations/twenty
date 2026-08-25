@@ -1,4 +1,3 @@
-import { SidePanelHeader } from '@/command-menu/components/SidePanelHeader';
 import { FormDateTimeFieldInput } from '@/object-record/record-field/ui/form-types/components/FormDateTimeFieldInput';
 import { FormNumberFieldInput } from '@/object-record/record-field/ui/form-types/components/FormNumberFieldInput';
 import { Select } from '@/ui/input/components/Select';
@@ -6,16 +5,13 @@ import { GenericDropdownContentWidth } from '@/ui/layout/dropdown/constants/Gene
 import { type WorkflowDelayAction } from '@/workflow/types/Workflow';
 import { WorkflowStepBody } from '@/workflow/workflow-steps/components/WorkflowStepBody';
 import { WorkflowStepFooter } from '@/workflow/workflow-steps/components/WorkflowStepFooter';
-import { DELAY_ACTION } from '@/workflow/workflow-steps/workflow-actions/constants/actions/DelayAction';
-import { useWorkflowActionHeader } from '@/workflow/workflow-steps/workflow-actions/hooks/useWorkflowActionHeader';
 import { WorkflowVariablePicker } from '@/workflow/workflow-variables/components/WorkflowVariablePicker';
 import { t } from '@lingui/core/macro';
-import {
-  HorizontalSeparator,
-  IconCalendar,
-  IconHourglassHigh,
-} from 'twenty-ui/display';
+import { useEffect, useState } from 'react';
+import { IconCalendar, IconHourglassHigh } from 'twenty-ui/icon';
+import { HorizontalSeparator } from 'twenty-ui/layout';
 import { type SelectOption } from 'twenty-ui/input';
+
 type WorkflowEditActionDelayProps = {
   action: WorkflowDelayAction;
   actionOptions:
@@ -32,11 +28,43 @@ export const WorkflowEditActionDelay = ({
   action,
   actionOptions,
 }: WorkflowEditActionDelayProps) => {
-  const { headerTitle, headerIcon, headerIconColor, headerType, getIcon } =
-    useWorkflowActionHeader({
-      action,
-      defaultTitle: DELAY_ACTION.defaultLabel,
+  const [localDuration, setLocalDuration] = useState<{
+    days?: number | string;
+    hours?: number | string;
+    minutes?: number | string;
+    seconds?: number | string;
+  }>(() => ({
+    days: action.settings.input.duration?.days,
+    hours: action.settings.input.duration?.hours,
+    minutes: action.settings.input.duration?.minutes,
+    seconds: action.settings.input.duration?.seconds,
+  }));
+
+  useEffect(() => {
+    if (action.settings.input.delayType !== 'DURATION') {
+      setLocalDuration({
+        days: undefined,
+        hours: undefined,
+        minutes: undefined,
+        seconds: undefined,
+      });
+
+      return;
+    }
+
+    setLocalDuration({
+      days: action.settings.input.duration?.days,
+      hours: action.settings.input.duration?.hours,
+      minutes: action.settings.input.duration?.minutes,
+      seconds: action.settings.input.duration?.seconds,
     });
+  }, [
+    action.settings.input.delayType,
+    action.settings.input.duration?.days,
+    action.settings.input.duration?.hours,
+    action.settings.input.duration?.minutes,
+    action.settings.input.duration?.seconds,
+  ]);
 
   const delayOptions: Array<SelectOption<'SCHEDULED_DATE' | 'DURATION'>> = [
     {
@@ -102,10 +130,21 @@ export const WorkflowEditActionDelay = ({
     });
   };
 
-  const handleDurationChange = (
+  const handleDurationDraftChange = (
     field: 'days' | 'hours' | 'minutes' | 'seconds',
     value: number | string | null,
   ) => {
+    if (actionOptions.readonly === true) {
+      return;
+    }
+
+    setLocalDuration((previousDuration) => ({
+      ...previousDuration,
+      [field]: value ?? undefined,
+    }));
+  };
+
+  const handleDurationCommit = () => {
     if (actionOptions.readonly === true) {
       return;
     }
@@ -117,50 +156,18 @@ export const WorkflowEditActionDelay = ({
         input: {
           delayType: 'DURATION',
           duration: {
-            days:
-              field === 'days'
-                ? (value ?? undefined)
-                : action.settings.input.duration?.days,
-            hours:
-              field === 'hours'
-                ? (value ?? undefined)
-                : action.settings.input.duration?.hours,
-            minutes:
-              field === 'minutes'
-                ? (value ?? undefined)
-                : action.settings.input.duration?.minutes,
-            seconds:
-              field === 'seconds'
-                ? (value ?? undefined)
-                : action.settings.input.duration?.seconds,
+            days: localDuration.days,
+            hours: localDuration.hours,
+            minutes: localDuration.minutes,
+            seconds: localDuration.seconds,
           },
         },
       },
     });
   };
 
-  const HeaderIcon = getIcon(headerIcon ?? 'IconPlayerPause');
-
   return (
     <>
-      <SidePanelHeader
-        initialTitle={headerTitle}
-        Icon={HeaderIcon}
-        iconColor={headerIconColor}
-        headerType={headerType}
-        onTitleChange={(newTitle: string) => {
-          if (actionOptions.readonly === true) {
-            return;
-          }
-
-          actionOptions.onActionUpdate({
-            ...action,
-            name: newTitle,
-          });
-        }}
-        iconTooltip={DELAY_ACTION.defaultLabel}
-      />
-
       <WorkflowStepBody>
         <Select
           dropdownId="workflow-edit-action-delay-type"
@@ -180,42 +187,46 @@ export const WorkflowEditActionDelay = ({
             onChange={handleDateTimeChange}
             readonly={actionOptions.readonly}
             VariablePicker={WorkflowVariablePicker}
-            placeholder="Select a date"
+            placeholder={t`Select a date`}
           />
         )}
         {action.settings.input.delayType === 'DURATION' && (
           <>
             <FormNumberFieldInput
               label={t`Days`}
-              defaultValue={action.settings.input.duration?.days}
-              onChange={(value) => handleDurationChange('days', value)}
+              defaultValue={localDuration.days}
+              onChange={(value) => handleDurationDraftChange('days', value)}
+              onBlur={handleDurationCommit}
               readonly={actionOptions.readonly}
               VariablePicker={WorkflowVariablePicker}
-              placeholder="0"
+              placeholder={t`0`}
             />
             <FormNumberFieldInput
               label={t`Hours`}
-              defaultValue={action.settings.input.duration?.hours}
-              onChange={(value) => handleDurationChange('hours', value)}
+              defaultValue={localDuration.hours}
+              onChange={(value) => handleDurationDraftChange('hours', value)}
+              onBlur={handleDurationCommit}
               readonly={actionOptions.readonly}
               VariablePicker={WorkflowVariablePicker}
-              placeholder="0"
+              placeholder={t`0`}
             />
             <FormNumberFieldInput
               label={t`Minutes`}
-              defaultValue={action.settings.input.duration?.minutes}
-              onChange={(value) => handleDurationChange('minutes', value)}
+              defaultValue={localDuration.minutes}
+              onChange={(value) => handleDurationDraftChange('minutes', value)}
+              onBlur={handleDurationCommit}
               readonly={actionOptions.readonly}
               VariablePicker={WorkflowVariablePicker}
-              placeholder="0"
+              placeholder={t`0`}
             />
             <FormNumberFieldInput
               label={t`Seconds`}
-              defaultValue={action.settings.input.duration?.seconds}
-              onChange={(value) => handleDurationChange('seconds', value)}
+              defaultValue={localDuration.seconds}
+              onChange={(value) => handleDurationDraftChange('seconds', value)}
+              onBlur={handleDurationCommit}
               readonly={actionOptions.readonly}
               VariablePicker={WorkflowVariablePicker}
-              placeholder="0"
+              placeholder={t`0`}
             />
           </>
         )}

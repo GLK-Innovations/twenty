@@ -5,50 +5,95 @@ import { FieldMetadataType, NumberDataType } from 'twenty-shared/types';
 import { objectMetadataItemMock } from 'src/engine/api/__mocks__/object-metadata-item.mock';
 import { computeSchemaComponents } from 'src/engine/core-modules/open-api/utils/components.utils';
 import { type FieldMetadataEntity } from 'src/engine/metadata-modules/field-metadata/field-metadata.entity';
-import { type ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
+import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
 
 describe('computeSchemaComponents', () => {
   faker.seed(1);
   it('should compute schema components', () => {
+    const flatObjectMetadata: FlatObjectMetadata = {
+      ...objectMetadataItemMock,
+      universalIdentifier: 'objectName',
+      fieldIds: objectMetadataItemMock.fields.map((f) => f.id),
+    } as any;
+
+    const flatFieldMetadataMaps = {
+      byUniversalIdentifier: Object.fromEntries(
+        objectMetadataItemMock.fields.map((f) => [
+          f.universalIdentifier || f.id,
+          f as any,
+        ]),
+      ),
+      universalIdentifierById: Object.fromEntries(
+        objectMetadataItemMock.fields.map((f) => [
+          f.id,
+          f.universalIdentifier || f.id,
+        ]),
+      ),
+      universalIdentifiersByApplicationId: {},
+    };
+
+    const relationTargetObjectMetadata: FlatObjectMetadata = {
+      id: 'relationTargetObjectId',
+      nameSingular: 'relationTargetObject',
+      namePlural: 'relationTargetObjects',
+      universalIdentifier: 'relationTargetObject',
+      fieldIds: [],
+    } as any;
+
+    const flatObjectMetadataMaps = {
+      byUniversalIdentifier: {
+        [flatObjectMetadata.universalIdentifier as string]: flatObjectMetadata,
+        [relationTargetObjectMetadata.universalIdentifier as string]:
+          relationTargetObjectMetadata,
+      },
+      universalIdentifierById: {
+        [flatObjectMetadata.id]:
+          flatObjectMetadata.universalIdentifier as string,
+        [relationTargetObjectMetadata.id]:
+          relationTargetObjectMetadata.universalIdentifier as string,
+      },
+      universalIdentifiersByApplicationId: {},
+    };
+
     expect(
-      computeSchemaComponents([
-        objectMetadataItemMock,
-      ] as ObjectMetadataEntity[]),
+      computeSchemaComponents(
+        [flatObjectMetadata],
+        flatObjectMetadataMaps,
+        flatFieldMetadataMaps,
+      ),
     ).toMatchInlineSnapshot(`
 {
   "ObjectName": {
     "description": "Object description",
     "example": {
       "fieldCurrency": {
-        "amountMicros": 284000000,
+        "amountMicros": "773000000",
         "currencyCode": "EUR",
       },
       "fieldEmails": {
         "additionalEmails": null,
-        "primaryEmail": "mina.gutmann9@hotmail.com",
+        "primaryEmail": "clair.runte69@yahoo.com",
       },
       "fieldFullName": {
-        "firstName": "Shad",
-        "lastName": "Osinski",
+        "firstName": "Maxie",
+        "lastName": "Davis",
       },
       "fieldLinks": {
-        "additionalLinks": [],
         "primaryLinkLabel": "",
-        "primaryLinkUrl": "https://narrow-help.net/",
+        "primaryLinkUrl": "https://frivolous-lox.info/",
+        "secondaryLinks": [],
       },
       "fieldMultiSelect": [
         "OPTION_1",
       ],
-      "fieldNumber": 346.2151663160047,
+      "fieldNumber": 352.6893054576472,
       "fieldPhones": {
         "additionalPhones": [],
         "primaryPhoneCallingCode": "+33",
         "primaryPhoneCountryCode": "FR",
         "primaryPhoneNumber": "06 10 20 30 40",
       },
-      "fieldSelect": [
-        "OPTION_1",
-      ],
+      "fieldSelect": "OPTION_1",
     },
     "properties": {
       "fieldActor": {
@@ -214,7 +259,18 @@ describe('computeSchemaComponents', () => {
         "properties": {
           "additionalPhones": {
             "items": {
-              "type": "string",
+              "properties": {
+                "callingCode": {
+                  "type": "string",
+                },
+                "countryCode": {
+                  "type": "string",
+                },
+                "number": {
+                  "type": "string",
+                },
+              },
+              "type": "object",
             },
             "type": "array",
           },
@@ -248,10 +304,6 @@ describe('computeSchemaComponents', () => {
       },
       "fieldRelationId": {
         "format": "uuid",
-        "type": "string",
-      },
-      "fieldRichText": {
-        "description": "Default field metadata entity description",
         "type": "string",
       },
       "fieldSelect": {
@@ -450,7 +502,18 @@ describe('computeSchemaComponents', () => {
         "properties": {
           "additionalPhones": {
             "items": {
-              "type": "string",
+              "properties": {
+                "callingCode": {
+                  "type": "string",
+                },
+                "countryCode": {
+                  "type": "string",
+                },
+                "number": {
+                  "type": "string",
+                },
+              },
+              "type": "object",
             },
             "type": "array",
           },
@@ -495,10 +558,6 @@ describe('computeSchemaComponents', () => {
         "format": "uuid",
         "type": "string",
       },
-      "fieldRichText": {
-        "description": "Default field metadata entity description",
-        "type": "string",
-      },
       "fieldSelect": {
         "description": "Default field metadata entity description",
         "enum": [
@@ -523,35 +582,33 @@ describe('computeSchemaComponents', () => {
     "description": "Object description",
     "example": {
       "fieldCurrency": {
-        "amountMicros": 253000000,
+        "amountMicros": "773000000",
         "currencyCode": "EUR",
       },
       "fieldEmails": {
         "additionalEmails": null,
-        "primaryEmail": "keegan_donnelly96@hotmail.com",
+        "primaryEmail": "clair.runte69@yahoo.com",
       },
       "fieldFullName": {
-        "firstName": "Shad",
-        "lastName": "Jones",
+        "firstName": "Maxie",
+        "lastName": "Davis",
       },
       "fieldLinks": {
-        "additionalLinks": [],
         "primaryLinkLabel": "",
-        "primaryLinkUrl": "https://unlawful-blowgun.biz",
+        "primaryLinkUrl": "https://frivolous-lox.info/",
+        "secondaryLinks": [],
       },
       "fieldMultiSelect": [
         "OPTION_1",
       ],
-      "fieldNumber": 692.6302930536448,
+      "fieldNumber": 352.6893054576472,
       "fieldPhones": {
         "additionalPhones": [],
         "primaryPhoneCallingCode": "+33",
         "primaryPhoneCountryCode": "FR",
         "primaryPhoneNumber": "06 10 20 30 40",
       },
-      "fieldSelect": [
-        "OPTION_1",
-      ],
+      "fieldSelect": "OPTION_1",
     },
     "properties": {
       "fieldActor": {
@@ -717,7 +774,18 @@ describe('computeSchemaComponents', () => {
         "properties": {
           "additionalPhones": {
             "items": {
-              "type": "string",
+              "properties": {
+                "callingCode": {
+                  "type": "string",
+                },
+                "countryCode": {
+                  "type": "string",
+                },
+                "number": {
+                  "type": "string",
+                },
+              },
+              "type": "object",
             },
             "type": "array",
           },
@@ -753,10 +821,6 @@ describe('computeSchemaComponents', () => {
         "format": "uuid",
         "type": "string",
       },
-      "fieldRichText": {
-        "description": "Default field metadata entity description",
-        "type": "string",
-      },
       "fieldSelect": {
         "description": "Default field metadata entity description",
         "enum": [
@@ -785,7 +849,7 @@ describe('computeSchemaComponents', () => {
     Pick<
       FieldMetadataEntity<FieldMetadataType.NUMBER>,
       'id' | 'name' | 'type' | 'isNullable' | 'defaultValue' | 'settings'
-    >
+    > & { universalIdentifier: string }
   >[] = [
     {
       title: 'Integer dataType with decimals',
@@ -796,6 +860,7 @@ describe('computeSchemaComponents', () => {
         isNullable: false,
         defaultValue: null,
         settings: { type: 'number', decimals: 1, dataType: NumberDataType.INT },
+        universalIdentifier: 'number1',
       },
     },
     {
@@ -807,6 +872,7 @@ describe('computeSchemaComponents', () => {
         isNullable: false,
         defaultValue: null,
         settings: { type: 'number', dataType: NumberDataType.FLOAT },
+        universalIdentifier: 'number2',
       },
     },
     {
@@ -818,22 +884,48 @@ describe('computeSchemaComponents', () => {
         isNullable: false,
         defaultValue: null,
         settings: { type: 'number', decimals: 0, dataType: NumberDataType.INT },
+        universalIdentifier: 'number3',
       },
     },
   ];
 
   it.each(testsCases)('$title', ({ context: field }) => {
+    const flatObjectMetadata: FlatObjectMetadata = {
+      targetTableName: 'testingObject',
+      id: 'mockObjectId',
+      nameSingular: 'objectName',
+      namePlural: 'objectsName',
+      universalIdentifier: 'objectName',
+      fieldIds: [field.id],
+    } as any;
+
+    const flatFieldMetadataMaps = {
+      byUniversalIdentifier: {
+        [field.universalIdentifier || field.id]: field as any,
+      },
+      universalIdentifierById: {
+        [field.id]: field.universalIdentifier || field.id,
+      },
+      universalIdentifiersByApplicationId: {},
+    };
+
+    const flatObjectMetadataMaps = {
+      byUniversalIdentifier: {
+        [flatObjectMetadata.universalIdentifier as string]: flatObjectMetadata,
+      },
+      universalIdentifierById: {
+        [flatObjectMetadata.id]:
+          flatObjectMetadata.universalIdentifier as string,
+      },
+      universalIdentifiersByApplicationId: {},
+    };
+
     expect(
-      computeSchemaComponents([
-        {
-          targetTableName: 'testingObject',
-          id: 'mockObjectId',
-          nameSingular: 'objectName',
-          namePlural: 'objectsName',
-          //@ts-expect-error Passing partial FieldMetadataEntity array
-          fields: [field],
-        },
-      ]),
+      computeSchemaComponents(
+        [flatObjectMetadata],
+        flatObjectMetadataMaps,
+        flatFieldMetadataMaps,
+      ),
     ).toMatchSnapshot();
   });
 });

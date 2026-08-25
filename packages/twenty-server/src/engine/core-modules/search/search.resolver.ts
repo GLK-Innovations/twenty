@@ -1,28 +1,36 @@
 import { UseFilters, UseGuards, UsePipes } from '@nestjs/common';
-import { Args, Query, Resolver } from '@nestjs/graphql';
+import { Args, Context, Query } from '@nestjs/graphql';
 
 import { isDefined } from 'twenty-shared/utils';
 
+import { CoreResolver } from 'src/engine/api/graphql/graphql-config/decorators/core-resolver.decorator';
 import { PreventNestToAutoLogGraphqlErrorsFilter } from 'src/engine/core-modules/graphql/filters/prevent-nest-to-auto-log-graphql-errors.filter';
 import { ResolverValidationPipe } from 'src/engine/core-modules/graphql/pipes/resolver-validation.pipe';
 import { SearchArgs } from 'src/engine/core-modules/search/dtos/search-args';
 import { SearchResultConnectionDTO } from 'src/engine/core-modules/search/dtos/search-result-connection.dto';
 import { SearchApiExceptionFilter } from 'src/engine/core-modules/search/filters/search-api-exception.filter';
 import { SearchService } from 'src/engine/core-modules/search/services/search.service';
+import { type I18nContext } from 'src/engine/core-modules/i18n/types/i18n-context.type';
 import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
+import { type IDataloaders } from 'src/engine/dataloaders/dataloader.interface';
 import { AuthWorkspace } from 'src/engine/decorators/auth/auth-workspace.decorator';
 import { CustomPermissionGuard } from 'src/engine/guards/custom-permission.guard';
 import { WorkspaceAuthGuard } from 'src/engine/guards/workspace-auth.guard';
-import { WorkspaceCacheStorageService } from 'src/engine/workspace-cache-storage/workspace-cache-storage.service';
+import { WorkspaceManyOrAllFlatEntityMapsCacheService } from 'src/engine/metadata-modules/flat-entity/services/workspace-many-or-all-flat-entity-maps-cache.service';
+import { PermissionsGraphqlApiExceptionFilter } from 'src/engine/metadata-modules/permissions/utils/permissions-graphql-api-exception.filter';
 
-@Resolver()
-@UseFilters(SearchApiExceptionFilter, PreventNestToAutoLogGraphqlErrorsFilter)
+@CoreResolver()
+@UseFilters(
+  SearchApiExceptionFilter,
+  PermissionsGraphqlApiExceptionFilter,
+  PreventNestToAutoLogGraphqlErrorsFilter,
+)
 @UsePipes(ResolverValidationPipe)
 @UseGuards(WorkspaceAuthGuard, CustomPermissionGuard)
 export class SearchResolver {
   constructor(
     private readonly searchService: SearchService,
-    private readonly workspaceCacheStorageService: WorkspaceCacheStorageService,
+    private readonly workspaceManyOrAllFlatEntityMapsCacheService: WorkspaceManyOrAllFlatEntityMapsCacheService,
   ) {}
 
   @Query(() => SearchResultConnectionDTO)
@@ -37,24 +45,31 @@ export class SearchResolver {
       excludedObjectNameSingulars,
       after,
     }: SearchArgs,
+    @Context() context: { loaders: IDataloaders } & I18nContext,
   ) {
-    const objectMetadataMaps =
-      await this.workspaceCacheStorageService.getObjectMetadataMapsOrThrow(
-        workspace.id,
+    const { flatObjectMetadataMaps, flatFieldMetadataMaps } =
+      await this.workspaceManyOrAllFlatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+        {
+          workspaceId: workspace.id,
+          flatMapsKeys: ['flatObjectMetadataMaps', 'flatFieldMetadataMaps'],
+        },
       );
+
+    const flatObjectMetadatas = Object.values(
+      flatObjectMetadataMaps.byUniversalIdentifier,
+    ).filter(isDefined);
 
     const filteredObjectMetadataItems =
       this.searchService.filterObjectMetadataItems({
-        objectMetadataItemWithFieldMaps: Object.values(
-          objectMetadataMaps.byId,
-        ).filter(isDefined),
+        flatObjectMetadatas,
         includedObjectNameSingulars: includedObjectNameSingulars ?? [],
         excludedObjectNameSingulars: excludedObjectNameSingulars ?? [],
       });
 
     const allRecordsWithObjectMetadataItems =
       await this.searchService.getAllRecordsWithObjectMetadataItems({
-        objectMetadataItemWithFieldMaps: filteredObjectMetadataItems,
+        flatObjectMetadatas: filteredObjectMetadataItems,
+        flatFieldMetadataMaps,
         searchInput,
         limit,
         filter,
@@ -63,11 +78,14 @@ export class SearchResolver {
         after,
       });
 
-    return this.searchService.computeSearchObjectResults({
+    return await this.searchService.computeSearchObjectResults({
       recordsWithObjectMetadataItems: allRecordsWithObjectMetadataItems,
+      flatFieldMetadataMaps,
       workspaceId: workspace.id,
       limit,
       after,
+      loaders: context.loaders,
+      locale: context.req.locale,
     });
   }
 }

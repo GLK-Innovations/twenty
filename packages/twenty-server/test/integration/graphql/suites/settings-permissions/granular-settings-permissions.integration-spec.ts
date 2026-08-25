@@ -1,13 +1,16 @@
 import request from 'supertest';
 import { deleteOneRoleOperationFactory } from 'test/integration/graphql/utils/delete-one-role-operation-factory.util';
 import { destroyOneOperationFactory } from 'test/integration/graphql/utils/destroy-one-operation-factory.util';
-import { updateWorkspaceMemberRole } from 'test/integration/graphql/utils/update-workspace-member-role.util';
+import { createOneObjectMetadata } from 'test/integration/metadata/suites/object-metadata/utils/create-one-object-metadata.util';
 import { deleteOneObjectMetadata } from 'test/integration/metadata/suites/object-metadata/utils/delete-one-object-metadata.util';
 import { updateOneObjectMetadata } from 'test/integration/metadata/suites/object-metadata/utils/update-one-object-metadata.util';
-import { createOneObjectMetadata } from 'test/integration/metadata/suites/object-metadata/utils/create-one-object-metadata.util';
+import { findOneRoleByLabel } from 'test/integration/metadata/suites/role/utils/find-one-role-by-label.util';
+import { findRoles } from 'test/integration/metadata/suites/role/utils/find-roles.util';
+import { updateWorkspaceMemberRole } from 'test/integration/metadata/suites/role/utils/update-workspace-member-role.util';
+import { jestExpectToBeDefined } from 'test/utils/jest-expect-to-be-defined.util.test';
+import { PermissionFlagType } from 'twenty-shared/constants';
 
 import { ErrorCode } from 'src/engine/core-modules/graphql/utils/graphql-errors.util';
-import { PermissionFlagType } from 'src/engine/metadata-modules/permissions/constants/permission-flag-type.constants';
 import { PermissionsExceptionMessage } from 'src/engine/metadata-modules/permissions/permissions.exception';
 import { WORKSPACE_MEMBER_DATA_SEED_IDS } from 'src/engine/workspace-manager/dev-seeder/data/constants/workspace-member-data-seeds.constant';
 
@@ -19,28 +22,12 @@ describe('Granular settings permissions', () => {
   const createdObjectMetadataIds: string[] = [];
 
   beforeAll(async () => {
-    // Get the original Member role ID for restoration later
-    const getRolesQuery = {
-      query: `
-        query GetRoles {
-          getRoles {
-            id
-            label
-          }
-        }
-      `,
-    };
+    const memberRole = await findOneRoleByLabel({ label: 'Member' });
 
-    const rolesResponse = await client
-      .post('/graphql')
-      .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
-      .send(getRolesQuery);
-
-    originalMemberRoleId = rolesResponse.body.data.getRoles.find(
-      (role: any) => role.label === 'Member',
-    ).id;
+    originalMemberRoleId = memberRole.id;
 
     // Create a custom role with canUpdateAllSettings = false
+    // canUpdateAllObjectRecords must be true to allow creating records like workflows
     const createRoleQuery = {
       query: `
         mutation CreateOneRole {
@@ -49,7 +36,7 @@ describe('Granular settings permissions', () => {
             description: "Role for testing specific setting permissions"
             canUpdateAllSettings: false
             canReadAllObjectRecords: true
-            canUpdateAllObjectRecords: false
+            canUpdateAllObjectRecords: true
             canSoftDeleteAllObjectRecords: false
             canDestroyAllObjectRecords: false
           }) {
@@ -62,19 +49,18 @@ describe('Granular settings permissions', () => {
     };
 
     const createRoleResponse = await client
-      .post('/graphql')
+      .post('/metadata')
       .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
       .send(createRoleQuery);
 
     customRoleId = createRoleResponse.body.data.createOneRole.id;
 
-    // Assign specific setting permissions to the custom role
     const upsertSettingPermissionsQuery = {
       query: `
         mutation UpsertPermissionFlags {
           upsertPermissionFlags(upsertPermissionFlagsInput: {
             roleId: "${customRoleId}"
-            permissionFlagKeys: [${PermissionFlagType.DATA_MODEL}, ${PermissionFlagType.WORKSPACE}, ${PermissionFlagType.WORKFLOWS}]
+            permissionFlagKeys: ["${PermissionFlagType.DATA_MODEL}", "${PermissionFlagType.WORKSPACE}", "${PermissionFlagType.WORKFLOWS}"]
           }) {
             id
             flag
@@ -85,43 +71,32 @@ describe('Granular settings permissions', () => {
     };
 
     await client
-      .post('/graphql')
+      .post('/metadata')
       .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
       .send(upsertSettingPermissionsQuery);
 
-    // Assign the custom role to JONY (who uses APPLE_JONY_MEMBER_ACCESS_TOKEN)
     await updateWorkspaceMemberRole({
-      client,
-      roleId: customRoleId,
-      workspaceMemberId: WORKSPACE_MEMBER_DATA_SEED_IDS.JONY,
+      input: {
+        roleId: customRoleId,
+        workspaceMemberId: WORKSPACE_MEMBER_DATA_SEED_IDS.JONY,
+      },
+      expectToFail: false,
     });
   });
 
   afterAll(async () => {
-    // Restore JONY's original Member role
-    const restoreMemberRoleQuery = {
-      query: `
-        mutation UpdateWorkspaceMemberRole {
-          updateWorkspaceMemberRole(
-            workspaceMemberId: "${WORKSPACE_MEMBER_DATA_SEED_IDS.JONY}"
-            roleId: "${originalMemberRoleId}"
-          ) {
-            id
-          }
-        }
-      `,
-    };
+    await updateWorkspaceMemberRole({
+      input: {
+        workspaceMemberId: WORKSPACE_MEMBER_DATA_SEED_IDS.JONY,
+        roleId: originalMemberRoleId,
+      },
+      expectToFail: false,
+    });
 
-    await client
-      .post('/graphql')
-      .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
-      .send(restoreMemberRoleQuery);
-
-    // Delete the custom role
     const deleteRoleQuery = deleteOneRoleOperationFactory(customRoleId);
 
     await client
-      .post('/graphql')
+      .post('/metadata')
       .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
       .send(deleteRoleQuery);
 
@@ -173,7 +148,6 @@ describe('Granular settings permissions', () => {
 
   describe('Workspace Permissions', () => {
     it('should allow access to workspace operations when user has WORKSPACE setting permission', async () => {
-      // Test updating workspace settings (requires WORKSPACE permission)
       const updateWorkspaceQuery = {
         query: `
           mutation UpdateWorkspace {
@@ -188,7 +162,7 @@ describe('Granular settings permissions', () => {
       };
 
       const response = await client
-        .post('/graphql')
+        .post('/metadata')
         .set('Authorization', `Bearer ${APPLE_JONY_MEMBER_ACCESS_TOKEN}`)
         .send(updateWorkspaceQuery);
 
@@ -199,7 +173,6 @@ describe('Granular settings permissions', () => {
         'Updated Test Workspace',
       );
 
-      // Restore original workspace name
       const restoreWorkspaceQuery = {
         query: `
           mutation UpdateWorkspace {
@@ -214,7 +187,7 @@ describe('Granular settings permissions', () => {
       };
 
       await client
-        .post('/graphql')
+        .post('/metadata')
         .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
         .send(restoreWorkspaceQuery);
     });
@@ -222,7 +195,6 @@ describe('Granular settings permissions', () => {
 
   describe('Workflows Permissions', () => {
     it('should allow access to workflows operations when user has WORKFLOWS setting permission', async () => {
-      // Test creating a workflow (requires WORKFLOWS permission)
       const createWorkflowQuery = {
         query: `
           mutation CreateWorkflow {
@@ -246,7 +218,6 @@ describe('Granular settings permissions', () => {
       expect(response.body.data.createWorkflow).toBeDefined();
       expect(response.body.data.createWorkflow.name).toBe('Test Workflow');
 
-      // Clean up - delete the created workflow
       const graphqlOperation = destroyOneOperationFactory({
         objectMetadataSingularName: 'workflow',
         gqlFields: `
@@ -264,7 +235,6 @@ describe('Granular settings permissions', () => {
 
   describe('Denied Permissions', () => {
     it('should deny access to roles operations when user does not have ROLES setting permission', async () => {
-      // Test creating a role (requires ROLES permission, which our custom role doesn't have)
       const createRoleQuery = {
         query: `
           mutation CreateOneRole {
@@ -278,7 +248,7 @@ describe('Granular settings permissions', () => {
       };
 
       const response = await client
-        .post('/graphql')
+        .post('/metadata')
         .set('Authorization', `Bearer ${APPLE_JONY_MEMBER_ACCESS_TOKEN}`)
         .send(createRoleQuery);
 
@@ -292,11 +262,13 @@ describe('Granular settings permissions', () => {
     });
 
     it('should deny access to workspace members operations when user does not have WORKSPACE_MEMBERS setting permission', async () => {
-      // Test inviting a workspace member (requires WORKSPACE_MEMBERS permission)
       const inviteWorkspaceMemberQuery = {
         query: `
           mutation SendWorkspaceInvitation {
-            sendInvitations(emails: ["test@example.com"]) {
+            sendInvitations(
+              emails: ["test@example.com"],
+              roleId: "${originalMemberRoleId}"
+            ) {
               success
             }
           }
@@ -304,7 +276,7 @@ describe('Granular settings permissions', () => {
       };
 
       const response = await client
-        .post('/graphql')
+        .post('/metadata')
         .set('Authorization', `Bearer ${APPLE_JONY_MEMBER_ACCESS_TOKEN}`)
         .send(inviteWorkspaceMemberQuery);
 
@@ -317,8 +289,35 @@ describe('Granular settings permissions', () => {
       expect(response.body.errors[0].extensions.code).toBe(ErrorCode.FORBIDDEN);
     });
 
+    it('should deny access to applications operations when user does not have APPLICATIONS setting permission', async () => {
+      const findOneApplicationQuery = {
+        query: `
+          query FindOneApplication {
+            findOneApplication(id: "20202020-1c25-4d02-bf25-6aeccf7ea419") {
+              applicationVariables {
+                key
+                value
+              }
+            }
+          }
+        `,
+      };
+
+      const response = await client
+        .post('/metadata')
+        .set('Authorization', `Bearer ${APPLE_JONY_MEMBER_ACCESS_TOKEN}`)
+        .send(findOneApplicationQuery);
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toBeNull();
+      expect(response.body.errors).toBeDefined();
+      expect(response.body.errors[0].message).toBe(
+        PermissionsExceptionMessage.PERMISSION_DENIED,
+      );
+      expect(response.body.errors[0].extensions.code).toBe(ErrorCode.FORBIDDEN);
+    });
+
     it('should deny access to API keys operations when user does not have API_KEYS_AND_WEBHOOKS setting permission', async () => {
-      // Test creating an API key (requires API_KEYS_AND_WEBHOOKS permission)
       const createApiKeyQuery = {
         query: `
           mutation GenerateApiKeyToken {
@@ -330,7 +329,7 @@ describe('Granular settings permissions', () => {
       };
 
       const response = await client
-        .post('/graphql')
+        .post('/metadata')
         .set('Authorization', `Bearer ${APPLE_JONY_MEMBER_ACCESS_TOKEN}`)
         .send(createApiKeyQuery);
 
@@ -346,38 +345,31 @@ describe('Granular settings permissions', () => {
 
   describe('Permission Inheritance', () => {
     it('should verify that canUpdateAllSettings=false is properly overridden by specific setting permissions', async () => {
-      // Verify the role configuration
-      const getRoleQuery = {
-        query: `
-          query GetRole {
-            getRoles {
-              id
-              label
-              canUpdateAllSettings
-              permissionFlags {
-                flag
-              }
-            }
+      const { data, errors } = await findRoles({
+        gqlFields: `
+          id
+          label
+          canUpdateAllSettings
+          permissionFlags {
+            flag
           }
         `,
-      };
+        expectToFail: false,
+      });
 
-      const response = await client
-        .post('/graphql')
-        .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
-        .send(getRoleQuery);
+      expect(errors).toBeUndefined();
+      expect(data).toBeDefined();
 
-      const customRole = response.body.data.getRoles.find(
-        (role: any) => role.id === customRoleId,
-      );
+      const customRole = data.getRoles.find((role) => role.id === customRoleId);
 
-      expect(customRole).toBeDefined();
+      jestExpectToBeDefined(customRole);
       expect(customRole.canUpdateAllSettings).toBe(false);
       expect(customRole.permissionFlags).toHaveLength(3);
-      expect(customRole.permissionFlags.map((p: any) => p.flag)).toContain(
+      jestExpectToBeDefined(customRole.permissionFlags);
+      expect(customRole.permissionFlags.map((p) => p.flag)).toContain(
         PermissionFlagType.DATA_MODEL,
       );
-      expect(customRole.permissionFlags.map((p: any) => p.flag)).toContain(
+      expect(customRole.permissionFlags.map((p) => p.flag)).toContain(
         PermissionFlagType.WORKSPACE,
       );
     });
@@ -385,13 +377,12 @@ describe('Granular settings permissions', () => {
 
   describe('Dynamic Permission Updates', () => {
     it('should allow adding new setting permissions to existing role', async () => {
-      // Add SECURITY permission to the custom role
       const upsertSecurityPermissionQuery = {
         query: `
           mutation UpsertPermissionFlags {
             upsertPermissionFlags(upsertPermissionFlagsInput: {
               roleId: "${customRoleId}"
-              permissionFlagKeys: [${PermissionFlagType.DATA_MODEL}, ${PermissionFlagType.WORKSPACE}, ${PermissionFlagType.SECURITY}]
+              permissionFlagKeys: ["${PermissionFlagType.DATA_MODEL}", "${PermissionFlagType.WORKSPACE}", "${PermissionFlagType.SECURITY}"]
             }) {
               id
               flag
@@ -402,7 +393,7 @@ describe('Granular settings permissions', () => {
       };
 
       const response = await client
-        .post('/graphql')
+        .post('/metadata')
         .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
         .send(upsertSecurityPermissionQuery);
 
@@ -410,45 +401,38 @@ describe('Granular settings permissions', () => {
       expect(response.body.errors).toBeUndefined();
       expect(response.body.data.upsertPermissionFlags).toHaveLength(3);
 
-      // Verify the user now has access to security operations
-      // Note: This would require a specific security operation to test
-      // For now, we just verify the permission was added
-      const getRoleQuery = {
-        query: `
-          query GetRole {
-            getRoles {
-              id
-              permissionFlags {
-                flag
-              }
-            }
+      const { data, errors } = await findRoles({
+        gqlFields: `
+          id
+          permissionFlags {
+            flag
           }
         `,
-      };
+        expectToFail: false,
+      });
 
-      const roleResponse = await client
-        .post('/graphql')
-        .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
-        .send(getRoleQuery);
+      expect(errors).toBeUndefined();
+      expect(data).toBeDefined();
 
-      const updatedRole = roleResponse.body.data.getRoles.find(
-        (role: any) => role.id === customRoleId,
+      const updatedRole = data.getRoles.find(
+        (role) => role.id === customRoleId,
       );
 
+      jestExpectToBeDefined(updatedRole);
       expect(updatedRole.permissionFlags).toHaveLength(3);
-      expect(updatedRole.permissionFlags.map((p: any) => p.flag)).toContain(
+      jestExpectToBeDefined(updatedRole.permissionFlags);
+      expect(updatedRole.permissionFlags.map((p) => p.flag)).toContain(
         PermissionFlagType.SECURITY,
       );
     });
 
     it('should allow removing setting permissions from existing role', async () => {
-      // Remove SECURITY permission, keep only DATA_MODEL and WORKSPACE
       const upsertReducedPermissionsQuery = {
         query: `
           mutation UpsertPermissionFlags {
             upsertPermissionFlags(upsertPermissionFlagsInput: {
               roleId: "${customRoleId}"
-              permissionFlagKeys: [${PermissionFlagType.DATA_MODEL}, ${PermissionFlagType.WORKSPACE}]
+              permissionFlagKeys: ["${PermissionFlagType.DATA_MODEL}", "${PermissionFlagType.WORKSPACE}"]
             }) {
               id
               flag
@@ -459,7 +443,7 @@ describe('Granular settings permissions', () => {
       };
 
       const response = await client
-        .post('/graphql')
+        .post('/metadata')
         .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
         .send(upsertReducedPermissionsQuery);
 
@@ -467,31 +451,27 @@ describe('Granular settings permissions', () => {
       expect(response.body.errors).toBeUndefined();
       expect(response.body.data.upsertPermissionFlags).toHaveLength(2);
 
-      // Verify SECURITY permission was removed
-      const getRoleQuery = {
-        query: `
-          query GetRole {
-            getRoles {
-              id
-              permissionFlags {
-                flag
-              }
-            }
+      const { data, errors } = await findRoles({
+        gqlFields: `
+          id
+          permissionFlags {
+            flag
           }
         `,
-      };
+        expectToFail: false,
+      });
 
-      const roleResponse = await client
-        .post('/graphql')
-        .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
-        .send(getRoleQuery);
+      expect(errors).toBeUndefined();
+      expect(data).toBeDefined();
 
-      const updatedRole = roleResponse.body.data.getRoles.find(
-        (role: any) => role.id === customRoleId,
+      const updatedRole = data.getRoles.find(
+        (role) => role.id === customRoleId,
       );
 
+      jestExpectToBeDefined(updatedRole);
+      jestExpectToBeDefined(updatedRole.permissionFlags);
       expect(updatedRole.permissionFlags).toHaveLength(2);
-      expect(updatedRole.permissionFlags.map((p: any) => p.flag)).not.toContain(
+      expect(updatedRole.permissionFlags.map((p) => p.flag)).not.toContain(
         PermissionFlagType.SECURITY,
       );
     });

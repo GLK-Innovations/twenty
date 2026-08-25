@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 import { lingui } from '@lingui/vite-plugin';
 import { isNonEmptyString } from '@sniptt/guards';
 import react from '@vitejs/plugin-react-swc';
@@ -12,23 +11,25 @@ import {
   type PluginOption,
   searchForWorkspaceRoot,
 } from 'vite';
-import checker from 'vite-plugin-checker';
 import svgr from 'vite-plugin-svgr';
-import tsconfigPaths from 'vite-tsconfig-paths';
-type Checkers = Parameters<typeof checker>[0];
 
-export default defineConfig(({ command, mode }) => {
+import { createWywProfilingPlugin } from 'twenty-shared/vite';
+
+import {
+  API_PROXY_PATHS,
+  buildApiProxyMatcher,
+} from './src/config/apiProxyPrefixes';
+
+export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, __dirname, '');
 
   const {
-    REACT_APP_SERVER_BASE_URL,
     VITE_BUILD_SOURCEMAP,
-    VITE_DISABLE_TYPESCRIPT_CHECKER,
-    VITE_DISABLE_ESLINT_CHECKER,
     VITE_HOST,
     SSL_CERT_PATH,
     SSL_KEY_PATH,
     REACT_APP_PORT,
+    REACT_APP_SERVER_BASE_URL,
     IS_DEBUG_MODE,
   } = env;
 
@@ -36,48 +37,27 @@ export default defineConfig(({ command, mode }) => {
     ? parseInt(REACT_APP_PORT)
     : 3001;
 
-  const isBuildCommand = command === 'build';
+  const apiProxyTarget = isNonEmptyString(REACT_APP_SERVER_BASE_URL)
+    ? REACT_APP_SERVER_BASE_URL
+    : 'http://localhost:3000';
 
-  const tsConfigPath = isBuildCommand
-    ? path.resolve(__dirname, './tsconfig.build.json')
-    : path.resolve(__dirname, './tsconfig.dev.json');
+  const apiProxy = Object.fromEntries(
+    API_PROXY_PATHS.map((apiPath) => [
+      buildApiProxyMatcher(apiPath),
+      { target: apiProxyTarget },
+    ]),
+  );
 
   const CHUNK_SIZE_WARNING_LIMIT = 1024 * 1024; // 1MB
   // Please don't increase this limit for main index chunk
   // If it gets too big then find modules in the code base
   // that can be loaded lazily, there are more!
-  const MAIN_CHUNK_SIZE_LIMIT = 6.1 * 1024 * 1024; // 6.1MB for main index chunk
+  const MAIN_CHUNK_SIZE_LIMIT = 6.8 * 1024 * 1024; // 6.8MB for main index chunk
   const OTHER_CHUNK_SIZE_LIMIT = 5 * 1024 * 1024; // 5MB for other chunks
 
-  const checkers: Checkers = {
-    overlay: false,
-  };
-
-  if (VITE_DISABLE_TYPESCRIPT_CHECKER === 'true') {
-    console.log(
-      `VITE_DISABLE_TYPESCRIPT_CHECKER: ${VITE_DISABLE_TYPESCRIPT_CHECKER}`,
-    );
-  }
-
-  if (VITE_DISABLE_ESLINT_CHECKER === 'true') {
-    console.log(`VITE_DISABLE_ESLINT_CHECKER: ${VITE_DISABLE_ESLINT_CHECKER}`);
-  }
-
   if (VITE_BUILD_SOURCEMAP === 'true') {
+    // oxlint-disable-next-line no-console
     console.log(`VITE_BUILD_SOURCEMAP: ${VITE_BUILD_SOURCEMAP}`);
-  }
-
-  if (VITE_DISABLE_TYPESCRIPT_CHECKER !== 'true') {
-    checkers['typescript'] = {
-      tsconfigPath: tsConfigPath,
-    };
-  }
-
-  if (VITE_DISABLE_ESLINT_CHECKER !== 'true') {
-    checkers['eslint'] = {
-      lintCommand: 'eslint ../../packages/twenty-front --max-warnings 0',
-      useFlatConfig: true,
-    };
   }
 
   return {
@@ -86,6 +66,7 @@ export default defineConfig(({ command, mode }) => {
 
     server: {
       port: port,
+      proxy: apiProxy,
       ...(VITE_HOST ? { host: VITE_HOST } : {}),
       ...(SSL_KEY_PATH && SSL_CERT_PATH
         ? {
@@ -108,66 +89,60 @@ export default defineConfig(({ command, mode }) => {
 
     plugins: [
       react({
-        jsxImportSource: '@emotion/react',
         plugins: [['@lingui/swc-plugin', {}]],
-      }),
-      tsconfigPaths({
-        root: __dirname,
-        projects: ['tsconfig.json'],
       }),
       svgr(),
       lingui({
         configPath: path.resolve(__dirname, './lingui.config.ts'),
       }),
-      checker(checkers),
-      {
-        ...wyw({
-          include: [
-            '**/CurrencyDisplay.tsx',
-            '**/EllipsisDisplay.tsx',
-            '**/ContactLink.tsx',
-            '**/BooleanDisplay.tsx',
-            '**/LinksDisplay.tsx',
-            '**/RoundedLink.tsx',
-            '**/OverflowingTextWithTooltip.tsx',
-            '**/Chip.tsx',
-            '**/Tag.tsx',
-            '**/MultiSelectFieldDisplay.tsx',
-            '**/RatingInput.tsx',
-            '**/RecordTableCellContainer.tsx',
-            '**/RecordTableCellDisplayContainer.tsx',
-            '**/Avatar.tsx',
-            '**/RecordTableBodyDroppable.tsx',
-            '**/RecordTableCellBaseContainer.tsx',
-            '**/RecordTableCellTd.tsx',
-            '**/RecordTableCellStyleWrapper.tsx',
-            '**/RecordTableHeaderDragDropColumn.tsx',
-            '**/ActorDisplay.tsx',
-            '**/BooleanDisplay.tsx',
-            '**/CurrencyDisplay.tsx',
-            '**/TextDisplay.tsx',
-            '**/EllipsisDisplay.tsx',
-            '**/AvatarChip.tsx',
-            '**/URLDisplay.tsx',
-            '**/EmailsDisplay.tsx',
-            '**/PhonesDisplay.tsx',
-            '**/MultiSelectDisplay.tsx',
-            '**/RecordTableRowVirtualizedContainer.tsx',
-            '**/RecordTableVirtualizedBodyPlaceholder.tsx',
-            '**/RecordTableCellLoading.tsx',
+      createWywProfilingPlugin(
+        wyw({
+          include: [path.resolve(__dirname, 'src') + '/**/*.{ts,tsx}'],
+          exclude: [
+            '**/generated-metadata/**',
+            '**/generated-admin/**',
+            '**/testing/mock-data/**',
+            '**/testing/jest/**',
+            '**/testing/hooks/**',
+            '**/testing/utils/**',
+            '**/testing/constants/**',
+            '**/testing/cache/**',
+            '**/*.test.{ts,tsx}',
+            '**/*.spec.{ts,tsx}',
+            '**/__tests__/**',
+            '**/__mocks__/**',
+            '**/types/**',
+            '**/constants/**',
+            '**/states/**',
+            '**/selectors/**',
+            '**/guards/**',
+            '**/schemas/**',
+            '**/utils/**',
+            '**/contexts/**',
+            '**/hooks/**',
+            '**/enums/**',
+            '**/queries/**',
+            '**/mutations/**',
+            '**/fragments/**',
+            '**/graphql/**',
+            '**/decorators/**',
           ],
           babelOptions: {
             presets: ['@babel/preset-typescript', '@babel/preset-react'],
+            plugins: ['@babel/plugin-transform-export-namespace-from'],
           },
         }),
-        enforce: 'pre',
-      },
-      visualizer({
-        open: true,
-        gzipSize: true,
-        brotliSize: true,
-        filename: 'dist/stats.html',
-      }) as PluginOption, // https://github.com/btd/rollup-plugin-visualizer/issues/162#issuecomment-1538265997,
+      ),
+      ...(env.ANALYZE === 'true'
+        ? [
+            visualizer({
+              open: !process.env.CI,
+              gzipSize: true,
+              brotliSize: true,
+              filename: 'dist/stats.html',
+            }) as PluginOption,
+          ]
+        : []),
     ],
 
     optimizeDeps: {
@@ -176,20 +151,36 @@ export default defineConfig(({ command, mode }) => {
         '../../node_modules/.cache',
         '../../node_modules/twenty-ui',
       ],
+      // Pre-bundle React and the heavy libraries reached through lazy() chains
+      // (charts, rich-text editors). Otherwise a lazy story (e.g. a graph widget)
+      // makes Vite discover the dep mid-render, triggering a re-optimize + page
+      // reload that 404s every in-flight story import in browser-mode Storybook
+      // tests (vite 8 / rolldown).
+      include: [
+        'react',
+        'react-dom',
+        'react-dom/client',
+        'react/jsx-runtime',
+        'react/jsx-dev-runtime',
+        '@nivo/core',
+        '@nivo/pie',
+        '@nivo/line',
+        '@nivo/arcs',
+        '@react-spring/web',
+        'd3-shape',
+      ],
     },
 
     build: {
       minify: 'esbuild',
       outDir: 'build',
-      sourcemap: VITE_BUILD_SOURCEMAP === 'true',
+      sourcemap: VITE_BUILD_SOURCEMAP === 'true' ? 'hidden' : false,
+      chunkSizeWarningLimit: CHUNK_SIZE_WARNING_LIMIT,
       rollupOptions: {
         //  Don't use manual chunks as it causes many issue
         // including this one we wasted a lot of time on:
         // https://github.com/rollup/rollup/issues/2793
         output: {
-          // Set chunk size warning limit (in bytes) - warns at 1MB
-          chunkSizeWarningLimit: CHUNK_SIZE_WARNING_LIMIT,
-          // Custom plugin to fail build if chunks exceed max size
           plugins: [
             {
               name: 'chunk-size-limit',
@@ -270,12 +261,9 @@ export default defineConfig(({ command, mode }) => {
     envPrefix: 'REACT_APP_',
 
     define: {
-      _env_: {
-        REACT_APP_SERVER_BASE_URL,
-      },
       'process.env': {
-        REACT_APP_SERVER_BASE_URL,
         IS_DEBUG_MODE,
+        IS_DEV_ENV: mode === 'development' ? 'true' : 'false',
       },
     },
     css: {
@@ -284,12 +272,21 @@ export default defineConfig(({ command, mode }) => {
       },
     },
     resolve: {
-      alias: {
-        path: 'rollup-plugin-node-polyfills/polyfills/path',
-        // https://github.com/twentyhq/twenty/pull/10782/files
-        // This will likely be migrated to twenty-ui package when built separately
-        '@tabler/icons-react': '@tabler/icons-react/dist/esm/icons/index.mjs',
-      },
+      tsconfigPaths: true,
+      alias: [
+        // wyw-in-js 1.x resolves modules in its CSS evaluator via vite's
+        // resolve.alias (not resolve.tsconfigPaths), so the `@/` and `~/`
+        // tsconfig path aliases must be mirrored here.
+        {
+          find: /^@\//,
+          replacement: path.resolve(__dirname, 'src/modules') + '/',
+        },
+        { find: /^~\//, replacement: path.resolve(__dirname, 'src') + '/' },
+        {
+          find: 'path',
+          replacement: 'rollup-plugin-node-polyfills/polyfills/path',
+        },
+      ],
     },
   };
 });

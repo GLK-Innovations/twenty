@@ -4,15 +4,23 @@ import {
   isObject,
   isString,
 } from '@sniptt/guards';
+import isEqual from 'lodash.isequal';
+import { Temporal } from 'temporal-polyfill';
 import {
   type StepFilter,
   type StepFilterGroup,
   ViewFilterOperand,
   type ViewFilterOperandDeprecated,
 } from 'twenty-shared/types';
-import { convertViewFilterOperandToCoreOperand as convertViewFilterOperandDeprecated } from 'twenty-shared/utils';
+import {
+  convertViewFilterOperandToCoreOperand as convertViewFilterOperandDeprecated,
+  isDefined,
+  isSamePlainDate,
+  parseToInstantOrThrow,
+} from 'twenty-shared/utils';
 import { parseBooleanFromStringValue } from 'twenty-shared/workflow';
 
+import { findDefaultNullEquivalentValue } from 'src/modules/workflow/workflow-executor/workflow-actions/filter/utils/find-default-null-equivalent-value.util';
 import { parseAndEvaluateRelativeDateFilter } from 'src/modules/workflow/workflow-executor/workflow-actions/filter/utils/parse-and-evaluate-relative-date-filter.util';
 
 type ResolvedFilterWithPotentiallyDeprecatedOperand = Omit<
@@ -59,7 +67,11 @@ function evaluateFilter(
     case 'ARRAY':
     case 'array':
     case 'RAW_JSON':
-      return evaluateTextAndArrayFilter(filterWithConvertedOperand);
+      return evaluateTextAndArrayFilter(
+        filterWithConvertedOperand,
+        filter.type,
+        filter.compositeFieldSubFieldName,
+      );
     case 'SELECT':
       return evaluateSelectFilter(filterWithConvertedOperand);
     case 'BOOLEAN':
@@ -67,10 +79,14 @@ function evaluateFilter(
       return evaluateBooleanFilter(filterWithConvertedOperand);
     case 'UUID':
       return evaluateUuidFilter(filterWithConvertedOperand);
+    case 'RATING':
+      return evaluateRatingFilter(filterWithConvertedOperand);
     case 'RELATION':
       return evaluateRelationFilter(filterWithConvertedOperand);
     case 'CURRENCY':
       return evaluateCurrencyFilter(filterWithConvertedOperand);
+    case 'ACTOR':
+      return evaluateActorFilter(filterWithConvertedOperand);
     default:
       return evaluateDefaultFilter(filterWithConvertedOperand);
   }
@@ -121,7 +137,6 @@ function evaluateFilterGroup(
 }
 
 function contains(leftValue: unknown, rightValue: unknown): boolean {
-  // if two arrays, check if any item is in the other array
   if (Array.isArray(leftValue) && Array.isArray(rightValue)) {
     return leftValue.some((item) => rightValue.includes(item));
   }
@@ -146,12 +161,35 @@ function contains(leftValue: unknown, rightValue: unknown): boolean {
   return String(leftValue).includes(String(rightValue));
 }
 
-function evaluateTextAndArrayFilter(filter: ResolvedFilter): boolean {
+function evaluateTextAndArrayFilter(
+  filter: ResolvedFilter,
+  filterType: string,
+  compositeFieldSubFieldName: string | undefined,
+): boolean {
+  //TODO : nullEquivalentRightValue to remove once feature flag removed + workflow action based on common api
+  const nullEquivalentRightValue = findDefaultNullEquivalentValue({
+    value: filter.rightOperand,
+    fieldMetadataType: filterType,
+    key: compositeFieldSubFieldName,
+  });
+
   switch (filter.operand) {
     case ViewFilterOperand.CONTAINS:
-      return contains(filter.leftOperand, filter.rightOperand);
+      return (
+        contains(filter.leftOperand, filter.rightOperand) ||
+        (isDefined(nullEquivalentRightValue) &&
+          !isNotEmptyTextOrArray(filter.leftOperand))
+      );
     case ViewFilterOperand.DOES_NOT_CONTAIN:
-      return !contains(filter.leftOperand, filter.rightOperand);
+      return (
+        !contains(filter.leftOperand, filter.rightOperand) ||
+        (isDefined(nullEquivalentRightValue) &&
+          isNotEmptyTextOrArray(filter.leftOperand))
+      );
+    case ViewFilterOperand.IS:
+      return isEqual(filter.leftOperand, filter.rightOperand);
+    case ViewFilterOperand.IS_NOT:
+      return !isEqual(filter.leftOperand, filter.rightOperand);
     case ViewFilterOperand.IS_EMPTY:
       return !isNotEmptyTextOrArray(filter.leftOperand);
 
@@ -183,53 +221,83 @@ function evaluateBooleanFilter(filter: ResolvedFilter): boolean {
   }
 }
 
+function parseDateOperandToInstant(value: unknown): Temporal.Instant | null {
+  try {
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+      return Temporal.Instant.fromEpochMilliseconds(value.getTime());
+    }
+
+    return parseToInstantOrThrow(String(value));
+  } catch {
+    return null;
+  }
+}
+
+function toUtcPlainDate(instant: Temporal.Instant): Temporal.PlainDate {
+  return instant.toZonedDateTimeISO('UTC').toPlainDate();
+}
+
 function evaluateDateFilter(filter: ResolvedFilter): boolean {
-  const dateLeftValue = new Date(String(filter.leftOperand));
+  if (filter.operand === ViewFilterOperand.IS_EMPTY) {
+    return !isDefined(filter.leftOperand) || filter.leftOperand === '';
+  }
+
+  if (filter.operand === ViewFilterOperand.IS_NOT_EMPTY) {
+    return isDefined(filter.leftOperand) && filter.leftOperand !== '';
+  }
+
+  const leftInstant = parseDateOperandToInstant(filter.leftOperand);
+
+  if (!isDefined(leftInstant)) {
+    return false;
+  }
 
   switch (filter.operand) {
-    case ViewFilterOperand.IS:
+    case ViewFilterOperand.IS: {
+      const rightInstant = parseDateOperandToInstant(filter.rightOperand);
+
       return (
-        dateLeftValue.getDate() ===
-        new Date(String(filter.rightOperand)).getDate()
+        isDefined(rightInstant) &&
+        isSamePlainDate(
+          toUtcPlainDate(leftInstant),
+          toUtcPlainDate(rightInstant),
+        )
       );
+    }
+
     case ViewFilterOperand.IS_IN_PAST:
-      return dateLeftValue.getTime() < Date.now();
+      return Temporal.Instant.compare(leftInstant, Temporal.Now.instant()) < 0;
 
     case ViewFilterOperand.IS_IN_FUTURE:
-      return dateLeftValue.getTime() > Date.now();
+      return Temporal.Instant.compare(leftInstant, Temporal.Now.instant()) > 0;
 
     case ViewFilterOperand.IS_TODAY:
-      return dateLeftValue.toDateString() === new Date().toDateString();
-
-    case ViewFilterOperand.IS_BEFORE:
-      return (
-        dateLeftValue.getTime() <
-        new Date(String(filter.rightOperand)).getTime()
+      return isSamePlainDate(
+        toUtcPlainDate(leftInstant),
+        Temporal.Now.zonedDateTimeISO('UTC').toPlainDate(),
       );
 
-    case ViewFilterOperand.IS_AFTER:
-      return (
-        dateLeftValue.getTime() >
-        new Date(String(filter.rightOperand)).getTime()
-      );
+    case ViewFilterOperand.IS_BEFORE: {
+      const rightInstant = parseDateOperandToInstant(filter.rightOperand);
 
-    case ViewFilterOperand.IS_EMPTY:
       return (
-        filter.leftOperand === null ||
-        filter.leftOperand === undefined ||
-        filter.leftOperand === ''
+        isDefined(rightInstant) &&
+        Temporal.Instant.compare(leftInstant, rightInstant) < 0
       );
+    }
 
-    case ViewFilterOperand.IS_NOT_EMPTY:
+    case ViewFilterOperand.IS_AFTER: {
+      const rightInstant = parseDateOperandToInstant(filter.rightOperand);
+
       return (
-        filter.leftOperand !== null &&
-        filter.leftOperand !== undefined &&
-        filter.leftOperand !== ''
+        isDefined(rightInstant) &&
+        Temporal.Instant.compare(leftInstant, rightInstant) > 0
       );
+    }
 
     case ViewFilterOperand.IS_RELATIVE:
       return parseAndEvaluateRelativeDateFilter({
-        dateToCheck: dateLeftValue,
+        dateToCheck: new Date(leftInstant.epochMilliseconds),
         relativeDateString: String(filter.rightOperand),
       });
 
@@ -246,9 +314,66 @@ function evaluateUuidFilter(filter: ResolvedFilter): boolean {
       return filter.leftOperand === filter.rightOperand;
     case ViewFilterOperand.IS_NOT:
       return filter.leftOperand !== filter.rightOperand;
+    case ViewFilterOperand.IS_EMPTY:
+      return !isNonEmptyString(filter.leftOperand);
+    case ViewFilterOperand.IS_NOT_EMPTY:
+      return isNonEmptyString(filter.leftOperand);
     default:
       throw new Error(
         `Operand ${filter.operand} not supported for uuid filter`,
+      );
+  }
+}
+
+// Rating values are stored as enum strings 'RATING_1'..'RATING_5'. Comparisons
+// must operate on the numeric rank (1..5), not lexicographic order or Number()
+// on the enum string (which would be NaN).
+function parseRatingRank(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.length > 0) {
+    const ratingPrefixMatch = value.match(/^RATING_(\d+)$/);
+
+    if (ratingPrefixMatch !== null) {
+      return Number(ratingPrefixMatch[1]);
+    }
+
+    const numericValue = Number(value);
+
+    if (Number.isFinite(numericValue)) {
+      return numericValue;
+    }
+  }
+
+  return undefined;
+}
+
+function evaluateRatingFilter(filter: ResolvedFilter): boolean {
+  const leftRank = parseRatingRank(filter.leftOperand);
+  const rightRank = parseRatingRank(filter.rightOperand);
+
+  switch (filter.operand) {
+    case ViewFilterOperand.IS:
+      return isDefined(leftRank) && leftRank === rightRank;
+    case ViewFilterOperand.IS_NOT:
+      return !isDefined(leftRank) || leftRank !== rightRank;
+    case ViewFilterOperand.GREATER_THAN_OR_EQUAL:
+      return (
+        isDefined(leftRank) && isDefined(rightRank) && leftRank >= rightRank
+      );
+    case ViewFilterOperand.LESS_THAN_OR_EQUAL:
+      return (
+        isDefined(leftRank) && isDefined(rightRank) && leftRank <= rightRank
+      );
+    case ViewFilterOperand.IS_EMPTY:
+      return !isDefined(leftRank);
+    case ViewFilterOperand.IS_NOT_EMPTY:
+      return isDefined(leftRank);
+    default:
+      throw new Error(
+        `Operand ${filter.operand} not supported for rating filter`,
       );
   }
 }
@@ -285,9 +410,9 @@ function evaluateCurrencyFilter(filter: ResolvedFilter): boolean {
   if (filter.compositeFieldSubFieldName === 'currencyCode') {
     switch (filter.operand) {
       case ViewFilterOperand.IS:
-        return filter.leftOperand === filter.rightOperand;
+        return contains(filter.leftOperand, filter.rightOperand);
       case ViewFilterOperand.IS_NOT:
-        return filter.leftOperand !== filter.rightOperand;
+        return !contains(filter.leftOperand, filter.rightOperand);
       case ViewFilterOperand.IS_EMPTY:
         return !isNonEmptyString(filter.leftOperand);
       case ViewFilterOperand.IS_NOT_EMPTY:
@@ -314,10 +439,16 @@ function evaluateNumberFilter(filter: ResolvedFilter): boolean {
       return Number(leftValue) <= Number(rightValue);
 
     case ViewFilterOperand.IS_EMPTY:
-      return !isNonEmptyString(leftValue);
+      return !isDefined(filter.leftOperand) || filter.leftOperand === '';
 
     case ViewFilterOperand.IS_NOT_EMPTY:
-      return isNonEmptyString(leftValue);
+      return isDefined(filter.leftOperand) && filter.leftOperand !== '';
+
+    case ViewFilterOperand.IS:
+      return Number(leftValue) === Number(rightValue);
+
+    case ViewFilterOperand.IS_NOT:
+      return Number(leftValue) !== Number(rightValue);
 
     default:
       throw new Error(
@@ -370,6 +501,20 @@ function evaluateSelectFilter(filter: ResolvedFilter): boolean {
         `Operand ${filter.operand} not supported for select filter`,
       );
   }
+}
+
+function evaluateActorFilter(filter: ResolvedFilter): boolean {
+  const { compositeFieldSubFieldName } = filter;
+
+  if (compositeFieldSubFieldName === 'source') {
+    return evaluateSelectFilter(filter);
+  }
+
+  if (compositeFieldSubFieldName === 'workspaceMemberId') {
+    return evaluateRelationFilter(filter);
+  }
+
+  return evaluateTextAndArrayFilter(filter, 'TEXT', compositeFieldSubFieldName);
 }
 
 export function evaluateFilterConditions({

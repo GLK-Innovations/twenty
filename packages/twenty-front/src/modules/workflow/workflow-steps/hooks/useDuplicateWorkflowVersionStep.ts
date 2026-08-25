@@ -1,22 +1,21 @@
 import { useApolloCoreClient } from '@/object-metadata/hooks/useApolloCoreClient';
-import { useSetRecoilComponentState } from '@/ui/utilities/state/component-state/hooks/useSetRecoilComponentState';
 import { DUPLICATE_WORKFLOW_VERSION_STEP } from '@/workflow/graphql/mutations/duplicateWorkflowVersionStep';
-import { flowComponentState } from '@/workflow/states/flowComponentState';
-import { useUpdateWorkflowVersionCache } from '@/workflow/workflow-steps/hooks/useUpdateWorkflowVersionCache';
-import { useMutation } from '@apollo/client';
-import { isDefined } from 'twenty-shared/utils';
+import { useApplyWorkflowVersionStepChanges } from '@/workflow/workflow-steps/hooks/useApplyWorkflowVersionStepChanges';
+import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
+import { useMutation } from '@apollo/client/react';
 import {
   type DuplicateWorkflowVersionStepInput,
   type DuplicateWorkflowVersionStepMutation,
   type DuplicateWorkflowVersionStepMutationVariables,
-} from '~/generated-metadata/graphql';
+} from '~/generated/graphql';
 
 export const useDuplicateWorkflowVersionStep = () => {
   const apolloCoreClient = useApolloCoreClient();
 
-  const { updateWorkflowVersionCache } = useUpdateWorkflowVersionCache();
+  const { applyWorkflowVersionStepChanges } =
+    useApplyWorkflowVersionStepChanges();
 
-  const setFlow = useSetRecoilComponentState(flowComponentState);
+  const { enqueueErrorSnackBar } = useSnackBar();
 
   const [mutate] = useMutation<
     DuplicateWorkflowVersionStepMutation,
@@ -30,23 +29,18 @@ export const useDuplicateWorkflowVersionStep = () => {
   ) => {
     const result = await mutate({
       variables: { input },
+      onError: (error) => {
+        enqueueErrorSnackBar({ apolloError: error });
+      },
     });
 
     const workflowVersionStepChanges =
       result?.data?.duplicateWorkflowVersionStep;
 
-    const updatedWorkflowVersion = updateWorkflowVersionCache({
+    applyWorkflowVersionStepChanges({
       workflowVersionStepChanges,
       workflowVersionId: input.workflowVersionId,
     });
-
-    if (isDefined(updatedWorkflowVersion)) {
-      setFlow({
-        workflowVersionId: updatedWorkflowVersion.id,
-        trigger: updatedWorkflowVersion.trigger,
-        steps: updatedWorkflowVersion.steps,
-      });
-    }
 
     return result;
   };

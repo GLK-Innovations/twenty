@@ -4,7 +4,7 @@ import { getSettingsPath } from '../getSettingsPath';
 describe('getSettingsPath', () => {
   it('should return settings path with correct prefix when no params or query params provided', () => {
     expect(getSettingsPath(SettingsPath.ProfilePage)).toBe('/settings/profile');
-    expect(getSettingsPath(SettingsPath.Workspace)).toBe('/settings/general');
+    expect(getSettingsPath(SettingsPath.General)).toBe('/settings/general');
     expect(getSettingsPath(SettingsPath.Accounts)).toBe('/settings/accounts');
   });
 
@@ -23,8 +23,8 @@ describe('getSettingsPath', () => {
     ).toBe('/settings/objects/companies/name');
 
     expect(
-      getSettingsPath(SettingsPath.ServerlessFunctionDetail, {
-        serverlessFunctionId: 'func123',
+      getSettingsPath(SettingsPath.LogicFunctionDetail, {
+        logicFunctionId: 'func123',
       }),
     ).toBe('/settings/functions/func123');
 
@@ -33,6 +33,13 @@ describe('getSettingsPath', () => {
         connectedAccountId: 'account123',
       }),
     ).toBe('/settings/accounts/edit-imap-smtp-caldav-connection/account123');
+
+    expect(
+      getSettingsPath(SettingsPath.ApplicationConnectionDetail, {
+        applicationId: 'app123',
+        connectedAccountId: 'account123',
+      }),
+    ).toBe('/settings/applications/app123/connections/account123');
   });
 
   it('should append query params when provided', () => {
@@ -61,7 +68,7 @@ describe('getSettingsPath', () => {
     ).toBe('/settings/profile#section1');
 
     expect(
-      getSettingsPath(SettingsPath.Workspace, undefined, undefined, 'general'),
+      getSettingsPath(SettingsPath.General, undefined, undefined, 'general'),
     ).toBe('/settings/general#general');
   });
 
@@ -88,8 +95,8 @@ describe('getSettingsPath', () => {
 
     expect(
       getSettingsPath(
-        SettingsPath.ServerlessFunctionDetail,
-        { serverlessFunctionId: 'func123' },
+        SettingsPath.LogicFunctionDetail,
+        { logicFunctionId: 'func123' },
         { mode: 'edit' },
         'code',
       ),

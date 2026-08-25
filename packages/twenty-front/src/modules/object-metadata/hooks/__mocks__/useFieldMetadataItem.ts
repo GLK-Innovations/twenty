@@ -1,33 +1,15 @@
 import { gql } from '@apollo/client';
-import { FieldMetadataType } from '~/generated/graphql';
+import {
+  DeleteOneFieldMetadataItemDocument,
+  FieldMetadataType,
+} from '~/generated-metadata/graphql';
 
 export const FIELD_METADATA_ID = '2c43466a-fe9e-4005-8d08-c5836067aa6c';
 export const FIELD_RELATION_METADATA_ID =
   '4da0302d-358a-45cd-9973-9f92723ed3c1';
 
 export const queries = {
-  deleteMetadataField: gql`
-    mutation DeleteOneFieldMetadataItem($idToDelete: UUID!) {
-      deleteOneField(input: { id: $idToDelete }) {
-        id
-        type
-        name
-        label
-        description
-        icon
-        isCustom
-        isActive
-        isUnique
-        isNullable
-        createdAt
-        updatedAt
-        settings
-        object {
-          id
-        }
-      }
-    }
-  `,
+  deleteMetadataField: DeleteOneFieldMetadataItemDocument,
   activateMetadataField: gql`
     mutation UpdateOneFieldMetadataItem(
       $idToUpdate: UUID!
@@ -40,13 +22,13 @@ export const queries = {
         label
         description
         icon
-        isCustom
         isActive
         isNullable
         createdAt
         updatedAt
         settings
         isLabelSyncedWithName
+        applicationId
         object {
           id
         }
@@ -62,7 +44,6 @@ export const queries = {
         label
         description
         icon
-        isCustom
         isActive
         isUnique
         isNullable
@@ -72,6 +53,7 @@ export const queries = {
         defaultValue
         options
         isLabelSyncedWithName
+        applicationId
         object {
           id
         }
@@ -119,12 +101,12 @@ const defaultResponseData = {
   label: 'label',
   description: 'description',
   icon: 'icon',
-  isCustom: false,
   isActive: true,
   isNullable: false,
   createdAt: '1977-09-28T13:56:55.157Z',
   updatedAt: '1996-10-10T08:27:57.117Z',
   settings: undefined,
+  applicationId: null,
 };
 
 const fieldRelationResponseData = {
@@ -176,7 +158,8 @@ export const responseData = {
         allowImpersonation: false,
         activationStatus: 'active',
         isPublicInviteLinkEnabled: false,
-        hasValidEnterpriseKey: false,
+        hasValidSignedEnterpriseKey: false,
+        hasValidEnterpriseValidityToken: false,
         isGoogleAuthEnabled: true,
         isMicrosoftAuthEnabled: false,
         isPasswordAuthEnabled: true,
@@ -190,7 +173,7 @@ export const responseData = {
         metadataVersion: 1,
         currentBillingSubscription: null,
         workspaceMembersCount: 1,
-        defaultRole:  {
+        defaultRole: {
           id: 'default-role-id',
           label: 'Default Role',
           description: 'Default Role Description',
@@ -200,7 +183,7 @@ export const responseData = {
           canUpdateAllObjectRecords: true,
           canSoftDeleteAllObjectRecords: true,
           canDestroyAllObjectRecords: true,
-        }
+        },
       },
       currentBillingSubscription: null,
       billingSubscriptions: [],

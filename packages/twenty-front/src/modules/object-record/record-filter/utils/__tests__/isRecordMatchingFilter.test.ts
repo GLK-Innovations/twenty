@@ -1,14 +1,19 @@
 import { type RecordGqlOperationFilter } from 'twenty-shared/types';
-import { getCompaniesMock } from '~/testing/mock-data/companies';
-import { generatedMockObjectMetadataItems } from '~/testing/utils/generatedMockObjectMetadataItems';
+import { mockedCompanyRecords } from '~/testing/mock-data/generated/data/companies/mock-companies-data';
+import { getTestEnrichedObjectMetadataItemsMock } from '~/testing/utils/getTestEnrichedObjectMetadataItemsMock';
 
 import { type Company } from '@/companies/types/Company';
 import { getCompanyDomainName } from '@/object-metadata/utils/getCompanyDomainName';
+import { getRecordFromRecordNode } from '@/object-record/cache/utils/getRecordFromRecordNode';
 import { isRecordMatchingFilter } from '@/object-record/record-filter/utils/isRecordMatchingFilter';
 
-const companiesMock = getCompaniesMock();
+const companiesMock = mockedCompanyRecords.map((record) =>
+  getRecordFromRecordNode<Company>({ recordNode: record }),
+);
 
-const companyMockObjectMetadataItem = generatedMockObjectMetadataItems.find(
+const objectMetadataItems = getTestEnrichedObjectMetadataItemsMock();
+
+const companyMockObjectMetadataItem = objectMetadataItems.find(
   (item) => item.nameSingular === 'company',
 )!;
 
@@ -23,6 +28,7 @@ describe('isRecordMatchingFilter', () => {
             record: company,
             filter: emptyFilter,
             objectMetadataItem: companyMockObjectMetadataItem,
+            objectMetadataItems,
           }),
         ).toBe(true);
       });
@@ -40,6 +46,7 @@ describe('isRecordMatchingFilter', () => {
             record: company,
             filter: filterWithEmptyFields,
             objectMetadataItem: companyMockObjectMetadataItem,
+            objectMetadataItems,
           }),
         ).toBe(true);
       });
@@ -54,6 +61,7 @@ describe('isRecordMatchingFilter', () => {
             record: company,
             filter,
             objectMetadataItem: companyMockObjectMetadataItem,
+            objectMetadataItems,
           }),
         ).toBe(true);
       });
@@ -68,6 +76,7 @@ describe('isRecordMatchingFilter', () => {
             record: company,
             filter,
             objectMetadataItem: companyMockObjectMetadataItem,
+            objectMetadataItems,
           }),
         ).toBe(true);
       });
@@ -82,6 +91,7 @@ describe('isRecordMatchingFilter', () => {
             record: company,
             filter,
             objectMetadataItem: companyMockObjectMetadataItem,
+            objectMetadataItems,
           }),
         ).toBe(true);
       });
@@ -106,6 +116,7 @@ describe('isRecordMatchingFilter', () => {
           record: companyMockInFilter,
           filter,
           objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
         }),
       ).toBe(true);
 
@@ -114,6 +125,7 @@ describe('isRecordMatchingFilter', () => {
           record: companyMockNotInFilter,
           filter,
           objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
         }),
       ).toBe(false);
     });
@@ -144,6 +156,7 @@ describe('isRecordMatchingFilter', () => {
           record: companyMockInFilter,
           filter,
           objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
         }),
       ).toBe(true);
       expect(
@@ -151,6 +164,7 @@ describe('isRecordMatchingFilter', () => {
           record: companyMockNotInFilter,
           filter,
           objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
         }),
       ).toBe(false);
     });
@@ -175,6 +189,7 @@ describe('isRecordMatchingFilter', () => {
           record: companyMockInFilter,
           filter,
           objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
         }),
       ).toBe(true);
 
@@ -183,6 +198,7 @@ describe('isRecordMatchingFilter', () => {
           record: companyMockNotInFilter,
           filter,
           objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
         }),
       ).toBe(false);
     });
@@ -209,6 +225,7 @@ describe('isRecordMatchingFilter', () => {
           record: companyIdealCustomerProfileTrue,
           filter,
           objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
         }),
       ).toBe(companyIdealCustomerProfileTrue.idealCustomerProfile);
       expect(
@@ -216,6 +233,7 @@ describe('isRecordMatchingFilter', () => {
           record: companyIdealCustomerProfileFalse,
           filter,
           objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
         }),
       ).toBe(companyIdealCustomerProfileFalse.idealCustomerProfile);
     });
@@ -266,6 +284,7 @@ describe('isRecordMatchingFilter', () => {
           record: companyMockInFilter,
           filter,
           objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
         }),
       ).toBe(true);
 
@@ -274,6 +293,7 @@ describe('isRecordMatchingFilter', () => {
           record: companyMockNotInFilter,
           filter,
           objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
         }),
       ).toBe(false);
     });
@@ -309,6 +329,7 @@ describe('isRecordMatchingFilter', () => {
           record: companyMockInFilter,
           filter,
           objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
         }),
       ).toBe(false);
 
@@ -317,6 +338,7 @@ describe('isRecordMatchingFilter', () => {
           record: companyMockNotInFilter,
           filter,
           objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
         }),
       ).toBe(true);
     });
@@ -361,6 +383,7 @@ describe('isRecordMatchingFilter', () => {
           record: companyMockInFilter,
           filter,
           objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
         }),
       ).toBe(true);
 
@@ -369,6 +392,7 @@ describe('isRecordMatchingFilter', () => {
           record: companyMockNotInFilter,
           filter,
           objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
         }),
       ).toBe(false);
     });
@@ -401,6 +425,7 @@ describe('isRecordMatchingFilter', () => {
           record: companyMockInFilter,
           filter,
           objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
         }),
       ).toBe(true);
 
@@ -409,6 +434,7 @@ describe('isRecordMatchingFilter', () => {
           record: companyMockNotInFilter,
           filter,
           objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
         }),
       ).toBe(false);
     });
@@ -439,6 +465,7 @@ describe('isRecordMatchingFilter', () => {
           record: companyMockInFilter,
           filter,
           objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
         }),
       ).toBe(true);
 
@@ -447,6 +474,7 @@ describe('isRecordMatchingFilter', () => {
           record: companyMockNotInFilter,
           filter,
           objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
         }),
       ).toBe(false);
     });
@@ -480,6 +508,7 @@ describe('isRecordMatchingFilter', () => {
           record: companyMockInFilter,
           filter,
           objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
         }),
       ).toBe(true); // Matches as Airbnb's employee count is between 10 and 100000
 
@@ -488,6 +517,7 @@ describe('isRecordMatchingFilter', () => {
           record: companyMockNotInFilter,
           filter,
           objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
         }),
       ).toBe(false); // Does not match as Aircall's employee count is not within the range
     });
@@ -519,6 +549,7 @@ describe('isRecordMatchingFilter', () => {
           record: companyMockInFilter,
           filter,
           objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
         }),
       ).toBe(true);
 
@@ -527,6 +558,286 @@ describe('isRecordMatchingFilter', () => {
           record: companyMockNotInFilter,
           filter,
           objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
+        }),
+      ).toBe(false);
+    });
+  });
+
+  describe('Relation Filters', () => {
+    const accountOwnerId = '20202020-0687-4c41-b707-ed1bfca972a7';
+
+    const companyWithAccountOwner = {
+      ...companiesMock[0],
+      accountOwner: { id: accountOwnerId },
+      accountOwnerId,
+    };
+
+    const companyWithoutAccountOwner = {
+      ...companyWithAccountOwner,
+      accountOwner: null,
+      accountOwnerId: null,
+    };
+
+    it('matches "is not empty" on a relation field by its related record id', () => {
+      const filter: RecordGqlOperationFilter = {
+        accountOwner: { is: 'NOT_NULL' },
+      };
+
+      expect(
+        isRecordMatchingFilter({
+          record: companyWithAccountOwner,
+          filter,
+          objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
+        }),
+      ).toBe(true);
+
+      expect(
+        isRecordMatchingFilter({
+          record: companyWithoutAccountOwner,
+          filter,
+          objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
+        }),
+      ).toBe(false);
+    });
+
+    it('matches "is empty" on a relation field by its related record id', () => {
+      const filter: RecordGqlOperationFilter = {
+        accountOwner: { is: 'NULL' },
+      };
+
+      expect(
+        isRecordMatchingFilter({
+          record: companyWithoutAccountOwner,
+          filter,
+          objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
+        }),
+      ).toBe(true);
+
+      expect(
+        isRecordMatchingFilter({
+          record: companyWithAccountOwner,
+          filter,
+          objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
+        }),
+      ).toBe(false);
+    });
+
+    it('matches an "in" filter on a relation field by its related record id', () => {
+      expect(
+        isRecordMatchingFilter({
+          record: companyWithAccountOwner,
+          filter: { accountOwner: { in: [accountOwnerId] } },
+          objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
+        }),
+      ).toBe(true);
+
+      expect(
+        isRecordMatchingFilter({
+          record: companyWithAccountOwner,
+          filter: { accountOwner: { in: ['unknown-id'] } },
+          objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
+        }),
+      ).toBe(false);
+    });
+
+    it('still matches the relation join column field', () => {
+      const filter: RecordGqlOperationFilter = {
+        accountOwnerId: { is: 'NOT_NULL' },
+      };
+
+      expect(
+        isRecordMatchingFilter({
+          record: companyWithAccountOwner,
+          filter,
+          objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
+        }),
+      ).toBe(true);
+    });
+  });
+
+  describe('Nested Relation Filters', () => {
+    const opportunityMockObjectMetadataItem = objectMetadataItems.find(
+      (item) => item.nameSingular === 'opportunity',
+    )!;
+
+    const companyId = '20202020-171e-4bcc-9cf7-43448d6fb278';
+    const personId = '20202020-2d40-4e49-8df4-9c6a049190ef';
+
+    const opportunityWithPointOfContact = {
+      id: '20202020-83f4-4c4f-95c1-b7be9f2d36d1',
+      pointOfContact: { id: personId, companyId },
+    };
+
+    it('matches when the related record satisfies the nested filter', () => {
+      const filter = {
+        pointOfContact: { companyId: { in: [companyId] } },
+      } as RecordGqlOperationFilter;
+
+      expect(
+        isRecordMatchingFilter({
+          record: opportunityWithPointOfContact,
+          filter,
+          objectMetadataItem: opportunityMockObjectMetadataItem,
+          objectMetadataItems,
+        }),
+      ).toBe(true);
+    });
+
+    it('does not match when the related record fails the nested filter', () => {
+      const filter = {
+        pointOfContact: {
+          companyId: { in: ['20202020-0000-4000-8000-000000000000'] },
+        },
+      } as RecordGqlOperationFilter;
+
+      expect(
+        isRecordMatchingFilter({
+          record: opportunityWithPointOfContact,
+          filter,
+          objectMetadataItem: opportunityMockObjectMetadataItem,
+          objectMetadataItems,
+        }),
+      ).toBe(false);
+    });
+
+    it('does not match when the related record is not loaded', () => {
+      const filter = {
+        pointOfContact: { companyId: { in: [companyId] } },
+      } as RecordGqlOperationFilter;
+
+      expect(
+        isRecordMatchingFilter({
+          record: {
+            ...opportunityWithPointOfContact,
+            pointOfContact: null,
+          },
+          filter,
+          objectMetadataItem: opportunityMockObjectMetadataItem,
+          objectMetadataItems,
+        }),
+      ).toBe(false);
+
+      expect(
+        isRecordMatchingFilter({
+          record: { id: opportunityWithPointOfContact.id },
+          filter,
+          objectMetadataItem: opportunityMockObjectMetadataItem,
+          objectMetadataItems,
+        }),
+      ).toBe(false);
+    });
+
+    it('evaluates composite conditions against the related record', () => {
+      const filter = {
+        pointOfContact: {
+          and: [{ companyId: { in: [companyId] } }, { id: { eq: personId } }],
+        },
+      } as RecordGqlOperationFilter;
+
+      expect(
+        isRecordMatchingFilter({
+          record: opportunityWithPointOfContact,
+          filter,
+          objectMetadataItem: opportunityMockObjectMetadataItem,
+          objectMetadataItems,
+        }),
+      ).toBe(true);
+
+      const nonMatchingFilter = {
+        pointOfContact: {
+          and: [{ companyId: { in: [companyId] } }, { id: { neq: personId } }],
+        },
+      } as RecordGqlOperationFilter;
+
+      expect(
+        isRecordMatchingFilter({
+          record: opportunityWithPointOfContact,
+          filter: nonMatchingFilter,
+          objectMetadataItem: opportunityMockObjectMetadataItem,
+          objectMetadataItems,
+        }),
+      ).toBe(false);
+    });
+
+    it('keeps a record with an unloaded relation out of a negated nested filter', () => {
+      const filter = {
+        not: { pointOfContact: { companyId: { in: [companyId] } } },
+      } as RecordGqlOperationFilter;
+
+      expect(
+        isRecordMatchingFilter({
+          record: { id: opportunityWithPointOfContact.id },
+          filter,
+          objectMetadataItem: opportunityMockObjectMetadataItem,
+          objectMetadataItems,
+        }),
+      ).toBe(false);
+    });
+
+    it('evaluates a negated nested filter truthfully on a loaded relation', () => {
+      const filter = {
+        not: { pointOfContact: { companyId: { in: [companyId] } } },
+      } as RecordGqlOperationFilter;
+
+      expect(
+        isRecordMatchingFilter({
+          record: opportunityWithPointOfContact,
+          filter,
+          objectMetadataItem: opportunityMockObjectMetadataItem,
+          objectMetadataItems,
+        }),
+      ).toBe(false);
+
+      expect(
+        isRecordMatchingFilter({
+          record: {
+            ...opportunityWithPointOfContact,
+            pointOfContact: {
+              id: personId,
+              companyId: '20202020-0000-4000-8000-000000000000',
+            },
+          },
+          filter,
+          objectMetadataItem: opportunityMockObjectMetadataItem,
+          objectMetadataItems,
+        }),
+      ).toBe(true);
+
+      expect(
+        isRecordMatchingFilter({
+          record: {
+            ...opportunityWithPointOfContact,
+            pointOfContact: null,
+          },
+          filter,
+          objectMetadataItem: opportunityMockObjectMetadataItem,
+          objectMetadataItems,
+        }),
+      ).toBe(true);
+    });
+
+    it('does not match a nested filter on a list of related records', () => {
+      const filter = {
+        people: { id: { eq: personId } },
+      } as RecordGqlOperationFilter;
+
+      expect(
+        isRecordMatchingFilter({
+          record: {
+            ...companiesMock[0],
+            people: [{ id: personId }],
+          },
+          filter,
+          objectMetadataItem: companyMockObjectMetadataItem,
+          objectMetadataItems,
         }),
       ).toBe(false);
     });

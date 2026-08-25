@@ -1,4 +1,4 @@
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
 import { motion } from 'framer-motion';
 import { Key } from 'ts-key-enum';
 
@@ -11,23 +11,25 @@ import { useListenClickOutside } from '@/ui/utilities/pointer-event/hooks/useLis
 import { useRef } from 'react';
 import { isDefined } from 'twenty-shared/utils';
 import { Button } from 'twenty-ui/input';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
 
-const StyledDialogOverlay = styled(motion.div)`
+const StyledDialogOverlayBase = styled.div`
   align-items: center;
-  background: ${({ theme }) => theme.background.overlayPrimary};
+  background: ${themeCssVariables.background.overlayPrimary};
   display: flex;
-  height: 100dvh;
+  height: calc(100dvh / var(--t-zoom, 1));
   justify-content: center;
   left: 0;
   position: fixed;
   top: 0;
-  width: 100vw;
+  width: calc(100vw / var(--t-zoom, 1));
   z-index: ${RootStackingContextZIndices.Dialog};
 `;
+const StyledDialogOverlay = motion.create(StyledDialogOverlayBase);
 
-const StyledDialogContainer = styled(motion.div)`
-  background: ${({ theme }) => theme.background.primary};
-  border-radius: 8px;
+const StyledDialogContainerBase = styled.div`
+  background: ${themeCssVariables.background.primary};
+  border-radius: ${themeCssVariables.border.radius.md};
   display: flex;
   flex-direction: column;
   max-width: 320px;
@@ -35,26 +37,28 @@ const StyledDialogContainer = styled(motion.div)`
   position: relative;
   width: 100%;
 `;
+const StyledDialogContainer = motion.create(StyledDialogContainerBase);
 
 const StyledDialogTitle = styled.span`
-  color: ${({ theme }) => theme.font.color.primary};
-  font-size: ${({ theme }) => theme.font.size.md};
-  font-weight: ${({ theme }) => theme.font.weight.semiBold};
-  margin-bottom: ${({ theme }) => theme.spacing(6)};
+  color: ${themeCssVariables.font.color.primary};
+  font-size: ${themeCssVariables.font.size.md};
+  font-weight: ${themeCssVariables.font.weight.semiBold};
+  margin-bottom: ${themeCssVariables.spacing[6]};
   text-align: center;
 `;
 
 const StyledDialogMessage = styled.span`
-  color: ${({ theme }) => theme.font.color.primary};
-  font-size: ${({ theme }) => theme.font.size.sm};
-  font-weight: ${({ theme }) => theme.font.weight.regular};
-  margin-bottom: ${({ theme }) => theme.spacing(6)};
+  color: ${themeCssVariables.font.color.primary};
+  font-size: ${themeCssVariables.font.size.sm};
+  font-weight: ${themeCssVariables.font.weight.regular};
+  margin-bottom: ${themeCssVariables.spacing[6]};
   text-align: center;
 `;
 
-const StyledDialogButton = styled(Button)`
+const StyledDialogButtonContainer = styled.div`
+  display: flex;
   justify-content: center;
-  margin-bottom: ${({ theme }) => theme.spacing(2)};
+  margin-bottom: ${themeCssVariables.spacing[2]};
 `;
 
 export type DialogButtonOptions = Omit<
@@ -154,16 +158,18 @@ export const Dialog = ({
         {message && <StyledDialogMessage>{message}</StyledDialogMessage>}
         {children}
         {buttons.map(({ accent, onClick, role, title: key, variant }) => (
-          <StyledDialogButton
-            onClick={(event) => {
-              onClose?.();
-              onClick?.(event);
-            }}
-            fullWidth={true}
-            variant={variant ?? 'secondary'}
-            title={key}
-            {...{ accent, key, role }}
-          />
+          <StyledDialogButtonContainer key={key}>
+            <Button
+              onClick={(event: React.MouseEvent<HTMLButtonElement>) => {
+                onClose?.();
+                onClick?.(event);
+              }}
+              fullWidth={true}
+              variant={variant ?? 'secondary'}
+              title={key}
+              {...{ accent, role }}
+            />
+          </StyledDialogButtonContainer>
         ))}
       </StyledDialogContainer>
     </StyledDialogOverlay>

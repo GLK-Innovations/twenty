@@ -1,10 +1,11 @@
 import { type Bundle, type ZObject } from 'zapier-platform-core';
 
-import handleQueryParams from '../../utils/handleQueryParams';
 import requestDb, {
   requestDbViaRestApi,
   requestSchema,
-} from '../../utils/requestDb';
+} from 'src/utils/requestDb';
+import handleQueryParams from 'src/utils/handleQueryParams';
+import { type InputData } from 'src/utils/data.types';
 
 export enum DatabaseEventAction {
   CREATED = 'created',
@@ -20,25 +21,28 @@ export const performSubscribe = async (z: ZObject, bundle: Bundle) => {
     ],
     secret: '',
   };
-  const result = await requestDb(
+  const result = await requestDb({
     z,
     bundle,
-    `mutation createWebhook {createWebhook(input:{${handleQueryParams(
+    query: `mutation createWebhook {createWebhook(input:{${handleQueryParams(
       data,
     )}}) {id}}`,
-    'metadata',
-  );
+    endpoint: 'metadata',
+  });
   return result.data.createWebhook;
 };
 
-export const performUnsubscribe = async (z: ZObject, bundle: Bundle) => {
+export const performUnsubscribe = async (
+  z: ZObject,
+  bundle: Bundle,
+): Promise<boolean> => {
   const data = { id: bundle.subscribeData?.id };
-  const result = await requestDb(
+  const result = await requestDb({
     z,
     bundle,
-    `mutation deleteWebhook {deleteWebhook(${handleQueryParams(data)})}`,
-    'metadata',
-  );
+    query: `mutation deleteWebhook {deleteWebhook(${handleQueryParams(data)}) {id}}`,
+    endpoint: 'metadata',
+  });
   return result.data.deleteWebhook;
 };
 
@@ -81,7 +85,7 @@ const getNamePluralFromNameSingular = async (
 
 export const performList = async (
   z: ZObject,
-  bundle: Bundle,
+  bundle: Bundle<InputData>,
 ): Promise<{ record: Record<string, any>; updatedFields?: string[] }[]> => {
   const nameSingular = bundle.inputData.nameSingular;
   const namePlural = await getNamePluralFromNameSingular(

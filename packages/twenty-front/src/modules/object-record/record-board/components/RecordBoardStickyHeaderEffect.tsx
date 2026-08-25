@@ -1,24 +1,28 @@
+import { RecordBoardContext } from '@/object-record/record-board/contexts/RecordBoardContext';
+import { getRecordBoardHeaderHtmlId } from '@/object-record/record-board/utils/getRecordBoardHeaderHtmlId';
 import { scrollWrapperScrollTopComponentState } from '@/ui/utilities/scroll/states/scrollWrapperScrollTopComponentState';
-import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
-import { useEffect } from 'react';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import { useContext, useEffect } from 'react';
 
 export const RecordBoardStickyHeaderEffect = () => {
-  const scrollTop = useRecoilComponentValue(
+  const { recordBoardId } = useContext(RecordBoardContext);
+
+  const scrollWrapperScrollTop = useAtomComponentStateValue(
     scrollWrapperScrollTopComponentState,
   );
 
   // TODO: move this outside because it might cause way too many re-renders for other hooks
   useEffect(() => {
-    if (scrollTop > 0) {
+    if (scrollWrapperScrollTop > 0) {
       document
-        .getElementById('record-board-header')
+        .getElementById(getRecordBoardHeaderHtmlId(recordBoardId))
         ?.classList.add('header-sticky');
     } else {
       document
-        .getElementById('record-board-header')
+        .getElementById(getRecordBoardHeaderHtmlId(recordBoardId))
         ?.classList.remove('header-sticky');
     }
-  }, [scrollTop]);
+  }, [scrollWrapperScrollTop, recordBoardId]);
 
   return <></>;
 };

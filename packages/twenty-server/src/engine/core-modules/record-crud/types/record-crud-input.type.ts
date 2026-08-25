@@ -1,7 +1,4 @@
-import {
-  type ObjectRecordFilter,
-  type ObjectRecordOrderBy,
-} from 'src/engine/api/graphql/workspace-query-builder/interfaces/object-record.interface';
+import { type ObjectRecordOrderBy } from 'src/engine/api/graphql/workspace-query-builder/interfaces/object-record.interface';
 
 import { type ObjectRecordProperties } from './object-record-properties.type';
 
@@ -26,18 +23,18 @@ export type DeleteRecordInput = {
 export type FindRecordsInput = {
   objectName: string;
   filter?: {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // oxlint-disable-next-line typescript/no-explicit-any
     recordFilterGroups?: any;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // oxlint-disable-next-line typescript/no-explicit-any
     recordFilters?: any;
-    gqlOperationFilter?: Partial<ObjectRecordFilter>[];
   };
   orderBy?: {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // oxlint-disable-next-line typescript/no-explicit-any
     recordSorts?: any;
-    gqlOperationOrderBy?: ObjectRecordOrderBy;
+    gqlOperationOrderBy?: Partial<ObjectRecordOrderBy>;
   };
   limit?: number;
+  offset?: number;
 };
 
 export type UpsertRecordInput = {

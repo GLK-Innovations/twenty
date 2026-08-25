@@ -29,34 +29,40 @@ export class RestApiFindManyHandler extends RestApiBaseHandler {
       const parsedArgs = this.parseRequestArgs(request);
       const {
         authContext,
-        objectMetadataItemWithFieldMaps,
-        objectMetadataMaps,
+        flatObjectMetadata,
+        flatObjectMetadataMaps,
+        flatFieldMetadataMaps,
+        objectIdByNameSingular,
       } = await this.buildCommonOptions(request);
 
       const selectedFields = await this.computeSelectedFields({
         depth: parsedArgs.depth,
-        objectMetadataMapItem: objectMetadataItemWithFieldMaps,
-        objectMetadataMaps,
+        flatObjectMetadata,
+        flatObjectMetadataMaps,
+        flatFieldMetadataMaps,
         authContext,
       });
 
-      const { records, aggregatedValues, pageInfo } =
-        await this.commonFindManyQueryRunnerService.execute(
-          {
-            ...parsedArgs,
-            selectedFields: { ...selectedFields, totalCount: true },
-          },
-          {
-            authContext,
-            objectMetadataMaps,
-            objectMetadataItemWithFieldMaps,
-          },
-        );
+      const {
+        results: { records, aggregatedValues, pageInfo },
+      } = await this.commonFindManyQueryRunnerService.execute(
+        {
+          ...parsedArgs,
+          selectedFields: { ...selectedFields, totalCount: true },
+        },
+        {
+          authContext,
+          flatObjectMetadata,
+          flatObjectMetadataMaps,
+          flatFieldMetadataMaps,
+          objectIdByNameSingular,
+        },
+      );
 
       return this.formatRestResponse(
         records,
         aggregatedValues,
-        objectMetadataItemWithFieldMaps.namePlural,
+        flatObjectMetadata.namePlural,
         pageInfo,
       );
     } catch (error) {
@@ -66,7 +72,7 @@ export class RestApiFindManyHandler extends RestApiBaseHandler {
 
   private formatRestResponse(
     records: ObjectRecord[],
-    aggregatedValues: Record<string, number>,
+    aggregatedValues: Record<string, number> | undefined,
     objectNamePlural: string,
     pageInfo: PageInfo,
   ) {
@@ -74,7 +80,7 @@ export class RestApiFindManyHandler extends RestApiBaseHandler {
       data: {
         [objectNamePlural]: records,
       },
-      totalCount: Number(aggregatedValues.totalCount),
+      totalCount: Number(aggregatedValues?.totalCount ?? 0),
       pageInfo,
     };
   }

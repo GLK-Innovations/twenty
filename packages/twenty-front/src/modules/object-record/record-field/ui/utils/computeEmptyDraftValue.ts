@@ -48,7 +48,9 @@ export const computeEmptyDraftValue = <FieldValue>({
       addressState: '',
       addressCountry: '',
       addressPostcode: '',
-    } as FieldInputDraftValue<FieldValue>;
+      addressLat: null,
+      addressLng: null,
+    } as unknown as FieldInputDraftValue<FieldValue>;
   }
 
   if (isFieldCurrency(fieldDefinition)) {

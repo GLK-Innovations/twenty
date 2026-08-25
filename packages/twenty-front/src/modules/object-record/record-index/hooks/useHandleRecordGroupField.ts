@@ -1,177 +1,124 @@
 import { useContextStoreObjectMetadataItemOrThrow } from '@/context-store/hooks/useContextStoreObjectMetadataItemOrThrow';
 import { contextStoreCurrentViewIdComponentState } from '@/context-store/states/contextStoreCurrentViewIdComponentState';
 import { type FieldMetadataItem } from '@/object-metadata/types/FieldMetadataItem';
-import { useSetRecordGroups } from '@/object-record/record-group/hooks/useSetRecordGroups';
-import { useRecoilComponentCallbackState } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentCallbackState';
-import { usePersistViewGroupRecords } from '@/views/hooks/internal/usePersistViewGroup';
-import { useGetViewFromPrefetchState } from '@/views/hooks/useGetViewFromPrefetchState';
-import { type ViewGroup } from '@/views/types/ViewGroup';
-import { useRecoilCallback } from 'recoil';
-import { v4 } from 'uuid';
+import { isManyToOneRelationField } from '@/object-metadata/utils/isManyToOneRelationField';
+import { useLoadRecordIndexStates } from '@/object-record/record-index/hooks/useLoadRecordIndexStates';
+import { useAtomComponentStateCallbackState } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateCallbackState';
+import { usePerformViewAPIUpdate } from '@/views/hooks/internal/usePerformViewAPIUpdate';
+import { useGetViewFromState } from '@/views/hooks/useGetViewFromState';
+import { useStore } from 'jotai';
+import { useCallback } from 'react';
+import { isDefined } from 'twenty-shared/utils';
 import { isUndefinedOrNull } from '~/utils/isUndefinedOrNull';
 
 export const useHandleRecordGroupField = () => {
-  const { createViewGroups, deleteViewGroups } = usePersistViewGroupRecords();
-
-  const currentViewIdCallbackState = useRecoilComponentCallbackState(
+  const currentViewIdCallbackState = useAtomComponentStateCallbackState(
     contextStoreCurrentViewIdComponentState,
   );
 
   const { objectMetadataItem } = useContextStoreObjectMetadataItemOrThrow();
 
-  const { getViewFromPrefetchState } = useGetViewFromPrefetchState();
+  const { getViewFromState } = useGetViewFromState();
 
-  const { setRecordGroupsFromViewGroups } = useSetRecordGroups();
+  const { performViewAPIUpdate } = usePerformViewAPIUpdate();
+  const { loadRecordIndexStates } = useLoadRecordIndexStates();
 
-  const handleRecordGroupFieldChange = useRecoilCallback(
-    ({ snapshot }) =>
-      async (fieldMetadataItem: FieldMetadataItem) => {
-        const currentViewId = snapshot
-          .getLoadable(currentViewIdCallbackState)
-          .getValue();
+  const store = useStore();
 
-        if (!currentViewId) {
-          return;
-        }
+  const updateViewMainGroupByFieldMetadataId = useCallback(
+    async ({
+      viewId,
+      mainGroupByFieldMetadataId,
+    }: {
+      viewId: string;
+      mainGroupByFieldMetadataId: string | null;
+    }) => {
+      const updatedViewResult = await performViewAPIUpdate({
+        id: viewId,
+        input: {
+          mainGroupByFieldMetadataId,
+        },
+      });
 
-        const view = await getViewFromPrefetchState(currentViewId);
+      if (updatedViewResult.status !== 'successful') {
+        return;
+      }
 
-        if (isUndefinedOrNull(view)) {
-          return;
-        }
+      const updatedView = updatedViewResult.response.data?.updateView;
 
-        if (
-          isUndefinedOrNull(fieldMetadataItem.options) ||
-          fieldMetadataItem.options.length === 0
-        ) {
-          return;
-        }
+      if (!isDefined(updatedView)) {
+        return;
+      }
 
-        const existingGroupKeys = new Set(
-          view.viewGroups.map(
-            (group) => `${group.fieldMetadataId}:${group.fieldValue}`,
-          ),
-        );
+      loadRecordIndexStates(updatedView, objectMetadataItem);
+    },
+    [performViewAPIUpdate, loadRecordIndexStates, objectMetadataItem],
+  );
 
-        const viewGroupsToCreate = fieldMetadataItem.options
-          // Avoid creation of already existing view groups
-          .filter(
-            (option) =>
-              !existingGroupKeys.has(`${fieldMetadataItem.id}:${option.value}`),
-          )
-          // Alphabetically sort the options by default
-          .sort((a, b) => a.value.localeCompare(b.value))
-          .map(
-            (option, index) =>
-              ({
-                __typename: 'ViewGroup',
-                id: v4(),
-                fieldValue: option.value,
-                isVisible: true,
-                position: index,
-                fieldMetadataId: fieldMetadataItem.id,
-              }) satisfies ViewGroup,
-          );
+  const handleRecordGroupFieldChange = useCallback(
+    async (fieldMetadataItem: FieldMetadataItem) => {
+      const currentViewId = store.get(currentViewIdCallbackState);
 
-        if (
-          !existingGroupKeys.has(`${fieldMetadataItem.id}:`) &&
-          fieldMetadataItem.isNullable === true
-        ) {
-          viewGroupsToCreate.push({
-            __typename: 'ViewGroup',
-            id: v4(),
-            fieldValue: '',
-            isVisible: true,
-            position: fieldMetadataItem.options.length,
-            fieldMetadataId: fieldMetadataItem.id,
-          } satisfies ViewGroup);
-        }
+      if (!currentViewId) {
+        return;
+      }
 
-        const viewGroupsToDelete = view.viewGroups.filter(
-          (group) => group.fieldMetadataId !== fieldMetadataItem.id,
-        );
+      const view = getViewFromState(currentViewId);
 
-        const newViewGroupsList = [
-          ...view.viewGroups.filter(
-            (group) => group.fieldMetadataId === fieldMetadataItem.id,
-          ),
-          ...viewGroupsToCreate,
-        ];
+      if (isUndefinedOrNull(view)) {
+        return;
+      }
 
-        setRecordGroupsFromViewGroups(
-          view.id,
-          newViewGroupsList,
-          objectMetadataItem,
-        );
+      const isRelationGroupBy = isManyToOneRelationField(fieldMetadataItem);
 
-        if (viewGroupsToCreate.length > 0) {
-          await createViewGroups({
-            inputs: viewGroupsToCreate.map(({ __typename, ...viewGroup }) => ({
-              ...viewGroup,
-              viewId: view.id,
-            })),
-          });
-        }
+      if (
+        !isRelationGroupBy &&
+        (isUndefinedOrNull(fieldMetadataItem.options) ||
+          fieldMetadataItem.options.length === 0)
+      ) {
+        return;
+      }
 
-        if (viewGroupsToDelete.length > 0) {
-          await deleteViewGroups(
-            viewGroupsToDelete.map((group) => ({
-              input: {
-                id: group.id,
-              },
-            })),
-          );
-        }
-      },
+      await updateViewMainGroupByFieldMetadataId({
+        viewId: view.id,
+        mainGroupByFieldMetadataId: fieldMetadataItem.id,
+      });
+    },
     [
-      objectMetadataItem,
       currentViewIdCallbackState,
-      getViewFromPrefetchState,
-      setRecordGroupsFromViewGroups,
-      createViewGroups,
-      deleteViewGroups,
+      getViewFromState,
+      updateViewMainGroupByFieldMetadataId,
+      store,
     ],
   );
 
-  const resetRecordGroupField = useRecoilCallback(
-    ({ snapshot }) =>
-      async () => {
-        const currentViewId = snapshot
-          .getLoadable(currentViewIdCallbackState)
-          .getValue();
+  const resetRecordGroupField = useCallback(async () => {
+    const currentViewId = store.get(currentViewIdCallbackState);
 
-        if (!currentViewId) {
-          return;
-        }
+    if (!currentViewId) {
+      return;
+    }
 
-        const view = getViewFromPrefetchState(currentViewId);
+    const view = getViewFromState(currentViewId);
 
-        if (isUndefinedOrNull(view)) {
-          return;
-        }
+    if (isUndefinedOrNull(view)) {
+      return;
+    }
 
-        if (view.viewGroups.length === 0) {
-          return;
-        }
+    if (!isDefined(view.mainGroupByFieldMetadataId)) {
+      return;
+    }
 
-        await deleteViewGroups(
-          view.viewGroups.map((group) => ({
-            input: {
-              id: group.id,
-            },
-          })),
-        );
-
-        setRecordGroupsFromViewGroups(view.id, [], objectMetadataItem);
-      },
-    [
-      deleteViewGroups,
-      currentViewIdCallbackState,
-      getViewFromPrefetchState,
-      setRecordGroupsFromViewGroups,
-      objectMetadataItem,
-    ],
-  );
+    await updateViewMainGroupByFieldMetadataId({
+      viewId: view.id,
+      mainGroupByFieldMetadataId: null,
+    });
+  }, [
+    currentViewIdCallbackState,
+    getViewFromState,
+    updateViewMainGroupByFieldMetadataId,
+    store,
+  ]);
 
   return { handleRecordGroupFieldChange, resetRecordGroupField };
 };

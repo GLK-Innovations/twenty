@@ -1,75 +1,113 @@
+import { currentWorkspaceState } from '@/auth/states/currentWorkspaceState';
+import { isDDLLockedState } from '@/client-config/states/isDDLLockedState';
 import { useDeleteOneObjectMetadataItem } from '@/object-metadata/hooks/useDeleteOneObjectMetadataItem';
+import { useGetIsMetadataItemCustom } from '@/object-metadata/hooks/useGetIsMetadataItemCustom';
 import { useUpdateOneObjectMetadataItem } from '@/object-metadata/hooks/useUpdateOneObjectMetadataItem';
-import { type ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
+import { isHiddenSystemField } from '@/object-metadata/utils/isHiddenSystemField';
 import { useCombinedGetTotalCount } from '@/object-record/multiple-objects/hooks/useCombinedGetTotalCount';
+import { StyledSettingsDataModelTableBodyContainer } from '@/settings/data-model/components/SettingsDataModelTableBodyContainer';
+import { SettingsObjectMetadataItemTableRow } from '@/settings/data-model/object-details/components/SettingsObjectItemTableRow';
+import { TableRow } from '@/ui/layout/table/components/TableRow';
+import { TableBody } from '@/ui/layout/table/components/TableBody';
 import {
-  SettingsObjectMetadataItemTableRow,
-  StyledObjectTableRow,
-} from '@/settings/data-model/object-details/components/SettingsObjectItemTableRow';
+  SETTINGS_OBJECT_TABLE_ROW_GRID_TEMPLATE_COLUMNS,
+  SETTINGS_OBJECT_TABLE_ROW_MOBILE_MIN_WIDTH,
+  StyledStickyFirstCell,
+} from '@/settings/data-model/object-details/components/SettingsObjectItemTableRowStyledComponents';
 import { SettingsObjectInactiveMenuDropDown } from '@/settings/data-model/objects/components/SettingsObjectInactiveMenuDropDown';
-import { getItemTagInfo } from '@/settings/data-model/utils/getItemTagInfo';
-import { SettingsTextInput } from '@/ui/input/components/SettingsTextInput';
+import { Dropdown } from '@/ui/layout/dropdown/components/Dropdown';
+import { DropdownContent } from '@/ui/layout/dropdown/components/DropdownContent';
+import { DropdownMenuItemsContainer } from '@/ui/layout/dropdown/components/DropdownMenuItemsContainer';
 import { SortableTableHeader } from '@/ui/layout/table/components/SortableTableHeader';
 import { Table } from '@/ui/layout/table/components/Table';
 import { TableHeader } from '@/ui/layout/table/components/TableHeader';
-import { TableSection } from '@/ui/layout/table/components/TableSection';
 import { useSortedArray } from '@/ui/layout/table/hooks/useSortedArray';
-import { useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
+import { isAdvancedModeEnabledState } from '@/ui/navigation/navigation-drawer/states/isAdvancedModeEnabledState';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { styled } from '@linaria/react';
 import { useLingui } from '@lingui/react/macro';
-import { isNonEmptyArray } from '@sniptt/guards';
-import { useMemo, useState } from 'react';
+import { type ReactNode, useContext, useMemo, useState } from 'react';
 import { SettingsPath } from 'twenty-shared/types';
 import { getSettingsPath } from 'twenty-shared/utils';
-import { IconChevronRight, IconSearch } from 'twenty-ui/display';
+import { IconArchive, IconChevronRight, IconSettings } from 'twenty-ui/icon';
+import { SearchInput } from 'twenty-ui/input';
+import { MenuItemToggle } from 'twenty-ui/navigation';
+import {
+  MOBILE_VIEWPORT,
+  ThemeContext,
+  themeCssVariables,
+} from 'twenty-ui/theme-constants';
+import { useNavigateSettings } from '~/hooks/useNavigateSettings';
 import { GET_SETTINGS_OBJECT_TABLE_METADATA } from '~/pages/settings/data-model/constants/SettingsObjectTableMetadata';
 import type { SettingsObjectTableItem } from '~/pages/settings/data-model/types/SettingsObjectTableItem';
 import { normalizeSearchText } from '~/utils/normalizeSearchText';
 
-const StyledIconChevronRight = styled(IconChevronRight)`
-  color: ${({ theme }) => theme.font.color.tertiary};
+const StyledIconChevronRightContainer = styled.div`
+  color: ${themeCssVariables.font.color.tertiary};
 `;
 
-const StyledSearchInput = styled(SettingsTextInput)`
-  padding-bottom: ${({ theme }) => theme.spacing(2)};
-  width: 100%;
+const StyledSearchInputContainer = styled.div`
+  padding-bottom: ${themeCssVariables.spacing[2]};
+`;
+
+const StyledScrollWrapper = styled.div`
+  @media (max-width: ${MOBILE_VIEWPORT}px) {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+`;
+
+const StyledScrollableContent = styled.div`
+  @media (max-width: ${MOBILE_VIEWPORT}px) {
+    min-width: ${SETTINGS_OBJECT_TABLE_ROW_MOBILE_MIN_WIDTH};
+  }
 `;
 
 export const SettingsObjectTable = ({
-  activeObjects,
-  inactiveObjects,
+  objectMetadataItems,
   withSearchBar = true,
 }: {
-  activeObjects: ObjectMetadataItem[];
-  inactiveObjects: ObjectMetadataItem[];
+  objectMetadataItems: EnrichedObjectMetadataItem[];
   withSearchBar?: boolean;
 }) => {
+  const { theme } = useContext(ThemeContext);
   const { t } = useLingui();
+  const getIsMetadataItemCustom = useGetIsMetadataItemCustom();
+  const navigate = useNavigateSettings();
 
-  const theme = useTheme();
+  const isAdvancedModeEnabled = useAtomStateValue(isAdvancedModeEnabledState);
+  const isDDLLocked = useAtomStateValue(isDDLLockedState);
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [showDeactivated, setShowDeactivated] = useState(true);
+  const [showSystemObjects, setShowSystemObjects] = useState(true);
+  const shouldShowSystemObjects = isAdvancedModeEnabled && showSystemObjects;
 
   const { deleteOneObjectMetadataItem } = useDeleteOneObjectMetadataItem();
 
   const { updateOneObjectMetadataItem } = useUpdateOneObjectMetadataItem();
 
-  const { totalCountByObjectMetadataItemNamePlural } = useCombinedGetTotalCount(
-    {
-      objectMetadataItems: [...activeObjects, ...inactiveObjects],
-    },
-  );
+  const { totalCountByObjectMetadataItemNamePlural } =
+    useCombinedGetTotalCount();
 
-  const activeObjectSettingsArray = useMemo(
+  const currentWorkspace = useAtomStateValue(currentWorkspaceState);
+  const installedApplications = currentWorkspace?.installedApplications;
+
+  const allObjectSettingsArray = useMemo(
     () =>
-      activeObjects.map(
+      objectMetadataItems.map(
         (objectMetadataItem) =>
           ({
             objectMetadataItem,
             labelPlural: objectMetadataItem.labelPlural,
-            objectTypeLabel: getItemTagInfo(objectMetadataItem).labelText,
+            objectTypeLabel:
+              installedApplications?.find(
+                (application) =>
+                  application.id === objectMetadataItem.applicationId,
+              )?.name ?? (objectMetadataItem.isRemote ? 'Remote' : ''),
             fieldsCount: objectMetadataItem.fields.filter(
-              (field) => !field.isSystem,
+              (field) => !isHiddenSystemField(field),
             ).length,
             totalObjectCount:
               totalCountByObjectMetadataItemNamePlural[
@@ -77,148 +115,202 @@ export const SettingsObjectTable = ({
               ] ?? 0,
           }) satisfies SettingsObjectTableItem,
       ),
-    [activeObjects, totalCountByObjectMetadataItemNamePlural],
+    [
+      objectMetadataItems,
+      totalCountByObjectMetadataItemNamePlural,
+      installedApplications,
+    ],
   );
 
-  const inactiveObjectSettingsArray = useMemo(
-    () =>
-      inactiveObjects.map(
-        (objectMetadataItem) =>
-          ({
-            objectMetadataItem,
-            labelPlural: objectMetadataItem.labelPlural,
-            objectTypeLabel: getItemTagInfo({
-              isCustom: objectMetadataItem.isCustom,
-              isRemote: objectMetadataItem.isRemote,
-            }).labelText,
-            fieldsCount: objectMetadataItem.fields.filter(
-              (field) => !field.isSystem,
-            ).length,
-            totalObjectCount:
-              totalCountByObjectMetadataItemNamePlural[
-                objectMetadataItem.namePlural
-              ] ?? 0,
-          }) satisfies SettingsObjectTableItem,
-      ),
-    [inactiveObjects, totalCountByObjectMetadataItemNamePlural],
-  );
-
-  const sortedActiveObjectSettingsItems = useSortedArray(
-    activeObjectSettingsArray,
+  const sortedObjectSettingsItems = useSortedArray(
+    allObjectSettingsArray,
     GET_SETTINGS_OBJECT_TABLE_METADATA,
   );
 
-  const sortedInactiveObjectSettingsItems = useSortedArray(
-    inactiveObjectSettingsArray,
-    GET_SETTINGS_OBJECT_TABLE_METADATA,
-  );
-
-  const filteredActiveObjectSettingsItems = useMemo(
+  const filteredObjectSettingsItems = useMemo(
     () =>
-      sortedActiveObjectSettingsItems.filter((item) => {
+      sortedObjectSettingsItems.filter((item) => {
         const searchNormalized = normalizeSearchText(searchTerm);
-        return (
+        const matchesSearch =
           normalizeSearchText(item.labelPlural).includes(searchNormalized) ||
-          normalizeSearchText(item.objectTypeLabel).includes(searchNormalized)
-        );
-      }),
-    [sortedActiveObjectSettingsItems, searchTerm],
-  );
+          normalizeSearchText(item.objectTypeLabel).includes(searchNormalized);
 
-  const filteredInactiveObjectSettingsItems = useMemo(
-    () =>
-      sortedInactiveObjectSettingsItems.filter((item) => {
-        const searchNormalized = normalizeSearchText(searchTerm);
-        return (
-          normalizeSearchText(item.labelPlural).includes(searchNormalized) ||
-          normalizeSearchText(item.objectTypeLabel).includes(searchNormalized)
-        );
+        if (!matchesSearch) {
+          return false;
+        }
+
+        const isActive = item.objectMetadataItem.isActive;
+        if (!isActive && !showDeactivated) {
+          return false;
+        }
+
+        const isSystem = item.objectMetadataItem.isSystem;
+        if (isSystem && !shouldShowSystemObjects) {
+          return false;
+        }
+
+        return true;
       }),
-    [sortedInactiveObjectSettingsItems, searchTerm],
+    [
+      sortedObjectSettingsItems,
+      searchTerm,
+      showDeactivated,
+      shouldShowSystemObjects,
+    ],
   );
 
   return (
     <>
       {withSearchBar && (
-        <StyledSearchInput
-          instanceId="settings-objects-search"
-          LeftIcon={IconSearch}
-          placeholder={t`Search for an object...`}
-          value={searchTerm}
-          onChange={setSearchTerm}
-        />
+        <StyledSearchInputContainer>
+          <SearchInput
+            placeholder={t`Search for an object...`}
+            value={searchTerm}
+            onChange={setSearchTerm}
+            filterDropdown={(filterButton: ReactNode) => (
+              <Dropdown
+                dropdownId="settings-objects-filter-dropdown"
+                dropdownPlacement="bottom-end"
+                dropdownOffset={{ x: 0, y: 8 }}
+                clickableComponent={filterButton}
+                dropdownComponents={
+                  <DropdownContent>
+                    <DropdownMenuItemsContainer>
+                      <MenuItemToggle
+                        LeftIcon={IconArchive}
+                        onToggleChange={() =>
+                          setShowDeactivated(!showDeactivated)
+                        }
+                        toggled={showDeactivated}
+                        text={t`Deactivated`}
+                        toggleSize="small"
+                      />
+                      {isAdvancedModeEnabled && (
+                        <MenuItemToggle
+                          LeftIcon={IconSettings}
+                          onToggleChange={() =>
+                            setShowSystemObjects(!showSystemObjects)
+                          }
+                          toggled={showSystemObjects}
+                          text={t`System objects`}
+                          toggleSize="small"
+                        />
+                      )}
+                    </DropdownMenuItemsContainer>
+                  </DropdownContent>
+                }
+              />
+            )}
+          />
+        </StyledSearchInputContainer>
       )}
 
-      <Table>
-        <StyledObjectTableRow>
-          {GET_SETTINGS_OBJECT_TABLE_METADATA.fields.map(
-            (settingsObjectsTableMetadataField) => (
-              <SortableTableHeader
-                key={settingsObjectsTableMetadataField.fieldName}
-                fieldName={settingsObjectsTableMetadataField.fieldName}
-                label={t(settingsObjectsTableMetadataField.fieldLabel)}
-                tableId={GET_SETTINGS_OBJECT_TABLE_METADATA.tableId}
-                align={settingsObjectsTableMetadataField.align}
-                initialSort={GET_SETTINGS_OBJECT_TABLE_METADATA.initialSort}
-              />
-            ),
-          )}
-          <TableHeader></TableHeader>
-        </StyledObjectTableRow>
-        {isNonEmptyArray(sortedActiveObjectSettingsItems) && (
-          <TableSection title={t`Active`}>
-            {filteredActiveObjectSettingsItems.map((objectSettingsItem) => (
-              <SettingsObjectMetadataItemTableRow
-                key={objectSettingsItem.objectMetadataItem.namePlural}
-                objectMetadataItem={objectSettingsItem.objectMetadataItem}
-                totalObjectCount={objectSettingsItem.totalObjectCount}
-                action={
-                  <StyledIconChevronRight
-                    size={theme.icon.size.md}
-                    stroke={theme.icon.stroke.sm}
-                  />
-                }
-                link={getSettingsPath(SettingsPath.ObjectDetail, {
-                  objectNamePlural:
-                    objectSettingsItem.objectMetadataItem.namePlural,
+      <StyledScrollWrapper>
+        <StyledScrollableContent>
+          <Table>
+            <TableRow
+              gridTemplateColumns={
+                SETTINGS_OBJECT_TABLE_ROW_GRID_TEMPLATE_COLUMNS
+              }
+            >
+              {GET_SETTINGS_OBJECT_TABLE_METADATA.fields.map(
+                (settingsObjectsTableMetadataField, index) =>
+                  index === 0 ? (
+                    <StyledStickyFirstCell
+                      key={settingsObjectsTableMetadataField.fieldName}
+                    >
+                      <SortableTableHeader
+                        fieldName={settingsObjectsTableMetadataField.fieldName}
+                        label={t(settingsObjectsTableMetadataField.fieldLabel)}
+                        tableId={GET_SETTINGS_OBJECT_TABLE_METADATA.tableId}
+                        align={settingsObjectsTableMetadataField.align}
+                        initialSort={
+                          GET_SETTINGS_OBJECT_TABLE_METADATA.initialSort
+                        }
+                      />
+                    </StyledStickyFirstCell>
+                  ) : (
+                    <SortableTableHeader
+                      key={settingsObjectsTableMetadataField.fieldName}
+                      fieldName={settingsObjectsTableMetadataField.fieldName}
+                      label={t(settingsObjectsTableMetadataField.fieldLabel)}
+                      tableId={GET_SETTINGS_OBJECT_TABLE_METADATA.tableId}
+                      align={settingsObjectsTableMetadataField.align}
+                      initialSort={
+                        GET_SETTINGS_OBJECT_TABLE_METADATA.initialSort
+                      }
+                    />
+                  ),
+              )}
+              <TableHeader></TableHeader>
+            </TableRow>
+            <StyledSettingsDataModelTableBodyContainer>
+              <TableBody>
+                {filteredObjectSettingsItems.map((objectSettingsItem) => {
+                  const isActive =
+                    objectSettingsItem.objectMetadataItem.isActive;
+
+                  return (
+                    <SettingsObjectMetadataItemTableRow
+                      key={objectSettingsItem.objectMetadataItem.namePlural}
+                      objectMetadataItem={objectSettingsItem.objectMetadataItem}
+                      totalObjectCount={objectSettingsItem.totalObjectCount}
+                      action={
+                        isActive ? (
+                          <StyledIconChevronRightContainer>
+                            <IconChevronRight
+                              size={theme.icon.size.md}
+                              stroke={theme.icon.stroke.sm}
+                            />
+                          </StyledIconChevronRightContainer>
+                        ) : (
+                          <SettingsObjectInactiveMenuDropDown
+                            isCustomObject={getIsMetadataItemCustom(
+                              objectSettingsItem.objectMetadataItem,
+                            )}
+                            isReadOnly={isDDLLocked}
+                            objectMetadataItemNamePlural={
+                              objectSettingsItem.objectMetadataItem.namePlural
+                            }
+                            onEdit={() =>
+                              navigate(SettingsPath.ObjectDetail, {
+                                objectNamePlural:
+                                  objectSettingsItem.objectMetadataItem
+                                    .namePlural,
+                              })
+                            }
+                            onActivate={() =>
+                              updateOneObjectMetadataItem({
+                                idToUpdate:
+                                  objectSettingsItem.objectMetadataItem.id,
+                                updatePayload: { isActive: true },
+                              })
+                            }
+                            onDelete={() =>
+                              deleteOneObjectMetadataItem(
+                                objectSettingsItem.objectMetadataItem.id,
+                              )
+                            }
+                          />
+                        )
+                      }
+                      link={
+                        isActive
+                          ? getSettingsPath(SettingsPath.ObjectDetail, {
+                              objectNamePlural:
+                                objectSettingsItem.objectMetadataItem
+                                  .namePlural,
+                            })
+                          : undefined
+                      }
+                    />
+                  );
                 })}
-              />
-            ))}
-          </TableSection>
-        )}
-        {isNonEmptyArray(sortedInactiveObjectSettingsItems) && (
-          <TableSection title={t`Inactive`}>
-            {filteredInactiveObjectSettingsItems.map((objectSettingsItem) => (
-              <SettingsObjectMetadataItemTableRow
-                key={objectSettingsItem.objectMetadataItem.namePlural}
-                objectMetadataItem={objectSettingsItem.objectMetadataItem}
-                totalObjectCount={objectSettingsItem.totalObjectCount}
-                action={
-                  <SettingsObjectInactiveMenuDropDown
-                    isCustomObject={
-                      objectSettingsItem.objectMetadataItem.isCustom
-                    }
-                    objectMetadataItemNamePlural={
-                      objectSettingsItem.objectMetadataItem.namePlural
-                    }
-                    onActivate={() =>
-                      updateOneObjectMetadataItem({
-                        idToUpdate: objectSettingsItem.objectMetadataItem.id,
-                        updatePayload: { isActive: true },
-                      })
-                    }
-                    onDelete={() =>
-                      deleteOneObjectMetadataItem(
-                        objectSettingsItem.objectMetadataItem.id,
-                      )
-                    }
-                  />
-                }
-              />
-            ))}
-          </TableSection>
-        )}
-      </Table>
+              </TableBody>
+            </StyledSettingsDataModelTableBodyContainer>
+          </Table>
+        </StyledScrollableContent>
+      </StyledScrollWrapper>
     </>
   );
 };

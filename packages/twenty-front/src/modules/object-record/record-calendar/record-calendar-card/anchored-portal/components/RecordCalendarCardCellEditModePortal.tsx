@@ -1,10 +1,10 @@
-import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
 
 import { useRecordCalendarContextOrThrow } from '@/object-record/record-calendar/contexts/RecordCalendarContext';
 import { RecordCalendarCardInputContextProvider } from '@/object-record/record-calendar/record-calendar-card/anchored-portal/components/RecordCalendarCardInputContextProvider';
-import { RECORD_CALENDAR_CARD_INPUT_ID_PREFIX } from '@/object-record/record-calendar/record-calendar-card/constants/RecordCalendarCardInputIdPrefix';
 import { useRecordCalendarCardMetadataFromPosition } from '@/object-record/record-calendar/record-calendar-card/hooks/useRecordCalendarCardMetadataFromPosition';
 import { recordCalendarCardEditModePositionComponentState } from '@/object-record/record-calendar/record-calendar-card/states/recordCalendarCardEditModePositionComponentState';
+import { getRecordCalendarCardInstanceIdPrefix } from '@/object-record/record-calendar/record-calendar-card/utils/getRecordCalendarCardInstanceIdPrefix';
 import { FieldInput } from '@/object-record/record-field/ui/components/FieldInput';
 import { RecordInlineCellAnchoredPortal } from '@/object-record/record-inline-cell/components/RecordInlineCellAnchoredPortal';
 import { RecordInlineCellEditMode } from '@/object-record/record-inline-cell/components/RecordInlineCellEditMode';
@@ -12,21 +12,26 @@ import { isDefined } from 'twenty-shared/utils';
 
 type RecordCalendarCardCellEditModePortalProps = {
   recordId: string;
+  calendarDay: string;
 };
 
 export const RecordCalendarCardCellEditModePortal = ({
   recordId,
+  calendarDay,
 }: RecordCalendarCardCellEditModePortalProps) => {
   const { objectMetadataItem } = useRecordCalendarContextOrThrow();
 
-  const editModePosition = useRecoilComponentValue(
+  const recordCalendarCardEditModePosition = useAtomComponentStateValue(
     recordCalendarCardEditModePositionComponentState,
   );
 
   const { editedFieldMetadataItem } =
     useRecordCalendarCardMetadataFromPosition();
 
-  if (!isDefined(editModePosition) || !isDefined(editedFieldMetadataItem)) {
+  if (
+    !isDefined(recordCalendarCardEditModePosition) ||
+    !isDefined(editedFieldMetadataItem)
+  ) {
     return null;
   }
 
@@ -35,7 +40,7 @@ export const RecordCalendarCardCellEditModePortal = ({
       fieldMetadataItem={editedFieldMetadataItem}
       objectMetadataItem={objectMetadataItem}
       recordId={recordId}
-      instanceIdPrefix={RECORD_CALENDAR_CARD_INPUT_ID_PREFIX}
+      instanceIdPrefix={getRecordCalendarCardInstanceIdPrefix(calendarDay)}
     >
       <RecordCalendarCardInputContextProvider>
         <RecordInlineCellEditMode>

@@ -1,5 +1,5 @@
 import { type ClientConfig } from '@/client-config/types/ClientConfig';
-import { CaptchaDriverType, SupportDriver } from '~/generated/graphql';
+import { CaptchaDriverType, SupportDriver } from '~/generated-metadata/graphql';
 
 export const mockedClientConfig: ClientConfig = {
   aiModels: [],
@@ -15,7 +15,6 @@ export const mockedClientConfig: ClientConfig = {
   },
   frontDomain: 'localhost',
   defaultSubdomain: 'app',
-  chromeExtensionId: 'MOCKED_EXTENSION_ID',
   analyticsEnabled: true,
   support: {
     supportDriver: SupportDriver.FRONT,
@@ -45,6 +44,13 @@ export const mockedClientConfig: ClientConfig = {
     siteKey: 'MOCKED_SITE_KEY',
   },
   api: { mutationMaximumAffectedRecords: 100 },
+  onboarding: {
+    importContactsCreditsReward: 2,
+    inviteTeamMaxCreditsReward: 9,
+    inviteTeamCreditsRewardPerUser: 3,
+    upgradeCreditsReward: 5,
+    installAppsCreditsRewardPerApp: 1,
+  },
   canManageFeatureFlags: true,
   publicFeatureFlags: [],
   isMicrosoftMessagingEnabled: true,
@@ -55,5 +61,12 @@ export const mockedClientConfig: ClientConfig = {
   isConfigVariablesInDbEnabled: false,
   isImapSmtpCaldavEnabled: false,
   isTwoFactorAuthenticationEnabled: false,
-  isEmailingDomainsEnabled: false,
+  isEmailingDomainInDemoMode: false,
+  allowRequestsToTwentyIcons: true,
+  isCloudflareIntegrationEnabled: false,
+  isClickHouseConfigured: false,
+  isWorkspaceSchemaDDLLocked: false,
+  isOnboardingAiChatEnabled: false,
+  isBookCallOnboardingStepEnabled: false,
+  isCompanyEnrichmentEnabled: false,
 };

@@ -1,4 +1,4 @@
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { PlaceAutocompleteSelect } from '@/geo-map/components/PlaceAutocompleteSelect';
@@ -13,15 +13,15 @@ import { SELECT_COUNTRY_DROPDOWN_ID } from '@/ui/input/components/internal/count
 import { Dropdown } from '@/ui/layout/dropdown/components/Dropdown';
 import { activeDropdownFocusIdState } from '@/ui/layout/dropdown/states/activeDropdownFocusIdState';
 import { useListenClickOutside } from '@/ui/utilities/pointer-event/hooks/useListenClickOutside';
-import { useRecoilValue } from 'recoil';
-import { isDefined } from 'twenty-shared/utils';
-import { MOBILE_VIEWPORT } from 'twenty-ui/theme';
-import { v4 } from 'uuid';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { isDefined, isNonEmptyArray } from 'twenty-shared/utils';
+import { MOBILE_VIEWPORT } from 'twenty-ui/theme-constants';
 
+import { t } from '@lingui/core/macro';
 import { type AllowedAddressSubField } from 'twenty-shared/types';
-import { useAddressAutocomplete } from '../hooks/useAddressAutocomplete';
-import { useCountryUtils } from '../hooks/useCountryUtils';
-import { useFocusManagement } from '../hooks/useFocusManagement';
+import { useAddressAutocomplete } from '@/ui/field/input/hooks/useAddressAutocomplete';
+import { useCountryUtils } from '@/ui/field/input/hooks/useCountryUtils';
+import { useFocusManagement } from '@/ui/field/input/hooks/useFocusManagement';
 
 const StyledAddressContainer = styled.div`
   padding: 4px 8px;
@@ -44,8 +44,8 @@ const StyledAddressContainer = styled.div`
 
 const StyledHalfRowContainer = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
   gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
 
   @media (max-width: ${MOBILE_VIEWPORT}px) {
     display: block;
@@ -113,7 +113,6 @@ export const AddressInput = ({
     placeAutocompleteData,
     tokenForPlaceApi,
     typeOfAddressForAutocomplete,
-    setTokenForPlaceApi,
     setTypeOfAddressForAutocomplete,
     getAutocompletePlaceData,
     autoFillInputsFromPlaceDetails,
@@ -147,10 +146,6 @@ export const AddressInput = ({
       onChange?.(updatedAddress);
 
       if (field === 'addressStreet1' || field === 'addressCity') {
-        const token = tokenForPlaceApi ?? v4();
-        if (token !== tokenForPlaceApi) {
-          setTokenForPlaceApi(token);
-        }
         const countryCode = findCountryCodeByCountryName(
           updatedAddress.addressCountry ?? '',
         );
@@ -158,19 +153,16 @@ export const AddressInput = ({
           setTypeOfAddressForAutocomplete(field);
         }
         const isFieldCity = field === 'addressCity';
-        getAutocompletePlaceData(
-          updatedAddressPart,
-          token,
-          countryCode,
+        getAutocompletePlaceData({
+          address: updatedAddressPart,
+          country: countryCode,
           isFieldCity,
-        );
+        });
       }
     },
     [
       internalValue,
       onChange,
-      tokenForPlaceApi,
-      setTokenForPlaceApi,
       findCountryCodeByCountryName,
       typeOfAddressForAutocomplete,
       setTypeOfAddressForAutocomplete,
@@ -235,7 +227,7 @@ export const AddressInput = ({
     onShiftTab: handleShiftTab,
   });
 
-  const activeDropdownFocusId = useRecoilValue(activeDropdownFocusIdState);
+  const activeDropdownFocusId = useAtomStateValue(activeDropdownFocusIdState);
 
   useListenClickOutside({
     refs: [wrapperRef],
@@ -260,9 +252,7 @@ export const AddressInput = ({
 
   const validAutocompleteData = useMemo(
     () =>
-      placeAutocompleteData && placeAutocompleteData.length > 0
-        ? placeAutocompleteData
-        : null,
+      isNonEmptyArray(placeAutocompleteData) ? placeAutocompleteData : null,
     [placeAutocompleteData],
   );
 
@@ -309,7 +299,7 @@ export const AddressInput = ({
             autoFocus
             value={internalValue.addressStreet1 ?? ''}
             ref={inputRefs.addressStreet1}
-            label="Address 1"
+            label={t`Address 1`}
             fullWidth
             onChange={getChangeHandler('addressStreet1')}
             onFocus={getFocusHandler('addressStreet1')}
@@ -326,7 +316,7 @@ export const AddressInput = ({
         <TextInput
           value={internalValue.addressStreet2 ?? ''}
           ref={inputRefs.addressStreet2}
-          label="Address 2"
+          label={t`Address 2`}
           fullWidth
           onChange={getChangeHandler('addressStreet2')}
           onFocus={getFocusHandler('addressStreet2')}
@@ -338,7 +328,7 @@ export const AddressInput = ({
             <TextInput
               value={internalValue.addressCity ?? ''}
               ref={inputRefs.addressCity}
-              label="City"
+              label={t`City`}
               fullWidth
               onChange={getChangeHandler('addressCity')}
               onFocus={getFocusHandler('addressCity')}
@@ -355,7 +345,7 @@ export const AddressInput = ({
           <TextInput
             value={internalValue.addressState ?? ''}
             ref={inputRefs.addressState}
-            label="State"
+            label={t`State`}
             fullWidth
             onChange={getChangeHandler('addressState')}
             onFocus={getFocusHandler('addressState')}
@@ -367,7 +357,7 @@ export const AddressInput = ({
           <TextInput
             value={internalValue.addressPostcode ?? ''}
             ref={inputRefs.addressPostcode}
-            label="Post Code"
+            label={t`Post Code`}
             fullWidth
             onChange={getChangeHandler('addressPostcode')}
             onFocus={getFocusHandler('addressPostcode')}
@@ -375,7 +365,7 @@ export const AddressInput = ({
         )}
         {isFieldInputInSubFieldsAddress('addressCountry') && (
           <CountrySelect
-            label="Country"
+            label={t`Country`}
             onChange={getChangeHandler('addressCountry')}
             selectedCountryName={internalValue.addressCountry ?? ''}
           />

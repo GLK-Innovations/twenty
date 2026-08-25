@@ -1,4 +1,4 @@
-import { createOneCoreView } from 'test/integration/metadata/suites/view/utils/create-one-core-view.util';
+import { createOneView } from 'test/integration/metadata/suites/view/utils/create-one-view.util';
 
 import { type CreateViewInput } from 'src/engine/metadata-modules/view/dtos/inputs/create-view.input';
 import { type ViewEntity } from 'src/engine/metadata-modules/view/entities/view.entity';
@@ -15,12 +15,14 @@ export const createTestViewWithGraphQL = async (
     icon: viewData.icon,
     type: viewData.type,
     position: viewData.position,
+    mainGroupByFieldMetadataId:
+      viewData.mainGroupByFieldMetadataId ?? undefined,
     isCompact: viewData.isCompact,
     openRecordIn: viewData.openRecordIn,
     visibility: viewData.visibility,
   };
 
-  const { data, errors } = await createOneCoreView({
+  const { data, errors } = await createOneView({
     input,
     expectToFail: false,
   });
@@ -33,5 +35,5 @@ export const createTestViewWithGraphQL = async (
     throw new Error('No data returned from createTestViewWithGraphQL');
   }
 
-  return data.createCoreView;
+  return data.createView;
 };

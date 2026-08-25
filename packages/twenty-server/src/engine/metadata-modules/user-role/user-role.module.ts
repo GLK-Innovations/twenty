@@ -2,18 +2,26 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { UserWorkspaceEntity } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
-import { RoleTargetsEntity } from 'src/engine/metadata-modules/role/role-targets.entity';
+import { RoleTargetEntity } from 'src/engine/metadata-modules/role-target/role-target.entity';
+import { RoleTargetModule } from 'src/engine/metadata-modules/role-target/role-target.module';
+import { RoleValidationModule } from 'src/engine/metadata-modules/role-validation/role-validation.module';
 import { RoleEntity } from 'src/engine/metadata-modules/role/role.entity';
 import { UserRoleService } from 'src/engine/metadata-modules/user-role/user-role.service';
-import { WorkspacePermissionsCacheModule } from 'src/engine/metadata-modules/workspace-permissions-cache/workspace-permissions-cache.module';
+import { provideWorkspaceScopedRepository } from 'src/engine/twenty-orm/workspace-scoped-repository/provide-workspace-scoped-repository';
+import { WorkspaceCacheModule } from 'src/engine/workspace-cache/workspace-cache.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([RoleEntity, RoleTargetsEntity]),
+    TypeOrmModule.forFeature([RoleEntity, RoleTargetEntity]),
     TypeOrmModule.forFeature([UserWorkspaceEntity]),
-    WorkspacePermissionsCacheModule,
+    WorkspaceCacheModule,
+    RoleTargetModule,
+    RoleValidationModule,
   ],
-  providers: [UserRoleService],
+  providers: [
+    UserRoleService,
+    provideWorkspaceScopedRepository(RoleTargetEntity),
+  ],
   exports: [UserRoleService],
 })
 export class UserRoleModule {}

@@ -1,31 +1,42 @@
-import { useUpdateOneObjectMetadataItem } from '@/object-metadata/hooks/useUpdateOneObjectMetadataItem';
-import { type ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
+import { isDDLLockedState } from '@/client-config/states/isDDLLockedState';
+import { useGetIsMetadataItemCustom } from '@/object-metadata/hooks/useGetIsMetadataItemCustom';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
+import { isObjectMetadataReadOnly } from '@/object-record/read-only/utils/isObjectMetadataReadOnly';
+import {
+  TRANSLATION_INTENT_MODAL_ID,
+  useSaveUpdateDataModelObjectAboutForm,
+} from '@/settings/data-model/object-details/hooks/useSaveUpdateDataModelObjectAboutForm';
 import { SettingsDataModelObjectAboutForm } from '@/settings/data-model/objects/forms/components/SettingsDataModelObjectAboutForm';
 import {
   type SettingsDataModelObjectAboutFormValues,
   settingsDataModelObjectAboutFormSchema,
 } from '@/settings/data-model/validation-schemas/settingsDataModelObjectAboutFormSchema';
+import {
+  ConfirmationModal,
+  StyledCenteredButton,
+} from '@/ui/layout/modal/components/ConfirmationModal';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useLingui } from '@lingui/react/macro';
 import { FormProvider, useForm } from 'react-hook-form';
-import { useSetRecoilState } from 'recoil';
-import { SettingsPath } from 'twenty-shared/types';
-import { useNavigateSettings } from '~/hooks/useNavigateSettings';
-import { updatedObjectNamePluralState } from '~/pages/settings/data-model/states/updatedObjectNamePluralState';
-import { isObjectMetadataSettingsReadOnly } from '@/object-record/read-only/utils/isObjectMetadataSettingsReadOnly';
+import { parseThemeColor } from 'twenty-ui/utilities';
 
 type SettingsUpdateDataModelObjectAboutFormProps = {
-  objectMetadataItem: ObjectMetadataItem;
+  objectMetadataItem: EnrichedObjectMetadataItem;
 };
 
 export const SettingsUpdateDataModelObjectAboutForm = ({
   objectMetadataItem,
 }: SettingsUpdateDataModelObjectAboutFormProps) => {
-  const readonly = isObjectMetadataSettingsReadOnly({ objectMetadataItem });
-  const navigate = useNavigateSettings();
-  const setUpdatedObjectNamePlural = useSetRecoilState(
-    updatedObjectNamePluralState,
-  );
-  const { updateOneObjectMetadataItem } = useUpdateOneObjectMetadataItem();
+  const { t } = useLingui();
+  const isDDLLocked = useAtomStateValue(isDDLLockedState);
+  const getIsMetadataItemCustom = useGetIsMetadataItemCustom();
+  const isCustomObject = getIsMetadataItemCustom(objectMetadataItem);
+  const readonly =
+    isObjectMetadataReadOnly({
+      objectMetadataItem,
+    }) || isDDLLocked;
+
   const {
     description,
     icon,
@@ -46,87 +57,50 @@ export const SettingsUpdateDataModelObjectAboutForm = ({
       labelSingular,
       namePlural,
       nameSingular,
+      ...(isCustomObject
+        ? { color: parseThemeColor(objectMetadataItem.color) }
+        : {}),
     },
   });
 
-  const handleSave = async (
-    formValues: SettingsDataModelObjectAboutFormValues,
-  ) => {
-    if (readonly) {
-      return;
-    }
-
-    if (!(Object.keys(formConfig.formState.dirtyFields).length > 0)) {
-      return;
-    }
-
-    const objectNamePluralForRedirection =
-      formValues.namePlural ?? objectMetadataItem.namePlural;
-
-    if (readonly) {
-      return;
-    }
-
-    setUpdatedObjectNamePlural(objectNamePluralForRedirection);
-    const updateResult = await updateObjectMetadata(formValues);
-
-    if (updateResult.status === 'failed') {
-      return;
-    }
-
-    const updatedObject = updateResult.response;
-
-    if (formValues.isLabelSyncedWithName !== isLabelSyncedWithName) {
-      formConfig.reset({
-        description,
-        icon: icon ?? undefined,
-        isLabelSyncedWithName: formValues.isLabelSyncedWithName,
-        labelPlural: updatedObject?.data?.updateOneObject.labelPlural,
-        labelSingular: updatedObject?.data?.updateOneObject.labelSingular,
-        namePlural: updatedObject?.data?.updateOneObject.namePlural,
-        nameSingular: updatedObject?.data?.updateOneObject.nameSingular,
-      });
-    } else {
-      formConfig.reset(undefined, { keepValues: true });
-    }
-
-    navigate(SettingsPath.ObjectDetail, {
-      objectNamePlural: objectNamePluralForRedirection,
-    });
-  };
-
-  const updateObjectMetadata = async (
-    formValues: SettingsDataModelObjectAboutFormValues,
-  ) => {
-    const updatePayload = { ...formValues };
-
-    if (!objectMetadataItem.isCustom) {
-      const {
-        nameSingular: _nameSingular,
-        namePlural: _namePlural,
-        isLabelSyncedWithName: _isLabelSyncedWithName,
-        ...payloadWithoutNames
-      } = updatePayload;
-
-      return await updateOneObjectMetadataItem({
-        idToUpdate: objectMetadataItem.id,
-        updatePayload: payloadWithoutNames,
-      });
-    }
-
-    return await updateOneObjectMetadataItem({
-      idToUpdate: objectMetadataItem.id,
-      updatePayload,
-    });
-  };
+  const {
+    handleSave,
+    saveAsTranslation,
+    handleRenameForAllLanguages,
+    cancelPendingSave,
+    currentLanguageLabel,
+  } = useSaveUpdateDataModelObjectAboutForm({
+    objectMetadataItem,
+    formConfig,
+    readonly,
+  });
 
   return (
-    // eslint-disable-next-line react/jsx-props-no-spreading
+    // oxlint-disable-next-line react/jsx-props-no-spreading
     <FormProvider {...formConfig}>
       <SettingsDataModelObjectAboutForm
         onNewDirtyField={() => formConfig.handleSubmit(handleSave)()}
         disableEdition={readonly}
         objectMetadataItem={objectMetadataItem}
+      />
+      <ConfirmationModal
+        modalInstanceId={TRANSLATION_INTENT_MODAL_ID}
+        title={t`Translate or rename?`}
+        subtitle={t`You are editing the ${currentLanguageLabel} translation. Renaming instead changes the source label, for every language.`}
+        confirmButtonText={t`Only in ${currentLanguageLabel}`}
+        confirmButtonAccent="blue"
+        hideCancelButton
+        onConfirmClick={saveAsTranslation}
+        onClose={cancelPendingSave}
+        AdditionalButtons={
+          <StyledCenteredButton
+            title={t`Rename for all languages`}
+            variant="secondary"
+            fullWidth
+            justify="center"
+            onClick={handleRenameForAllLanguages}
+          />
+        }
       />
     </FormProvider>
   );

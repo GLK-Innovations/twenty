@@ -1,14 +1,18 @@
 import { Scope } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
 
-import { Process } from 'src/engine/core-modules/message-queue/decorators/process.decorator';
-import { Processor } from 'src/engine/core-modules/message-queue/decorators/processor.decorator';
-import { MessageQueue } from 'src/engine/core-modules/message-queue/message-queue.constants';
-import { TwentyORMGlobalManager } from 'src/engine/twenty-orm/twenty-orm-global.manager';
+import { Repository } from 'typeorm';
+
 import {
   CalendarChannelSyncStage,
   CalendarChannelSyncStatus,
-  CalendarChannelWorkspaceEntity,
-} from 'src/modules/calendar/common/standard-objects/calendar-channel.workspace-entity';
+} from 'twenty-shared/types';
+import { Process } from 'src/engine/core-modules/message-queue/decorators/process.decorator';
+import { Processor } from 'src/engine/core-modules/message-queue/decorators/processor.decorator';
+import { MessageQueue } from 'src/engine/core-modules/message-queue/message-queue.constants';
+import { CalendarChannelEntity } from 'src/engine/metadata-modules/calendar-channel/entities/calendar-channel.entity';
+import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
+import { buildSystemAuthContext } from 'src/engine/twenty-orm/utils/build-system-auth-context.util';
 
 export type CalendarRelaunchFailedCalendarChannelJobData = {
   workspaceId: string;
@@ -21,42 +25,48 @@ export type CalendarRelaunchFailedCalendarChannelJobData = {
 })
 export class CalendarRelaunchFailedCalendarChannelJob {
   constructor(
-    private readonly twentyORMGlobalManager: TwentyORMGlobalManager,
+    private readonly workspaceOrmManager: WorkspaceOrmManager,
+    @InjectRepository(CalendarChannelEntity)
+    private readonly calendarChannelRepository: Repository<CalendarChannelEntity>,
   ) {}
 
   @Process(CalendarRelaunchFailedCalendarChannelJob.name)
   async handle(data: CalendarRelaunchFailedCalendarChannelJobData) {
     const { workspaceId, calendarChannelId } = data;
 
-    const calendarChannelRepository =
-      await this.twentyORMGlobalManager.getRepositoryForWorkspace<CalendarChannelWorkspaceEntity>(
-        workspaceId,
-        'calendarChannel',
-        { shouldBypassPermissionChecks: true },
-      );
+    const authContext = buildSystemAuthContext(workspaceId);
 
-    const calendarChannel = await calendarChannelRepository.findOne({
-      where: {
-        id: calendarChannelId,
+    await this.workspaceOrmManager.executeInWorkspaceContext(
+      async () => {
+        const calendarChannel = await this.calendarChannelRepository.findOne({
+          where: {
+            id: calendarChannelId,
+            workspaceId,
+          },
+        });
+
+        if (
+          !calendarChannel ||
+          calendarChannel.syncStage !== CalendarChannelSyncStage.FAILED ||
+          calendarChannel.syncStatus !==
+            CalendarChannelSyncStatus.FAILED_UNKNOWN
+        ) {
+          return;
+        }
+
+        await this.calendarChannelRepository.update(
+          { id: calendarChannelId, workspaceId },
+          {
+            syncStage:
+              CalendarChannelSyncStage.CALENDAR_EVENT_LIST_FETCH_PENDING,
+            syncStatus: CalendarChannelSyncStatus.ACTIVE,
+            throttleFailureCount: 0,
+            syncStageStartedAt: null,
+          },
+        );
       },
-      relations: {
-        connectedAccount: {
-          accountOwner: true,
-        },
-      },
-    });
-
-    if (
-      !calendarChannel ||
-      calendarChannel.syncStage !== CalendarChannelSyncStage.FAILED ||
-      calendarChannel.syncStatus !== CalendarChannelSyncStatus.FAILED_UNKNOWN
-    ) {
-      return;
-    }
-
-    await calendarChannelRepository.update(calendarChannelId, {
-      syncStage: CalendarChannelSyncStage.CALENDAR_EVENT_LIST_FETCH_PENDING,
-      syncStatus: CalendarChannelSyncStatus.ACTIVE,
-    });
+      authContext,
+      { lite: true },
+    );
   }
 }

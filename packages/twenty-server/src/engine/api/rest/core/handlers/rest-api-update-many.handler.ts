@@ -24,30 +24,33 @@ export class RestApiUpdateManyHandler extends RestApiBaseHandler {
 
       const {
         authContext,
-        objectMetadataItemWithFieldMaps,
-        objectMetadataMaps,
+        flatObjectMetadata,
+        flatObjectMetadataMaps,
+        flatFieldMetadataMaps,
+        objectIdByNameSingular,
       } = await this.buildCommonOptions(request);
 
       const selectedFields = await this.computeSelectedFields({
         depth,
-        objectMetadataMapItem: objectMetadataItemWithFieldMaps,
-        objectMetadataMaps,
+        flatObjectMetadata,
+        flatObjectMetadataMaps,
+        flatFieldMetadataMaps,
         authContext,
       });
 
-      const records = await this.commonUpdateManyQueryRunnerService.execute(
-        { data, filter, selectedFields },
-        {
-          authContext,
-          objectMetadataMaps,
-          objectMetadataItemWithFieldMaps,
-        },
-      );
+      const { results: records } =
+        await this.commonUpdateManyQueryRunnerService.execute(
+          { data, filter, selectedFields },
+          {
+            authContext,
+            flatObjectMetadata,
+            flatObjectMetadataMaps,
+            flatFieldMetadataMaps,
+            objectIdByNameSingular,
+          },
+        );
 
-      return this.formatRestResponse(
-        records,
-        objectMetadataItemWithFieldMaps.namePlural,
-      );
+      return this.formatRestResponse(records, flatObjectMetadata.namePlural);
     } catch (error) {
       return workspaceQueryRunnerRestApiExceptionHandler(error);
     }

@@ -7,22 +7,35 @@ import { computeVisibleRecordFieldsWidthOnTable } from '@/object-record/record-t
 export const computeLastRecordTableColumnWidth = ({
   recordFields,
   tableWidth,
-  isMobile,
+  shouldCompactFirstColumn,
+  isDragColumnHidden,
+  isCheckboxColumnHidden,
 }: {
   recordFields: Pick<RecordField, 'size'>[];
   tableWidth: number;
-  isMobile: boolean;
+  shouldCompactFirstColumn: boolean;
+  isDragColumnHidden?: boolean;
+  isCheckboxColumnHidden?: boolean;
 }) => {
   const { visibleRecordFieldsWidth } = computeVisibleRecordFieldsWidthOnTable({
-    isMobile,
+    shouldCompactFirstColumn,
     visibleRecordFields: recordFields,
   });
 
-  const widthOfBorders = recordFields.length;
+  const widthOfBorders = recordFields.length + 1;
+
+  const dragColumnWidth = isDragColumnHidden
+    ? 0
+    : RECORD_TABLE_COLUMN_DRAG_AND_DROP_WIDTH;
+
+  const checkboxColumnWidth = isCheckboxColumnHidden
+    ? 0
+    : RECORD_TABLE_COLUMN_CHECKBOX_WIDTH;
+
+  const leftColumnsWidth = dragColumnWidth + checkboxColumnWidth;
 
   const fixedColumnsWidth =
-    RECORD_TABLE_COLUMN_DRAG_AND_DROP_WIDTH +
-    RECORD_TABLE_COLUMN_CHECKBOX_WIDTH +
+    leftColumnsWidth +
     RECORD_TABLE_COLUMN_ADD_COLUMN_BUTTON_WIDTH +
     widthOfBorders;
 

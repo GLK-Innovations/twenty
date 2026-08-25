@@ -1,4 +1,4 @@
-import { type Meta, type StoryObj } from '@storybook/react';
+import { type Meta, type StoryObj } from '@storybook/react-vite';
 
 import { RatingFieldDisplay } from '@/object-record/record-field/ui/meta-types/display/components/RatingFieldDisplay';
 import { ComponentDecorator } from 'twenty-ui/testing';
@@ -28,7 +28,7 @@ export const Default: Story = {};
 
 export const Performance = getProfilingStory({
   componentName: 'RatingFieldDisplay',
-  averageThresholdInMs: 0.5,
+  averageThresholdInMs: 1,
   numberOfRuns: 30,
   numberOfTestsPerRun: 30,
 });

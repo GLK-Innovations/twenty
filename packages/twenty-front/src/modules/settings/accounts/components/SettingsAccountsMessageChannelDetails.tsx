@@ -1,24 +1,25 @@
-import styled from '@emotion/styled';
+import { useMutation } from '@apollo/client/react';
+import { styled } from '@linaria/react';
+import { t } from '@lingui/core/macro';
 
 import {
-  type MessageChannel,
   type MessageChannelContactAutoCreationPolicy,
+  MessageChannelType,
   type MessageFolderImportPolicy,
-} from '@/accounts/types/MessageChannel';
-import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
-import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
+} from 'twenty-shared/types';
+import { IconBriefcase, IconUsers } from 'twenty-ui/icon';
+import { H2Title } from 'twenty-ui/typography';
+import { Section } from 'twenty-ui/layout';
+import { Card } from 'twenty-ui/surfaces';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
+
+import { type MessageChannel } from '@/accounts/types/MessageChannel';
 import { SettingsAccountsMessageAutoCreationCard } from '@/settings/accounts/components/SettingsAccountsMessageAutoCreationCard';
 import { SettingsAccountsMessageFolderCard } from '@/settings/accounts/components/SettingsAccountsMessageFolderCard';
 import { SettingsAccountsMessageVisibilityCard } from '@/settings/accounts/components/SettingsAccountsMessageVisibilityCard';
+import { UPDATE_MESSAGE_CHANNEL } from '@/settings/accounts/graphql/mutations/updateMessageChannel';
 import { SettingsOptionCardContentToggle } from '@/settings/components/SettingsOptions/SettingsOptionCardContentToggle';
-import { useIsFeatureEnabled } from '@/workspace/hooks/useIsFeatureEnabled';
-import { t } from '@lingui/core/macro';
-import { H2Title, IconBriefcase, IconUsers } from 'twenty-ui/display';
-import { Card, Section } from 'twenty-ui/layout';
-import {
-  FeatureFlagKey,
-  type MessageChannelVisibility,
-} from '~/generated-metadata/graphql';
+import { type MessageChannelVisibility } from '~/generated/graphql';
 
 type SettingsAccountsMessageChannelDetailsProps = {
   messageChannel: Pick<
@@ -29,105 +30,95 @@ type SettingsAccountsMessageChannelDetailsProps = {
     | 'excludeNonProfessionalEmails'
     | 'excludeGroupEmails'
     | 'isSyncEnabled'
-    | 'messageFolders'
     | 'messageFolderImportPolicy'
+    | 'type'
   >;
 };
+
+type MessageChannelUpdateInput = Partial<{
+  visibility: MessageChannelVisibility;
+  contactAutoCreationPolicy: MessageChannelContactAutoCreationPolicy;
+  excludeGroupEmails: boolean;
+  excludeNonProfessionalEmails: boolean;
+  messageFolderImportPolicy: MessageFolderImportPolicy;
+}>;
 
 const StyledDetailsContainer = styled.div`
   display: flex;
   flex-direction: column;
-  gap: ${({ theme }) => theme.spacing(6)};
+  gap: ${themeCssVariables.spacing[6]};
 `;
 
 export const SettingsAccountsMessageChannelDetails = ({
   messageChannel,
 }: SettingsAccountsMessageChannelDetailsProps) => {
-  const { updateOneRecord } = useUpdateOneRecord<MessageChannel>({
-    objectNameSingular: CoreObjectNameSingular.MessageChannel,
-  });
+  const [updateMessageChannel] = useMutation(UPDATE_MESSAGE_CHANNEL);
 
-  const isFolderControlEnabled = useIsFeatureEnabled(
-    FeatureFlagKey.IS_MESSAGE_FOLDER_CONTROL_ENABLED,
-  );
+  const updateChannel = (update: MessageChannelUpdateInput) => {
+    updateMessageChannel({
+      variables: { input: { id: messageChannel.id, update } },
+    });
+  };
 
   const handleVisibilityChange = (value: MessageChannelVisibility) => {
-    updateOneRecord({
-      idToUpdate: messageChannel.id,
-      updateOneRecordInput: {
-        visibility: value,
-      },
-    });
+    updateChannel({ visibility: value });
   };
 
   const handleContactAutoCreationChange = (
     value: MessageChannelContactAutoCreationPolicy,
   ) => {
-    updateOneRecord({
-      idToUpdate: messageChannel.id,
-      updateOneRecordInput: {
-        contactAutoCreationPolicy: value,
-      },
-    });
+    updateChannel({ contactAutoCreationPolicy: value });
   };
 
   const handleIsGroupEmailExcludedToggle = (value: boolean) => {
-    updateOneRecord({
-      idToUpdate: messageChannel.id,
-      updateOneRecordInput: {
-        excludeGroupEmails: value,
-      },
-    });
+    updateChannel({ excludeGroupEmails: value });
   };
 
   const handleIsNonProfessionalEmailExcludedToggle = (value: boolean) => {
-    updateOneRecord({
-      idToUpdate: messageChannel.id,
-      updateOneRecordInput: {
-        excludeNonProfessionalEmails: value,
-      },
-    });
+    updateChannel({ excludeNonProfessionalEmails: value });
   };
 
   const handleMessageFolderImportPolicyChange = (
     value: MessageFolderImportPolicy,
   ) => {
-    updateOneRecord({
-      idToUpdate: messageChannel.id,
-      updateOneRecordInput: { messageFolderImportPolicy: value },
-    });
+    updateChannel({ messageFolderImportPolicy: value });
   };
+
+  const supportsFolderImportPolicy =
+    messageChannel.type === MessageChannelType.EMAIL;
+
+  const isGroupMailbox = messageChannel.type === MessageChannelType.EMAIL_GROUP;
 
   return (
     <StyledDetailsContainer>
-      {isFolderControlEnabled && messageChannel.messageFolders && (
-        <>
-          <Section>
-            <H2Title
-              title={t`Import`}
-              description={t`Emails from the blocklist will be ignored. Manage blocklist on the “Accounts” setting page.`}
+      {supportsFolderImportPolicy && (
+        <Section>
+          <H2Title
+            title={t`Import`}
+            description={t`Emails from the blocklist will be ignored. Manage blocklist on the "Accounts" setting page.`}
+          />
+          <SettingsAccountsMessageFolderCard
+            onChange={handleMessageFolderImportPolicyChange}
+            value={messageChannel.messageFolderImportPolicy}
+          />
+        </Section>
+      )}
+      {!isGroupMailbox && (
+        <Section>
+          <Card rounded>
+            <SettingsOptionCardContentToggle
+              Icon={IconUsers}
+              title={t`Exclude group emails`}
+              description={t`Don't sync emails from team@ support@ noreply@...`}
+              checked={messageChannel.excludeGroupEmails}
+              onChange={() =>
+                handleIsGroupEmailExcludedToggle(
+                  !messageChannel.excludeGroupEmails,
+                )
+              }
             />
-            <SettingsAccountsMessageFolderCard
-              onChange={handleMessageFolderImportPolicyChange}
-              value={messageChannel.messageFolderImportPolicy}
-            />
-          </Section>
-          <Section>
-            <Card rounded>
-              <SettingsOptionCardContentToggle
-                Icon={IconUsers}
-                title={t`Exclude group emails`}
-                description={t`Don't sync emails from team@ support@ noreply@...`}
-                checked={messageChannel.excludeGroupEmails}
-                onChange={() =>
-                  handleIsGroupEmailExcludedToggle(
-                    !messageChannel.excludeGroupEmails,
-                  )
-                }
-              />
-            </Card>
-          </Section>
-        </>
+          </Card>
+        </Section>
       )}
       <Section>
         <H2Title

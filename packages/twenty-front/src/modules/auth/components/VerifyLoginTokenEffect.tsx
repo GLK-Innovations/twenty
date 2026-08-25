@@ -1,10 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import { useIsLogged } from '@/auth/hooks/useIsLogged';
 import { useVerifyLogin } from '@/auth/hooks/useVerifyLogin';
-import { clientConfigApiStatusState } from '@/client-config/states/clientConfigApiStatusState';
-import { useRecoilValue } from 'recoil';
 import { AppPath } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 import { useNavigateApp } from '~/hooks/useNavigateApp';
@@ -17,21 +15,23 @@ export const VerifyLoginTokenEffect = () => {
   const navigate = useNavigateApp();
   const { verifyLoginToken } = useVerifyLogin();
 
-  const { isSaved: clientConfigLoaded } = useRecoilValue(
-    clientConfigApiStatusState,
-  );
+  // oxlint-disable-next-line twenty/no-state-useref
+  const hasVerifiedRef = useRef(false);
 
   useEffect(() => {
-    if (!clientConfigLoaded) return;
+    if (hasVerifiedRef.current) {
+      return;
+    }
+
+    hasVerifiedRef.current = true;
 
     if (isDefined(loginToken)) {
       verifyLoginToken(loginToken);
     } else if (!isLogged) {
       navigate(AppPath.SignInUp);
     }
-    // Verify only needs to run once at mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientConfigLoaded]);
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return <></>;
 };

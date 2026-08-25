@@ -7,18 +7,22 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseFilters,
   UseGuards,
 } from '@nestjs/common';
 
+import { ApiPath } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 
-import { FeatureFlagKey } from 'src/engine/core-modules/feature-flag/enums/feature-flag-key.enum';
-import { FeatureFlagService } from 'src/engine/core-modules/feature-flag/services/feature-flag.service';
 import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
+import { parseMetadataRestPagination } from 'src/engine/api/rest/metadata/utils/parse-metadata-rest-pagination.util';
+import { type AuthenticatedRequest } from 'src/engine/api/rest/types/authenticated-request';
 import { AuthWorkspace } from 'src/engine/decorators/auth/auth-workspace.decorator';
 import { NoPermissionGuard } from 'src/engine/guards/no-permission.guard';
 import { WorkspaceAuthGuard } from 'src/engine/guards/workspace-auth.guard';
+import { FlatEntityMapsRestApiExceptionFilter } from 'src/engine/metadata-modules/flat-entity/filters/flat-entity-maps-rest-api-exception.filter';
+import { PermissionsRestApiExceptionFilter } from 'src/engine/metadata-modules/permissions/utils/permissions-rest-api-exception.filter';
 import { CreateViewFilterInput } from 'src/engine/metadata-modules/view-filter/dtos/inputs/create-view-filter.input';
 import { UpdateViewFilterInput } from 'src/engine/metadata-modules/view-filter/dtos/inputs/update-view-filter.input';
 import { ViewFilterDTO } from 'src/engine/metadata-modules/view-filter/dtos/view-filter.dto';
@@ -30,33 +34,42 @@ import {
   ViewFilterExceptionMessageKey,
 } from 'src/engine/metadata-modules/view-filter/exceptions/view-filter.exception';
 import { ViewFilterRestApiExceptionFilter } from 'src/engine/metadata-modules/view-filter/filters/view-filter-rest-api-exception.filter';
-import { ViewFilterV2Service } from 'src/engine/metadata-modules/view-filter/services/view-filter-v2.service';
 import { ViewFilterService } from 'src/engine/metadata-modules/view-filter/services/view-filter.service';
-import { CreateViewFilterPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/create-view-filter-permission.guard';
-import { DeleteViewFilterPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/delete-view-filter-permission.guard';
-import { UpdateViewFilterPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/update-view-filter-permission.guard';
+import { WorkspaceMigrationRunnerRestApiExceptionFilter } from 'src/engine/workspace-manager/workspace-migration/filters/workspace-migration-runner-rest-api-exception.filter';
+import { CreateViewChildEntityPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/create-view-child-entity-permission.guard';
+import { ViewChildEntityPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/view-child-entity-permission.guard';
 
-@Controller('rest/metadata/viewFilters')
+@Controller(`${ApiPath.Rest}/metadata/viewFilters`)
 @UseGuards(WorkspaceAuthGuard)
-@UseFilters(ViewFilterRestApiExceptionFilter)
+@UseFilters(
+  PermissionsRestApiExceptionFilter,
+  ViewFilterRestApiExceptionFilter,
+  FlatEntityMapsRestApiExceptionFilter,
+  WorkspaceMigrationRunnerRestApiExceptionFilter,
+)
 export class ViewFilterController {
-  constructor(
-    private readonly viewFilterService: ViewFilterService,
-    private readonly viewFilterV2Service: ViewFilterV2Service,
-    private readonly featureFlagService: FeatureFlagService,
-  ) {}
+  constructor(private readonly viewFilterService: ViewFilterService) {}
 
   @Get()
   @UseGuards(NoPermissionGuard)
   async findMany(
+    @Req() request: AuthenticatedRequest,
     @AuthWorkspace() workspace: WorkspaceEntity,
     @Query('viewId') viewId?: string,
-  ): Promise<ViewFilterDTO[]> {
-    if (viewId) {
-      return this.viewFilterService.findByViewId(workspace.id, viewId);
-    }
+  ) {
+    const page = await this.viewFilterService.findManyPaginated({
+      workspaceId: workspace.id,
+      // An empty viewId means "no filter", matching the sibling view
+      // controllers, rather than filtering on the empty string.
+      viewId: viewId === '' ? undefined : viewId,
+      pagination: parseMetadataRestPagination(request),
+    });
 
-    return this.viewFilterService.findByWorkspaceId(workspace.id);
+    return {
+      data: page.items,
+      pageInfo: page.pageInfo,
+      totalCount: page.totalCount,
+    };
   }
 
   @Get(':id')
@@ -86,32 +99,19 @@ export class ViewFilterController {
   }
 
   @Post()
-  @UseGuards(CreateViewFilterPermissionGuard)
+  @UseGuards(CreateViewChildEntityPermissionGuard)
   async create(
     @Body() input: CreateViewFilterInput,
     @AuthWorkspace() workspace: WorkspaceEntity,
   ): Promise<ViewFilterDTO> {
-    const isWorkspaceMigrationV2Enabled =
-      await this.featureFlagService.isFeatureEnabled(
-        FeatureFlagKey.IS_WORKSPACE_MIGRATION_V2_ENABLED,
-        workspace.id,
-      );
-
-    if (isWorkspaceMigrationV2Enabled) {
-      return await this.viewFilterV2Service.createOne({
-        createViewFilterInput: input,
-        workspaceId: workspace.id,
-      });
-    }
-
-    return this.viewFilterService.create({
-      ...input,
+    return await this.viewFilterService.createOne({
+      createViewFilterInput: input,
       workspaceId: workspace.id,
     });
   }
 
   @Patch(':id')
-  @UseGuards(UpdateViewFilterPermissionGuard)
+  @UseGuards(ViewChildEntityPermissionGuard('viewFilter'))
   async update(
     @Param('id') id: string,
     @Body() input: UpdateViewFilterInput,
@@ -122,53 +122,22 @@ export class ViewFilterController {
       update: input.update ?? input,
     };
 
-    const isWorkspaceMigrationV2Enabled =
-      await this.featureFlagService.isFeatureEnabled(
-        FeatureFlagKey.IS_WORKSPACE_MIGRATION_V2_ENABLED,
-        workspace.id,
-      );
-
-    if (isWorkspaceMigrationV2Enabled) {
-      return await this.viewFilterV2Service.updateOne({
-        updateViewFilterInput: updateInput,
-        workspaceId: workspace.id,
-      });
-    }
-
-    const updatedViewFilter = await this.viewFilterService.update(
-      updateInput.id,
-      workspace.id,
-      updateInput.update,
-    );
-
-    return updatedViewFilter;
+    return await this.viewFilterService.updateOne({
+      updateViewFilterInput: updateInput,
+      workspaceId: workspace.id,
+    });
   }
 
   @Delete(':id')
-  @UseGuards(DeleteViewFilterPermissionGuard)
+  @UseGuards(ViewChildEntityPermissionGuard('viewFilter'))
   async delete(
     @Param('id') id: string,
     @AuthWorkspace() workspace: WorkspaceEntity,
   ): Promise<{ success: boolean }> {
-    const isWorkspaceMigrationV2Enabled =
-      await this.featureFlagService.isFeatureEnabled(
-        FeatureFlagKey.IS_WORKSPACE_MIGRATION_V2_ENABLED,
-        workspace.id,
-      );
-
-    if (isWorkspaceMigrationV2Enabled) {
-      const deletedViewFilter = await this.viewFilterV2Service.deleteOne({
-        deleteViewFilterInput: { id },
-        workspaceId: workspace.id,
-      });
-
-      return { success: isDefined(deletedViewFilter) };
-    }
-
-    const deletedViewFilter = await this.viewFilterService.delete(
-      id,
-      workspace.id,
-    );
+    const deletedViewFilter = await this.viewFilterService.deleteOne({
+      deleteViewFilterInput: { id },
+      workspaceId: workspace.id,
+    });
 
     return { success: isDefined(deletedViewFilter) };
   }

@@ -1,14 +1,33 @@
+import { type OpenAPIV3_1 } from 'openapi-types';
 import { capitalize } from 'twenty-shared/utils';
 
-import { type ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
+import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
 
-export const getFindManyResponse200 = (
-  item: Pick<ObjectMetadataEntity, 'nameSingular' | 'namePlural'>,
-  fromMetadata = false,
-) => {
+export const getFindManyResponse200 = ({
+  item,
+  isDirectDataFeatureFlagged = false,
+}: {
+  item: Pick<FlatObjectMetadata, 'nameSingular' | 'namePlural'>;
+  isDirectDataFeatureFlagged?: boolean;
+}): OpenAPIV3_1.ResponseObject => {
   const schemaRef = `#/components/schemas/${capitalize(
     item.nameSingular,
   )}ForResponse`;
+
+  const directDataSchema: OpenAPIV3_1.SchemaObject = {
+    type: 'array',
+    items: { $ref: schemaRef },
+  };
+
+  const nestedDataSchema: OpenAPIV3_1.SchemaObject = {
+    type: 'object',
+    properties: {
+      [item.namePlural]: {
+        type: 'array',
+        items: { $ref: schemaRef },
+      },
+    },
+  };
 
   return {
     description: 'Successful operation',
@@ -17,36 +36,32 @@ export const getFindManyResponse200 = (
         schema: {
           type: 'object',
           properties: {
-            data: {
-              type: 'object',
-              properties: {
-                [item.namePlural]: {
-                  type: 'array',
-                  items: {
-                    $ref: schemaRef,
-                  },
-                },
-              },
-            },
+            // Endpoints behind IS_REST_METADATA_API_NEW_FORMAT_DIRECT answer
+            // with either envelope depending on the workspace flag, so both
+            // are documented rather than only the post-flag shape.
+            data: isDirectDataFeatureFlagged
+              ? {
+                  description:
+                    'An array when IS_REST_METADATA_API_NEW_FORMAT_DIRECT is enabled for the workspace, otherwise the legacy nested envelope.',
+                  oneOf: [directDataSchema, nestedDataSchema],
+                }
+              : nestedDataSchema,
             pageInfo: {
               type: 'object',
               properties: {
                 hasNextPage: { type: 'boolean' },
+                hasPreviousPage: { type: 'boolean' },
                 startCursor: {
-                  type: 'string',
-                  format: 'uuid',
+                  type: ['string', 'null'],
                 },
                 endCursor: {
-                  type: 'string',
-                  format: 'uuid',
+                  type: ['string', 'null'],
                 },
               },
             },
-            ...(!fromMetadata && {
-              totalCount: {
-                type: 'integer',
-              },
-            }),
+            totalCount: {
+              type: 'integer',
+            },
           },
         },
       },
@@ -55,7 +70,7 @@ export const getFindManyResponse200 = (
 };
 
 export const getFindOneResponse200 = (
-  item: Pick<ObjectMetadataEntity, 'nameSingular'>,
+  item: Pick<FlatObjectMetadata, 'nameSingular'>,
 ) => {
   const schemaRef = `#/components/schemas/${capitalize(item.nameSingular)}ForResponse`;
 
@@ -82,7 +97,7 @@ export const getFindOneResponse200 = (
 };
 
 export const getRestoreOneResponse200 = (
-  item: Pick<ObjectMetadataEntity, 'nameSingular'>,
+  item: Pick<FlatObjectMetadata, 'nameSingular'>,
 ) => {
   const schemaRef = `#/components/schemas/${capitalize(item.nameSingular)}ForResponse`;
 
@@ -109,7 +124,7 @@ export const getRestoreOneResponse200 = (
 };
 
 export const getRestoreManyResponse200 = (
-  item: Pick<ObjectMetadataEntity, 'nameSingular' | 'namePlural'>,
+  item: Pick<FlatObjectMetadata, 'nameSingular' | 'namePlural'>,
 ) => {
   const schemaRef = `#/components/schemas/${capitalize(
     item.nameSingular,
@@ -141,7 +156,7 @@ export const getRestoreManyResponse200 = (
 };
 
 export const getCreateOneResponse201 = (
-  item: Pick<ObjectMetadataEntity, 'nameSingular'>,
+  item: Pick<FlatObjectMetadata, 'nameSingular'>,
   fromMetadata = false,
 ) => {
   const one = fromMetadata ? 'One' : '';
@@ -173,7 +188,7 @@ export const getCreateOneResponse201 = (
 };
 
 export const getCreateManyResponse201 = (
-  item: Pick<ObjectMetadataEntity, 'nameSingular' | 'namePlural'>,
+  item: Pick<FlatObjectMetadata, 'nameSingular' | 'namePlural'>,
 ) => {
   const schemaRef = `#/components/schemas/${capitalize(
     item.nameSingular,
@@ -205,7 +220,7 @@ export const getCreateManyResponse201 = (
 };
 
 export const getUpdateOneResponse200 = (
-  item: Pick<ObjectMetadataEntity, 'nameSingular'>,
+  item: Pick<FlatObjectMetadata, 'nameSingular'>,
   fromMetadata = false,
 ) => {
   const one = fromMetadata ? 'One' : '';
@@ -234,7 +249,7 @@ export const getUpdateOneResponse200 = (
 };
 
 export const getDeleteManyResponse200 = (
-  item: Pick<ObjectMetadataEntity, 'namePlural'>,
+  item: Pick<FlatObjectMetadata, 'namePlural'>,
 ) => {
   return {
     description: 'Successful operation',
@@ -268,7 +283,7 @@ export const getDeleteManyResponse200 = (
 };
 
 export const getUpdateManyResponse200 = (
-  item: Pick<ObjectMetadataEntity, 'namePlural' | 'nameSingular'>,
+  item: Pick<FlatObjectMetadata, 'namePlural' | 'nameSingular'>,
 ) => {
   const schemaRef = `#/components/schemas/${capitalize(item.nameSingular)}ForResponse`;
 
@@ -298,7 +313,7 @@ export const getUpdateManyResponse200 = (
 };
 
 export const getDeleteResponse200 = (
-  item: Pick<ObjectMetadataEntity, 'nameSingular'>,
+  item: Pick<FlatObjectMetadata, 'nameSingular'>,
   fromMetadata = false,
 ) => {
   const one = fromMetadata ? 'One' : '';
@@ -391,7 +406,7 @@ export const getJsonResponse = () => {
 };
 
 export const getFindDuplicatesResponse200 = (
-  item: Pick<ObjectMetadataEntity, 'nameSingular'>,
+  item: Pick<FlatObjectMetadata, 'nameSingular'>,
 ) => {
   const schemaRef = `#/components/schemas/${capitalize(
     item.nameSingular,
@@ -441,7 +456,7 @@ export const getFindDuplicatesResponse200 = (
 };
 
 export const getMergeManyResponse200 = (
-  item: Pick<ObjectMetadataEntity, 'nameSingular' | 'namePlural'>,
+  item: Pick<FlatObjectMetadata, 'nameSingular' | 'namePlural'>,
 ) => {
   const schemaRef = `#/components/schemas/${capitalize(
     item.nameSingular,
@@ -459,6 +474,60 @@ export const getMergeManyResponse200 = (
               properties: {
                 [`merge${capitalize(item.namePlural)}`]: {
                   $ref: schemaRef,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+};
+
+export const getGroupByResponse200 = (
+  item: Pick<FlatObjectMetadata, 'nameSingular' | 'namePlural'>,
+) => {
+  const schemaRef = `#/components/schemas/${capitalize(
+    item.nameSingular,
+  )}ForResponse`;
+
+  return {
+    description: 'Successful operation',
+    content: {
+      'application/json': {
+        schema: {
+          type: 'object',
+          properties: {
+            data: {
+              type: 'object',
+              properties: {
+                [`${item.namePlural}GroupBy`]: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      groupByDimensionValues: {
+                        type: 'array',
+                        description:
+                          'Array of values representing each dimension in the group',
+                        items: {
+                          type: 'string',
+                        },
+                      },
+                      records: {
+                        type: 'array',
+                        description:
+                          'Sample of records for this group (only present when include_records_sample is true)',
+                        items: {
+                          $ref: schemaRef,
+                        },
+                      },
+                    },
+                    additionalProperties: {
+                      type: 'number',
+                      description: 'Aggregate values (e.g., countNotEmptyId)',
+                    },
+                  },
                 },
               },
             },

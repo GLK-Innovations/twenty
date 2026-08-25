@@ -1,21 +1,10 @@
-import styled from '@emotion/styled';
+import { handleClickableElementKeyDown } from '@ui/accessibility/utils/handleClickableElementKeyDown';
 import { useJsonTreeContextOrThrow } from '@ui/json-visualizer/hooks/useJsonTreeContextOrThrow';
 import { type JsonNodeHighlighting } from '@ui/json-visualizer/types/JsonNodeHighlighting';
+import { clsx } from 'clsx';
+import { isDefined } from '@ui/utilities/utils/isDefined';
 
-const StyledText = styled.span<{
-  highlighting: JsonNodeHighlighting | undefined;
-}>`
-  align-items: center;
-  box-sizing: border-box;
-  color: ${({ theme, highlighting }) =>
-    highlighting === 'blue'
-      ? theme.color.blue8
-      : highlighting === 'red'
-        ? theme.color.red8
-        : theme.font.color.tertiary};
-  display: inline-flex;
-  height: 24px;
-`;
+import styles from './JsonNodeValue.module.scss';
 
 export const JsonNodeValue = ({
   valueAsString,
@@ -26,13 +15,31 @@ export const JsonNodeValue = ({
 }) => {
   const { onNodeValueClick } = useJsonTreeContextOrThrow();
 
+  const isInteractive = isDefined(onNodeValueClick);
+
   const handleClick = () => {
     onNodeValueClick?.(valueAsString);
   };
 
-  return (
-    <StyledText highlighting={highlighting} onClick={handleClick}>
-      {valueAsString}
-    </StyledText>
+  const valueClassName = clsx(
+    styles.text,
+    highlighting === 'blue' && styles.blue,
+    highlighting === 'red' && styles.red,
   );
+
+  if (isInteractive) {
+    return (
+      <span
+        className={valueClassName}
+        role="button"
+        tabIndex={0}
+        onClick={handleClick}
+        onKeyDown={handleClickableElementKeyDown}
+      >
+        {valueAsString}
+      </span>
+    );
+  }
+
+  return <span className={valueClassName}>{valueAsString}</span>;
 };

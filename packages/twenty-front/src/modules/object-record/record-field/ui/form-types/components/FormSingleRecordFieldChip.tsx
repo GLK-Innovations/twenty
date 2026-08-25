@@ -3,18 +3,30 @@ import { FormFieldPlaceholder } from '@/object-record/record-field/ui/form-types
 import {
   type RecordId,
   type Variable,
-} from '@/object-record/record-field/ui/form-types/components/FormSingleRecordPicker';
+} from '@/object-record/record-field/ui/form-types/types/RecordPickerValue';
 import { VariableChipStandalone } from '@/object-record/record-field/ui/form-types/components/VariableChipStandalone';
 import { type ObjectRecord } from '@/object-record/types/ObjectRecord';
-import { isStandaloneVariableString } from '@/workflow/utils/isStandaloneVariableString';
-import styled from '@emotion/styled';
+import { isStandaloneVariableString } from 'twenty-shared/workflow';
+import { styled } from '@linaria/react';
+import { t } from '@lingui/core/macro';
+import { isDefined } from 'twenty-shared/utils';
+import { IconForbid } from 'twenty-ui/icon';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
 
-const StyledRecordChip = styled(RecordChip)`
-  margin: ${({ theme }) => theme.spacing(2)};
+const StyledRecordChipContainer = styled.div`
+  margin: ${themeCssVariables.spacing[2]};
 `;
 
-const StyledPlaceholder = styled(FormFieldPlaceholder)`
-  margin: ${({ theme }) => theme.spacing(2)};
+const StyledPlaceholderContainer = styled.div`
+  margin: ${themeCssVariables.spacing[2]};
+`;
+
+const StyledNoRecordContainer = styled.div`
+  align-items: center;
+  color: ${themeCssVariables.font.color.primary};
+  display: flex;
+  gap: ${themeCssVariables.spacing[1]};
+  margin: ${themeCssVariables.spacing[2]};
 `;
 
 type FormSingleRecordFieldChipProps = {
@@ -26,6 +38,10 @@ type FormSingleRecordFieldChipProps = {
     | {
         type: 'variable';
         value: Variable;
+      }
+    | {
+        type: 'no-record';
+        value: null;
       };
   selectedRecord?: ObjectRecord;
   objectNameSingular: string;
@@ -41,7 +57,6 @@ export const FormSingleRecordFieldChip = ({
   disabled,
 }: FormSingleRecordFieldChipProps) => {
   if (
-    !!draftValue &&
     draftValue.type === 'variable' &&
     isStandaloneVariableString(draftValue.value)
   ) {
@@ -54,14 +69,29 @@ export const FormSingleRecordFieldChip = ({
     );
   }
 
-  if (!!draftValue && draftValue.type === 'static' && !!selectedRecord) {
+  if (draftValue.type === 'no-record') {
     return (
-      <StyledRecordChip
-        record={selectedRecord}
-        objectNameSingular={objectNameSingular}
-      />
+      <StyledNoRecordContainer>
+        <IconForbid size={12} />
+        {t`No record`}
+      </StyledNoRecordContainer>
     );
   }
 
-  return <StyledPlaceholder>Select a {objectNameSingular}</StyledPlaceholder>;
+  if (draftValue.type === 'static' && isDefined(selectedRecord)) {
+    return (
+      <StyledRecordChipContainer>
+        <RecordChip
+          record={selectedRecord}
+          objectNameSingular={objectNameSingular}
+        />
+      </StyledRecordChipContainer>
+    );
+  }
+
+  return (
+    <StyledPlaceholderContainer>
+      <FormFieldPlaceholder>{t`Select`}</FormFieldPlaceholder>
+    </StyledPlaceholderContainer>
+  );
 };

@@ -7,25 +7,26 @@ import {
   isInputObjectType,
   isObjectType,
 } from 'graphql';
-import { isDefined } from 'twenty-shared/utils';
+import { isDefined, pascalCase } from 'twenty-shared/utils';
 
 import { GqlInputTypeDefinitionKind } from 'src/engine/api/graphql/workspace-schema-builder/enums/gql-input-type-definition-kind.enum';
 import { RelationFieldMetadataGqlInputTypeGenerator } from 'src/engine/api/graphql/workspace-schema-builder/graphql-type-generators/input-types/relation-field-metadata-gql-type.generator';
-import {
-  TypeMapperService,
-  TypeOptions,
-} from 'src/engine/api/graphql/workspace-schema-builder/services/type-mapper.service';
+import { TypeMapperService } from 'src/engine/api/graphql/workspace-schema-builder/services/type-mapper.service';
 import { GqlTypesStorage } from 'src/engine/api/graphql/workspace-schema-builder/storages/gql-types.storage';
+import { type SchemaGenerationContext } from 'src/engine/api/graphql/workspace-schema-builder/types/schema-generation-context.type';
+import {
+  type CreateInputTypeOptions,
+  applyTypeOptionsForCreateInput,
+} from 'src/engine/api/graphql/workspace-schema-builder/utils/apply-type-options-for-create-input.util';
 import { computeFieldInputTypeOptions } from 'src/engine/api/graphql/workspace-schema-builder/utils/compute-field-input-type-options.util';
 import { computeCompositeFieldInputTypeKey } from 'src/engine/api/graphql/workspace-schema-builder/utils/compute-stored-gql-type-key-utils/compute-composite-field-input-type-key.util';
 import { computeEnumFieldGqlTypeKey } from 'src/engine/api/graphql/workspace-schema-builder/utils/compute-stored-gql-type-key-utils/compute-enum-field-gql-type-key.util';
 import { computeObjectMetadataInputTypeKey } from 'src/engine/api/graphql/workspace-schema-builder/utils/compute-stored-gql-type-key-utils/compute-object-metadata-input-type.util';
-import { isFieldMetadataRelationOrMorphRelation } from 'src/engine/api/graphql/workspace-schema-builder/utils/is-field-metadata-relation-or-morph-relation.utils';
-import { FieldMetadataEntity } from 'src/engine/metadata-modules/field-metadata/field-metadata.entity';
 import { isCompositeFieldMetadataType } from 'src/engine/metadata-modules/field-metadata/utils/is-composite-field-metadata-type.util';
 import { isEnumFieldMetadataType } from 'src/engine/metadata-modules/field-metadata/utils/is-enum-field-metadata-type.util';
-import { ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
-import { pascalCase } from 'src/utils/pascal-case';
+import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
+import { isMorphOrRelationFlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/utils/is-morph-or-relation-flat-field-metadata.util';
+import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
 
 @Injectable()
 export class ObjectMetadataCreateGqlInputTypeGenerator {
@@ -38,15 +39,20 @@ export class ObjectMetadataCreateGqlInputTypeGenerator {
     private readonly typeMapperService: TypeMapperService,
   ) {}
 
-  public buildAndStore(objectMetadata: ObjectMetadataEntity) {
+  public buildAndStore(
+    flatObjectMetadata: FlatObjectMetadata,
+    fields: FlatFieldMetadata[],
+    _context: SchemaGenerationContext,
+  ) {
     const inputType = new GraphQLInputObjectType({
-      name: `${pascalCase(objectMetadata.nameSingular)}${GqlInputTypeDefinitionKind.Create.toString()}Input`,
-      description: objectMetadata.description,
-      fields: () => this.generateFields(objectMetadata),
+      name: `${pascalCase(flatObjectMetadata.nameSingular)}${GqlInputTypeDefinitionKind.Create.toString()}Input`,
+      description: flatObjectMetadata.description,
+      fields: () =>
+        this.generateFields(flatObjectMetadata.nameSingular, fields),
     }) as GraphQLInputObjectType;
 
     const key = computeObjectMetadataInputTypeKey(
-      objectMetadata.nameSingular,
+      flatObjectMetadata.nameSingular,
       GqlInputTypeDefinitionKind.Create,
     );
 
@@ -54,11 +60,12 @@ export class ObjectMetadataCreateGqlInputTypeGenerator {
   }
 
   private generateFields(
-    objectMetadata: ObjectMetadataEntity,
+    objectNameSingular: string,
+    fields: FlatFieldMetadata[],
   ): GraphQLInputFieldConfigMap {
     const allGeneratedFields: GraphQLInputFieldConfigMap = {};
 
-    for (const fieldMetadata of objectMetadata.fields) {
+    for (const fieldMetadata of fields) {
       const typeOptions = computeFieldInputTypeOptions(
         fieldMetadata,
         GqlInputTypeDefinitionKind.Create,
@@ -66,24 +73,26 @@ export class ObjectMetadataCreateGqlInputTypeGenerator {
 
       let generatedFields;
 
-      if (isFieldMetadataRelationOrMorphRelation(fieldMetadata)) {
+      if (isMorphOrRelationFlatFieldMetadata(fieldMetadata)) {
+        const relationFieldMetadata = fieldMetadata;
+
         generatedFields = {
           ...this.relationFieldMetadataGqlInputTypeGenerator.generateSimpleRelationFieldCreateOrUpdateInputType(
             {
-              fieldMetadata,
+              fieldMetadata: relationFieldMetadata,
               typeOptions,
             },
           ),
           ...this.relationFieldMetadataGqlInputTypeGenerator.generateConnectRelationFieldInputType(
             {
-              fieldMetadata,
+              fieldMetadata: relationFieldMetadata,
               typeOptions,
             },
           ),
         };
       } else if (isEnumFieldMetadataType(fieldMetadata.type)) {
         generatedFields = this.generateEnumFieldCreateInputType(
-          objectMetadata,
+          objectNameSingular,
           fieldMetadata,
           typeOptions,
         );
@@ -106,12 +115,12 @@ export class ObjectMetadataCreateGqlInputTypeGenerator {
   }
 
   private generateEnumFieldCreateInputType(
-    objectMetadata: ObjectMetadataEntity,
-    fieldMetadata: FieldMetadataEntity,
-    typeOptions: TypeOptions,
+    objectNameSingular: string,
+    fieldMetadata: FlatFieldMetadata,
+    typeOptions: CreateInputTypeOptions,
   ) {
     const key = computeEnumFieldGqlTypeKey(
-      objectMetadata.nameSingular,
+      objectNameSingular,
       fieldMetadata.name,
     );
 
@@ -127,7 +136,7 @@ export class ObjectMetadataCreateGqlInputTypeGenerator {
       throw new Error(message);
     }
 
-    const modifiedEnumType = this.typeMapperService.applyTypeOptions(
+    const modifiedEnumType = applyTypeOptionsForCreateInput(
       enumType,
       typeOptions,
     );
@@ -141,8 +150,8 @@ export class ObjectMetadataCreateGqlInputTypeGenerator {
   }
 
   private generateCompositeFieldCreateInputType(
-    fieldMetadata: FieldMetadataEntity,
-    typeOptions: TypeOptions,
+    fieldMetadata: FlatFieldMetadata,
+    typeOptions: CreateInputTypeOptions,
   ) {
     const key = computeCompositeFieldInputTypeKey(
       fieldMetadata.type,
@@ -161,7 +170,7 @@ export class ObjectMetadataCreateGqlInputTypeGenerator {
       throw new Error(message);
     }
 
-    const modifiedCompositeType = this.typeMapperService.applyTypeOptions(
+    const modifiedCompositeType = applyTypeOptionsForCreateInput(
       compositeType,
       typeOptions,
     );
@@ -175,13 +184,13 @@ export class ObjectMetadataCreateGqlInputTypeGenerator {
   }
 
   private generateAtomicFieldCreateInputType(
-    fieldMetadata: FieldMetadataEntity,
-    typeOptions: TypeOptions,
+    fieldMetadata: FlatFieldMetadata,
+    typeOptions: CreateInputTypeOptions,
   ) {
-    const type = this.typeMapperService.mapToScalarType(
-      fieldMetadata.type,
+    const type = this.typeMapperService.mapToPreBuiltGraphQLInputType({
+      fieldMetadataType: fieldMetadata.type,
       typeOptions,
-    );
+    });
 
     if (!isDefined(type) || isObjectType(type)) {
       const message = `Could not find a GraphQL input type for ${fieldMetadata.type} field metadata`;
@@ -193,10 +202,7 @@ export class ObjectMetadataCreateGqlInputTypeGenerator {
       throw new Error(message);
     }
 
-    const modifiedType = this.typeMapperService.applyTypeOptions(
-      type,
-      typeOptions,
-    );
+    const modifiedType = applyTypeOptionsForCreateInput(type, typeOptions);
 
     return {
       [fieldMetadata.name]: {

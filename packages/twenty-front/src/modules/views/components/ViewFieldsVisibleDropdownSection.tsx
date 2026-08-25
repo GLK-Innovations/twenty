@@ -1,4 +1,4 @@
-import { type DropResult, type ResponderProvided } from '@hello-pangea/dnd';
+import { type DraggableListDropResult } from '@/ui/layout/draggable-list/types/DraggableListDropResult';
 
 import { useGetFieldMetadataItemByIdOrThrow } from '@/object-metadata/hooks/useGetFieldMetadataItemById';
 import { getLabelIdentifierFieldMetadataItem } from '@/object-metadata/utils/getLabelIdentifierFieldMetadataItem';
@@ -10,11 +10,11 @@ import { visibleRecordFieldsComponentSelector } from '@/object-record/record-fie
 import { DraggableItem } from '@/ui/layout/draggable-list/components/DraggableItem';
 import { DraggableList } from '@/ui/layout/draggable-list/components/DraggableList';
 import { DropdownMenuItemsContainer } from '@/ui/layout/dropdown/components/DropdownMenuItemsContainer';
-import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
+import { useAtomComponentSelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentSelectorValue';
 import { ViewType } from '@/views/types/ViewType';
 import { useContext } from 'react';
 import { isDefined } from 'twenty-shared/utils';
-import { IconEyeOff, useIcons } from 'twenty-ui/display';
+import { IconEyeOff, useIcons } from 'twenty-ui/icon';
 import { MenuItemDraggable } from 'twenty-ui/navigation';
 import { sortByProperty } from '~/utils/array/sortByProperty';
 
@@ -37,7 +37,7 @@ export const ViewFieldsVisibleDropdownSection = () => {
     useGetFieldMetadataItemByIdOrThrow();
 
   const handleReorderFields =
-    viewType === ViewType.Kanban
+    viewType === ViewType.KANBAN
       ? handleReorderBoardFields
       : processOptionDropdownDragEnd;
 
@@ -45,12 +45,12 @@ export const ViewFieldsVisibleDropdownSection = () => {
     useChangeRecordFieldVisibility(recordIndexId);
 
   const handleChangeFieldVisibility =
-    viewType === ViewType.Kanban
+    viewType === ViewType.KANBAN
       ? handleBoardFieldVisibilityChange
       : changeRecordFieldVisibility;
 
-  const handleDragEnd = (result: DropResult, provided: ResponderProvided) => {
-    handleReorderFields(result, provided);
+  const handleDragEnd = (result: DraggableListDropResult) => {
+    handleReorderFields(result);
   };
 
   const { getIcon } = useIcons();
@@ -58,7 +58,7 @@ export const ViewFieldsVisibleDropdownSection = () => {
   const fieldMetadataItemLabelIdentifier =
     getLabelIdentifierFieldMetadataItem(objectMetadataItem);
 
-  const visibleRecordFields = useRecoilComponentValue(
+  const visibleRecordFields = useAtomComponentSelectorValue(
     visibleRecordFieldsComponentSelector,
   );
 
@@ -84,7 +84,7 @@ export const ViewFieldsVisibleDropdownSection = () => {
             LeftIcon={getIcon(fieldMetadataItemLabelIdentifier.icon)}
             text={fieldMetadataItemLabelIdentifier.label}
             accent="placeholder"
-            showGrip={true}
+            gripMode="always"
             isDragDisabled
           />
         )}
@@ -124,7 +124,7 @@ export const ViewFieldsVisibleDropdownSection = () => {
                             },
                           ]}
                           text={fieldMetadataItem.label}
-                          showGrip
+                          gripMode="always"
                         />
                       }
                     />

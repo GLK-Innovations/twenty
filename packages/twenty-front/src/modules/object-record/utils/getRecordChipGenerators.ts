@@ -2,9 +2,10 @@ import {
   type ChipGeneratorPerObjectNameSingularPerFieldName,
   type IdentifierChipGeneratorPerObject,
 } from '@/object-metadata/contexts/PreComputedChipGeneratorsContext';
-import { type ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
 import { getAvatarType } from '@/object-metadata/utils/getAvatarType';
 import { getAvatarUrl } from '@/object-metadata/utils/getAvatarUrl';
+import { getImageIdentifierFieldMetadataItem } from '@/object-metadata/utils/getImageIdentifierFieldMetadataItem';
 import { getLabelIdentifierFieldMetadataItem } from '@/object-metadata/utils/getLabelIdentifierFieldMetadataItem';
 import { getLabelIdentifierFieldValue } from '@/object-metadata/utils/getLabelIdentifierFieldValue';
 import { isLabelIdentifierField } from '@/object-metadata/utils/isLabelIdentifierField';
@@ -15,7 +16,8 @@ import { isDefined } from 'twenty-shared/utils';
 import { FieldMetadataType } from '~/generated-metadata/graphql';
 
 export const getRecordChipGenerators = (
-  objectMetadataItems: ObjectMetadataItem[],
+  objectMetadataItems: EnrichedObjectMetadataItem[],
+  allowRequestsToTwentyIcons?: boolean,
 ) => {
   const chipGeneratorPerObjectPerField: ChipGeneratorPerObjectNameSingularPerFieldName =
     {};
@@ -71,13 +73,9 @@ export const getRecordChipGenerators = (
             getLabelIdentifierFieldMetadataItem(objectMetadataItemToUse);
 
           const imageIdentifierFieldMetadataToUse =
-            objectMetadataItemToUse.fields.find(
-              (field) =>
-                field.id ===
-                objectMetadataItemToUse.imageIdentifierFieldMetadataId,
-            );
+            getImageIdentifierFieldMetadataItem(objectMetadataItemToUse);
 
-          const avatarType = getAvatarType(objectNameSingularToFind);
+          const avatarType = getAvatarType(objectMetadataItemToUse);
 
           return [
             fieldMetadataItem.name,
@@ -87,12 +85,12 @@ export const getRecordChipGenerators = (
                 name: getLabelIdentifierFieldValue(
                   record,
                   labelIdentifierFieldMetadataItemToUse,
-                  objectMetadataItemToUse.nameSingular,
                 ),
                 avatarUrl: getAvatarUrl(
                   objectMetadataItemToUse.nameSingular,
                   record,
                   imageIdentifierFieldMetadataToUse,
+                  allowRequestsToTwentyIcons,
                 ),
                 avatarType,
                 isLabelIdentifier,

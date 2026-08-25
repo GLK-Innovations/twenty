@@ -1,9 +1,12 @@
 import { faker } from '@faker-js/faker';
-import { type FieldMetadataType } from 'twenty-shared/types';
+import {
+  type FieldMetadataType,
+  MetadataWritability,
+} from 'twenty-shared/types';
 
 import { type ApplicationEntity } from 'src/engine/core-modules/application/application.entity';
+import { type WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
 import { type FieldMetadataEntity } from 'src/engine/metadata-modules/field-metadata/field-metadata.entity';
-import { type IndexFieldMetadataEntity } from 'src/engine/metadata-modules/index-metadata/index-field-metadata.entity';
 import { type ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
 
 type GetMockFieldMetadataEntityOverride<
@@ -20,19 +23,24 @@ export const getMockFieldMetadataEntity = <
   overrides: GetMockFieldMetadataEntityOverride<T>,
 ): FieldMetadataEntity => {
   return {
+    isSystemSideEffect: false,
+    workspace: {} as WorkspaceEntity,
     calendarViews: [],
+    calendarEndViews: [],
+    mainGroupByFieldMetadataViews: [],
     viewFilters: [],
     viewFields: [],
-    viewGroups: [],
     kanbanAggregateOperationViews: [],
+    viewSorts: [],
+    searchFieldMetadatas: [],
     morphId: null,
     fieldPermissions: [],
     icon: null,
-    indexFieldMetadatas: {} as IndexFieldMetadataEntity,
-    isCustom: true,
+    indexFieldMetadatas: [],
     isLabelSyncedWithName: false,
     isNullable: null,
-    isUIReadOnly: false,
+    isUIEditable: true,
+    writability: MetadataWritability.OPEN,
     isSystem: false,
     isUnique: null,
     object: {} as ObjectMetadataEntity,
@@ -40,8 +48,9 @@ export const getMockFieldMetadataEntity = <
     relationTargetFieldMetadataId: null,
     relationTargetObjectMetadata: null,
     relationTargetObjectMetadataId: null,
-    standardId: null,
-    standardOverrides: null,
+    overrides: null,
+    standardOverrides:
+      null as unknown as FieldMetadataEntity['standardOverrides'],
     id: faker.string.uuid(),
     name: 'defaultFieldMetadataName',
     label: 'Default field metadata entity label',
@@ -52,6 +61,8 @@ export const getMockFieldMetadataEntity = <
     createdAt: new Date(),
     updatedAt: new Date(),
     isActive: true,
+    isCustom: false,
+    isUIReadOnly: false,
     application: {} as ApplicationEntity,
     applicationId: faker.string.uuid(),
     universalIdentifier: faker.string.uuid(),

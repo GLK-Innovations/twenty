@@ -7,8 +7,9 @@ import { GqlExecutionContext } from '@nestjs/graphql';
 
 import { msg } from '@lingui/core/macro';
 import { isDefined } from 'class-validator';
+import { PermissionFlagType } from 'twenty-shared/constants';
 
-import { PermissionFlagType } from 'src/engine/metadata-modules/permissions/constants/permission-flag-type.constants';
+import { userCanServerImpersonate } from 'src/engine/core-modules/impersonation/utils/user-can-server-impersonate.util';
 import {
   PermissionsException,
   PermissionsExceptionCode,
@@ -36,7 +37,9 @@ export class ImpersonatePermissionGuard implements CanActivate {
       );
     }
 
-    if (request.user.canImpersonate === true) return true;
+    if (userCanServerImpersonate(request.user)) {
+      return true;
+    }
 
     const hasPermission =
       await this.permissionsService.userHasWorkspaceSettingPermission({

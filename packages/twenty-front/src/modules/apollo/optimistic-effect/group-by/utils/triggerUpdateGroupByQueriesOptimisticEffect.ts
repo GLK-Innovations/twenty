@@ -3,19 +3,21 @@ import { type ApolloCache, type StoreObject } from '@apollo/client';
 import { normalizeGroupByDimensionValue } from '@/apollo/optimistic-effect/group-by/utils/normalizeGroupByDimensionValue';
 import { processGroupByConnectionWithRecords } from '@/apollo/optimistic-effect/group-by/utils/processGroupByConnectionWithRecords';
 import { type CachedObjectRecordQueryVariables } from '@/apollo/types/CachedObjectRecordQueryVariables';
-import { type ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
 import { type RecordGqlRefEdge } from '@/object-record/cache/types/RecordGqlRefEdge';
 import { createCacheEdgeWithRecordRef } from '@/object-record/cache/utils/createCacheEdgeWithRecordRef';
 import { type RecordGqlNode } from '@/object-record/graphql/types/RecordGqlNode';
 import { type RecordGqlGroupByConnection } from '@/object-record/graphql/types/RecordGqlOperationGroupByResult';
 import { type RecordGqlOperationGroupByVariables } from '@/object-record/graphql/types/RecordGqlOperationGroupByVariables';
 import { isRecordMatchingFilter } from '@/object-record/record-filter/utils/isRecordMatchingFilter';
-import { isDefined } from 'twenty-shared/utils';
+import { isArray } from '@sniptt/guards';
+import { getGroupByConnectionTypename, isDefined } from 'twenty-shared/utils';
 import { parseApolloStoreFieldName } from '~/utils/parseApolloStoreFieldName';
 
 type TriggerUpdateGroupByQueriesOptimisticEffectArgs = {
-  cache: ApolloCache<unknown>;
-  objectMetadataItem: ObjectMetadataItem;
+  cache: ApolloCache;
+  objectMetadataItem: EnrichedObjectMetadataItem;
+  objectMetadataItems: EnrichedObjectMetadataItem[];
   operation: 'create' | 'update' | 'delete';
   records: RecordGqlNode[];
   shouldMatchRootQueryFilter?: boolean;
@@ -24,6 +26,7 @@ type TriggerUpdateGroupByQueriesOptimisticEffectArgs = {
 export const triggerUpdateGroupByQueriesOptimisticEffect = ({
   cache,
   objectMetadataItem,
+  objectMetadataItems,
   operation,
   records,
   shouldMatchRootQueryFilter = false,
@@ -55,13 +58,16 @@ export const triggerUpdateGroupByQueriesOptimisticEffect = ({
         const updatedGroupByConnections = cachedGroupByConnections.map(
           (groupConnection) => {
             const groupByDimensionValues =
-              readField('groupByDimensionValues', groupConnection) || [];
+              readField('groupByDimensionValues', groupConnection) ?? [];
+
             const cachedEdges =
-              readField<RecordGqlRefEdge[]>('edges', groupConnection) || [];
+              readField<RecordGqlRefEdge[]>('edges', groupConnection) ?? [];
+
             const cachedTotalCount = readField<number | undefined>(
               'totalCount',
               groupConnection,
             );
+
             const cachedPageInfo = readField<{
               startCursor?: string;
               endCursor?: string;
@@ -82,6 +88,7 @@ export const triggerUpdateGroupByQueriesOptimisticEffect = ({
                   : [],
                 groupByConfig,
                 objectMetadataItem,
+                objectMetadataItems,
                 readField,
                 toReference,
               });
@@ -118,6 +125,7 @@ export const triggerUpdateGroupByQueriesOptimisticEffect = ({
               record,
               filter: queryFilter ?? {},
               objectMetadataItem,
+              objectMetadataItems,
             });
 
             if (
@@ -129,6 +137,11 @@ export const triggerUpdateGroupByQueriesOptimisticEffect = ({
             }
 
             if (!isDefined(groupByConfig) || groupByConfig.length === 0) {
+              continue;
+            }
+
+            // TODO: see if we need to handle the case where it's not an array like for aggregate header
+            if (!isArray(groupByConfig)) {
               continue;
             }
 
@@ -157,7 +170,7 @@ export const triggerUpdateGroupByQueriesOptimisticEffect = ({
             const dimensionKey = recordDimensionValues.join('|');
             const dimensionExists = updatedGroupByConnections.some((conn) => {
               const connDimensionValues =
-                readField('groupByDimensionValues', conn) || [];
+                readField('groupByDimensionValues', conn) ?? [];
               return (
                 Array.isArray(connDimensionValues) &&
                 connDimensionValues.join('|') === dimensionKey
@@ -190,7 +203,9 @@ export const triggerUpdateGroupByQueriesOptimisticEffect = ({
           for (const [_, groupData] of recordsToAddToNewGroups) {
             if (groupData.edges.length > 0) {
               const newGroupConnection = {
-                __typename: `${objectMetadataItem.nameSingular}Connection`,
+                __typename: getGroupByConnectionTypename(
+                  objectMetadataItem.nameSingular,
+                ),
                 edges: groupData.edges,
                 pageInfo: {
                   hasNextPage: false,

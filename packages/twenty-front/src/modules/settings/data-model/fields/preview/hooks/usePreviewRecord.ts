@@ -1,11 +1,10 @@
 import { useLabelIdentifierFieldMetadataItem } from '@/object-metadata/hooks/useLabelIdentifierFieldMetadataItem';
-import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
+import { CoreObjectNameSingular } from 'twenty-shared/types';
 import { useFindManyRecords } from '@/object-record/hooks/useFindManyRecords';
 import { isFieldValueEmpty } from '@/object-record/record-field/ui/utils/isFieldValueEmpty';
 import { type ObjectRecord } from '@/object-record/types/ObjectRecord';
 import { getFieldPreviewValue } from '@/settings/data-model/fields/preview/utils/getFieldPreviewValue';
-import { isDefined } from 'twenty-shared/utils';
-import { pascalCase } from '~/utils/string/pascalCase';
+import { isDefined, pascalCase } from 'twenty-shared/utils';
 
 type UsePreviewRecordParams = {
   objectNameSingular: string;
@@ -62,6 +61,5 @@ export const usePreviewRecord = ({
     [labelIdentifierFieldMetadataItem.name]: fieldPreviewValue,
   };
 
-  // If no record was found, or if the label identifier field value is empty, display a placeholder record
   return placeholderRecord;
 };

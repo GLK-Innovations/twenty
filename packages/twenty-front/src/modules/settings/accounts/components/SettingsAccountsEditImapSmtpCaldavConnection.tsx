@@ -1,11 +1,11 @@
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
 import { useLingui } from '@lingui/react/macro';
 import { FormProvider } from 'react-hook-form';
 import { useParams } from 'react-router-dom';
 
 import { SaveAndCancelButtons } from '@/settings/components/SaveAndCancelButtons/SaveAndCancelButtons';
 import { SettingsPageContainer } from '@/settings/components/SettingsPageContainer';
-import { SubMenuTopBarContainer } from '@/ui/layout/page/components/SubMenuTopBarContainer';
+import { SettingsPageLayout } from '@/settings/components/layout/SettingsPageLayout';
 import { SettingsPath } from 'twenty-shared/types';
 
 import { Loader } from 'twenty-ui/feedback';
@@ -13,8 +13,9 @@ import { Loader } from 'twenty-ui/feedback';
 import { getSettingsPath } from 'twenty-shared/utils';
 import { useNavigateSettings } from '~/hooks/useNavigateSettings';
 
+import { ACCOUNT_TYPES } from 'twenty-shared/constants';
 import { NotFound } from '~/pages/not-found/NotFound';
-import { useImapSmtpCaldavConnectionForm } from '../hooks/useImapSmtpCaldavConnectionForm';
+import { useImapSmtpCaldavConnectionForm } from '@/settings/accounts/hooks/useImapSmtpCaldavConnectionForm';
 import { SettingsAccountsConnectionForm } from './SettingsAccountsConnectionForm';
 
 const StyledLoadingContainer = styled.div`
@@ -56,10 +57,14 @@ export const SettingsAccountsEditImapSmtpCaldavConnection = () => {
     return <NotFound />;
   }
 
+  const existingProtocols = ACCOUNT_TYPES.filter(
+    (protocol) => connectedAccount?.connectionParameters?.[protocol]?.host,
+  );
+
   const renderForm = () => (
-    // eslint-disable-next-line react/jsx-props-no-spreading
+    // oxlint-disable-next-line react/jsx-props-no-spreading
     <FormProvider {...formMethods}>
-      <SubMenuTopBarContainer
+      <SettingsPageLayout
         title={t`Edit Account`}
         links={[
           {
@@ -83,9 +88,13 @@ export const SettingsAccountsEditImapSmtpCaldavConnection = () => {
         }
       >
         <SettingsPageContainer>
-          <SettingsAccountsConnectionForm control={control} isEditing />
+          <SettingsAccountsConnectionForm
+            control={control}
+            isEditing
+            existingProtocols={existingProtocols}
+          />
         </SettingsPageContainer>
-      </SubMenuTopBarContainer>
+      </SettingsPageLayout>
     </FormProvider>
   );
 

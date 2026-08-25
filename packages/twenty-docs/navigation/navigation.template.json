@@ -1,89 +1,204 @@
 {
   "tabs": {
+    "gettingStarted": {
+      "label": "Getting Started",
+      "groups": {
+        "welcome": {
+          "label": "Welcome"
+        },
+        "coreConcepts": {
+          "label": "Core Concepts"
+        }
+      }
+    },
     "userGuide": {
       "label": "User Guide",
       "groups": {
-        "gettingStarted": {
-          "label": "Getting Started"
+        "userGuideOverview": {
+          "label": "Overview"
         },
         "dataModel": {
-          "label": "Data Model"
+          "label": "Data Model",
+          "groups": {
+            "dataModelReference": {
+              "label": "Reference"
+            },
+            "dataModelHowTos": {
+              "label": "How-Tos"
+            }
+          }
         },
-        "crmEssentials": {
-          "label": "CRM Essentials"
+        "dataMigration": {
+          "label": "Data Migration",
+          "groups": {
+            "dataMigrationReference": {
+              "label": "Reference"
+            },
+            "dataMigrationHowTos": {
+              "label": "How-Tos"
+            }
+          }
         },
-        "views": {
-          "label": "Views"
+        "calendarEmails": {
+          "label": "Calendar & Emails",
+          "groups": {
+            "calendarEmailsReference": {
+              "label": "Reference"
+            },
+            "calendarEmailsHowTos": {
+              "label": "How-Tos"
+            }
+          }
         },
         "workflows": {
-          "label": "Workflows"
+          "label": "Workflows",
+          "groups": {
+            "workflowsReference": {
+              "label": "Reference"
+            },
+            "workflowsHowTos": {
+              "label": "How-Tos",
+              "groups": {
+                "crmAutomations": {
+                  "label": "CRM Automations"
+                },
+                "connectToOtherTools": {
+                  "label": "Connect to Other Tools"
+                },
+                "advancedConfigurations": {
+                  "label": "Advanced Configurations"
+                },
+                "needMoreHelp": {
+                  "label": "Need More Help"
+                }
+              }
+            }
+          }
         },
-        "collaboration": {
-          "label": "Collaboration"
+        "ai": {
+          "label": "AI",
+          "groups": {
+            "aiReference": {
+              "label": "Reference"
+            },
+            "aiHowTos": {
+              "label": "How-Tos"
+            }
+          }
         },
-        "integrationsApi": {
-          "label": "Integrations & API"
+        "layout": {
+          "label": "Layout",
+          "groups": {
+            "layoutReference": {
+              "label": "Reference",
+              "groups": {
+                "layoutViews": {
+                  "label": "Views"
+                }
+              }
+            },
+            "layoutHowTos": {
+              "label": "How-Tos"
+            }
+          }
         },
-        "reporting": {
-          "label": "Reporting"
+        "dashboards": {
+          "label": "Dashboards",
+          "groups": {
+            "dashboardsReference": {
+              "label": "Reference"
+            },
+            "dashboardsHowTos": {
+              "label": "How-Tos"
+            }
+          }
+        },
+        "permissionsAccess": {
+          "label": "Permissions & Access",
+          "groups": {
+            "permissionsAccessReference": {
+              "label": "Reference"
+            },
+            "permissionsAccessHowTos": {
+              "label": "How-Tos"
+            }
+          }
+        },
+        "billing": {
+          "label": "Billing",
+          "groups": {
+            "billingReference": {
+              "label": "Reference"
+            },
+            "billingHowTos": {
+              "label": "How-Tos"
+            }
+          }
         },
         "settings": {
-          "label": "Settings"
+          "label": "Settings",
+          "groups": {
+            "settingsReference": {
+              "label": "Reference"
+            },
+            "settingsHowTos": {
+              "label": "How-Tos"
+            }
+          }
         },
-        "pricing": {
-          "label": "Pricing"
-        },
-        "resources": {
-          "label": "Resources"
+        "legal": {
+          "label": "Legal",
+          "groups": {
+            "legalHowTos": {
+              "label": "How-Tos"
+            }
+          }
         }
       }
     },
     "developers": {
       "label": "Developers",
       "groups": {
-        "developersGroup": {
-          "label": "Developers"
+        "developersOverview": {
+          "label": "Overview"
         },
-        "devGettingStarted": {
-          "label": "Getting Started",
+        "apps": {
+          "label": "Apps",
           "groups": {
-            "selfHosting": {
-              "label": "Self-Hosting"
+            "appsGettingStarted": {
+              "label": "Getting Started"
             },
-            "apiAndWebhooks": {
-              "label": "API and Webhooks"
+            "appsTutorial": {
+              "label": "Tutorial"
+            },
+            "appsConfig": {
+              "label": "Config"
+            },
+            "appsData": {
+              "label": "Data"
+            },
+            "appsLogic": {
+              "label": "Logic"
+            },
+            "appsLayout": {
+              "label": "Layout"
+            },
+            "appsOperations": {
+              "label": "Operations"
+            },
+            "appsTranslations": {
+              "label": "Translations"
             }
           }
         },
-        "contributing": {
-          "label": "Contributing",
-          "groups": {
-            "frontendDevelopment": {
-              "label": "Frontend Development",
-              "groups": {
-                "twentyUi": {
-                  "label": "Twenty UI",
-                  "groups": {
-                    "display": {
-                      "label": "Display"
-                    },
-                    "feedback": {
-                      "label": "Feedback"
-                    },
-                    "input": {
-                      "label": "Input"
-                    },
-                    "navigation": {
-                      "label": "Navigation"
-                    }
-                  }
-                }
-              }
-            },
-            "backendDevelopment": {
-              "label": "Backend Development"
-            }
-          }
+        "api": {
+          "label": "API"
+        },
+        "selfHost": {
+          "label": "Self-Host"
+        },
+        "contribute": {
+          "label": "Contribute"
         }
       }
     }

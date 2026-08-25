@@ -1,5 +1,5 @@
 import { REACT_APP_SERVER_BASE_URL } from '~/config';
-import { getClientConfig } from '../getClientConfig';
+import { getClientConfig } from '@/client-config/utils/getClientConfig';
 
 global.fetch = jest.fn();
 
@@ -29,12 +29,12 @@ const mockClientConfig = {
     environment: 'development',
     release: '1.0.0',
     dsn: undefined,
+    tracesSampleRate: 0.1,
   },
   captcha: {
     provider: undefined,
     siteKey: undefined,
   },
-  chromeExtensionId: undefined,
   api: {
     mutationMaximumAffectedRecords: 100,
   },
@@ -64,12 +64,6 @@ describe('getClientConfig', () => {
 
     expect(fetch).toHaveBeenCalledWith(
       `${REACT_APP_SERVER_BASE_URL}/client-config`,
-      {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      },
     );
     expect(result).toEqual(mockClientConfig);
   });

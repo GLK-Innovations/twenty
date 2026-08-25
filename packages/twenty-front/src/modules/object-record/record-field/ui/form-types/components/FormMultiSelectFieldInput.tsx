@@ -1,6 +1,7 @@
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
+import { t } from '@lingui/core/macro';
 
-import { FormFieldInputContainer } from '@/object-record/record-field/ui/form-types/components/FormFieldInputContainer';
+import { FormFieldInputContainer } from '@/ui/input/components/FormFieldInputContainer';
 import { FormFieldInputInnerContainer } from '@/object-record/record-field/ui/form-types/components/FormFieldInputInnerContainer';
 import { FormFieldInputRowContainer } from '@/object-record/record-field/ui/form-types/components/FormFieldInputRowContainer';
 import { FormFieldPlaceholder } from '@/object-record/record-field/ui/form-types/components/FormFieldPlaceholder';
@@ -10,21 +11,19 @@ import { SELECT_FIELD_INPUT_SELECTABLE_LIST_COMPONENT_INSTANCE_ID } from '@/obje
 import { type FieldMultiSelectValue } from '@/object-record/record-field/ui/types/FieldMetadata';
 import { MultiSelectDisplay } from '@/ui/field/display/components/MultiSelectDisplay';
 import { MultiSelectInput } from '@/ui/field/input/components/MultiSelectInput';
-import { InputHint } from '@/ui/input/components/InputHint';
-import { InputLabel } from '@/ui/input/components/InputLabel';
+import { Field, type SelectOption } from 'twenty-ui/input';
 import { GenericDropdownContentWidth } from '@/ui/layout/dropdown/constants/GenericDropdownContentWidth';
 import { OverlayContainer } from '@/ui/layout/overlay/components/OverlayContainer';
 import { usePushFocusItemToFocusStack } from '@/ui/utilities/focus/hooks/usePushFocusItemToFocusStack';
 import { useRemoveFocusItemFromFocusStackById } from '@/ui/utilities/focus/hooks/useRemoveFocusItemFromFocusStackById';
 import { FocusComponentType } from '@/ui/utilities/focus/types/FocusComponentType';
-import { isStandaloneVariableString } from '@/workflow/utils/isStandaloneVariableString';
-import { useTheme } from '@emotion/react';
+import { isStandaloneVariableString } from 'twenty-shared/workflow';
 import { isArray } from '@sniptt/guards';
-import { useId, useState } from 'react';
+import { useContext, useId, useState } from 'react';
 import { isDefined } from 'twenty-shared/utils';
 import { VisibilityHidden } from 'twenty-ui/accessibility';
-import { IconChevronDown } from 'twenty-ui/display';
-import { type SelectOption } from 'twenty-ui/input';
+import { IconChevronDown } from 'twenty-ui/icon';
+import { ThemeContext, themeCssVariables } from 'twenty-ui/theme-constants';
 
 type FormMultiSelectFieldInputProps = {
   label?: string;
@@ -36,6 +35,7 @@ type FormMultiSelectFieldInputProps = {
   placeholder?: string;
   testId?: string;
   hint?: string;
+  dropdownWidth?: number;
 };
 
 const StyledDisplayModeReadonlyContainer = styled.div`
@@ -44,26 +44,28 @@ const StyledDisplayModeReadonlyContainer = styled.div`
   border: none;
   display: flex;
   font-family: inherit;
-  padding-inline: ${({ theme }) => theme.spacing(2)};
+  padding-inline: ${themeCssVariables.spacing[2]};
   width: 100%;
 `;
 
-const StyledDisplayModeContainer = styled(StyledDisplayModeReadonlyContainer)`
+const StyledDisplayModeContainer = styled.div`
+  align-items: center;
+  background: transparent;
+  border: none;
   cursor: pointer;
-
-  &:hover,
-  &[data-open='true'] {
-    background-color: ${({ theme }) => theme.background.transparent.lighter};
-  }
+  display: flex;
+  font-family: inherit;
+  padding-inline: ${themeCssVariables.spacing[2]};
+  width: 100%;
 `;
 
 const StyledSelectInputContainer = styled.div`
   position: absolute;
+  top: ${themeCssVariables.spacing[9]};
   z-index: 1;
-  top: ${({ theme }) => theme.spacing(9)};
 `;
 
-const StyledPlaceholder = styled(FormFieldPlaceholder)`
+const StyledPlaceholderContainer = styled.div`
   width: 100%;
 `;
 
@@ -85,9 +87,10 @@ export const FormMultiSelectFieldInput = ({
   placeholder,
   testId,
   hint,
+  dropdownWidth,
 }: FormMultiSelectFieldInputProps) => {
+  const { theme } = useContext(ThemeContext);
   const instanceId = useId();
-  const theme = useTheme();
 
   const { pushFocusItemToFocusStack } = usePushFocusItemToFocusStack();
   const { removeFocusItemFromFocusStackById } =
@@ -204,12 +207,13 @@ export const FormMultiSelectFieldInput = ({
 
   return (
     <FormFieldInputContainer data-testid={testId}>
-      {label ? <InputLabel>{label}</InputLabel> : null}
+      {label ? <Field.Label>{label}</Field.Label> : null}
 
       <FormFieldInputRowContainer>
         <FormFieldInputInnerContainer
           formFieldInputInstanceId={instanceId}
           hasRightElement={isDefined(VariablePicker) && !readonly}
+          hoverable={!readonly}
         >
           {draftValue.type === 'static' ? (
             readonly ? (
@@ -220,7 +224,9 @@ export const FormMultiSelectFieldInput = ({
                     options={selectedOptions}
                   />
                 ) : (
-                  <StyledPlaceholder />
+                  <StyledPlaceholderContainer>
+                    <FormFieldPlaceholder />
+                  </StyledPlaceholderContainer>
                 )}
                 <IconChevronDown
                   size={theme.icon.size.md}
@@ -232,7 +238,7 @@ export const FormMultiSelectFieldInput = ({
                 data-open={draftValue.editingMode === 'edit'}
                 onClick={handleDisplayModeClick}
               >
-                <VisibilityHidden>Edit</VisibilityHidden>
+                <VisibilityHidden>{t`Edit`}</VisibilityHidden>
 
                 {isDefined(selectedOptions) && selectedOptions.length > 0 ? (
                   <MultiSelectDisplay
@@ -240,7 +246,11 @@ export const FormMultiSelectFieldInput = ({
                     options={selectedOptions}
                   />
                 ) : (
-                  <StyledPlaceholder>{placeholderText}</StyledPlaceholder>
+                  <StyledPlaceholderContainer>
+                    <FormFieldPlaceholder>
+                      {placeholderText}
+                    </FormFieldPlaceholder>
+                  </StyledPlaceholderContainer>
                 )}
                 <IconChevronDown
                   size={theme.icon.size.md}
@@ -268,7 +278,9 @@ export const FormMultiSelectFieldInput = ({
                   onCancel={onCancel}
                   onOptionSelected={onOptionSelected}
                   values={selectedNames}
-                  dropdownWidth={GenericDropdownContentWidth.ExtraLarge}
+                  dropdownWidth={
+                    dropdownWidth ?? GenericDropdownContentWidth.ExtraLarge
+                  }
                 />
               </OverlayContainer>
             )}
@@ -281,7 +293,7 @@ export const FormMultiSelectFieldInput = ({
           />
         )}
       </FormFieldInputRowContainer>
-      {hint ? <InputHint>{hint}</InputHint> : null}
+      {hint ? <Field.Description>{hint}</Field.Description> : null}
     </FormFieldInputContainer>
   );
 };

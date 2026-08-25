@@ -24,6 +24,7 @@ export const getFilterTypeFromFieldType = (
     case FieldMetadataType.PHONES:
       return 'PHONES';
     case FieldMetadataType.RELATION:
+    case FieldMetadataType.MORPH_RELATION:
       return 'RELATION';
     case FieldMetadataType.SELECT:
       return 'SELECT';
@@ -39,6 +40,8 @@ export const getFilterTypeFromFieldType = (
       return 'ARRAY';
     case FieldMetadataType.RAW_JSON:
       return 'RAW_JSON';
+    case FieldMetadataType.FILES:
+      return 'FILES';
     case FieldMetadataType.BOOLEAN:
       return 'BOOLEAN';
     case FieldMetadataType.TS_VECTOR:

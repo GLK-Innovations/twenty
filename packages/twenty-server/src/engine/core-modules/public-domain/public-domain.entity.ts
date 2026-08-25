@@ -4,19 +4,21 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
+  type Relation,
   UpdateDateColumn,
 } from 'typeorm';
 
-import { Relation } from 'src/engine/workspace-manager/workspace-sync-metadata/interfaces/relation.interface';
-
-import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
+import { ApplicationEntity } from 'src/engine/core-modules/application/application.entity';
+import { WorkspaceRelatedEntity } from 'src/engine/workspace-manager/types/workspace-related-entity';
 
 @Entity({ name: 'publicDomain', schema: 'core' })
 @ObjectType('PublicDomain')
-export class PublicDomainEntity {
+@Index('IDX_PUBLIC_DOMAIN_APPLICATION_ID', ['applicationId'])
+export class PublicDomainEntity extends WorkspaceRelatedEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -32,12 +34,17 @@ export class PublicDomainEntity {
   @Column({ type: 'boolean', default: false, nullable: false })
   isValidated: boolean;
 
-  @Column({ nullable: false, type: 'uuid' })
-  workspaceId: string;
+  @Column({ type: 'uuid', nullable: false })
+  applicationId: string;
 
-  @ManyToOne(() => WorkspaceEntity, (workspace) => workspace.publicDomains, {
-    onDelete: 'CASCADE',
-  })
-  @JoinColumn({ name: 'workspaceId' })
-  workspace: Relation<WorkspaceEntity>;
+  @ManyToOne(
+    () => ApplicationEntity,
+    (application) => application.publicDomains,
+    {
+      onDelete: 'CASCADE',
+      nullable: false,
+    },
+  )
+  @JoinColumn({ name: 'applicationId' })
+  application: Relation<ApplicationEntity>;
 }

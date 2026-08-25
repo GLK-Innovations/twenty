@@ -6,26 +6,28 @@ import { DropdownMenuSeparator } from '@/ui/layout/dropdown/components/DropdownM
 import { SelectableList } from '@/ui/layout/selectable-list/components/SelectableList';
 import { SelectableListItem } from '@/ui/layout/selectable-list/components/SelectableListItem';
 import { useSelectableList } from '@/ui/layout/selectable-list/hooks/useSelectableList';
-import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
+import { useAtomComponentSelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentSelectorValue';
 
 import { type FieldMetadataItem } from '@/object-metadata/types/FieldMetadataItem';
 import { AdvancedFilterFieldSelectSearchInput } from '@/object-record/advanced-filter/components/AdvancedFilterFieldSelectSearchInput';
 import { useAdvancedFilterFieldSelectDropdown } from '@/object-record/advanced-filter/hooks/useAdvancedFilterFieldSelectDropdown';
-import { useSelectFieldUsedInAdvancedFilterDropdown } from '@/object-record/advanced-filter/hooks/useSelectFieldUsedInAdvancedFilterDropdown';
+import { useApplyAdvancedFilterSourceField } from '@/object-record/advanced-filter/hooks/useApplyAdvancedFilterSourceField';
 import { AdvancedFilterContext } from '@/object-record/advanced-filter/states/context/AdvancedFilterContext';
 import { ObjectFilterDropdownFilterSelectMenuItem } from '@/object-record/object-filter-dropdown/components/ObjectFilterDropdownFilterSelectMenuItem';
 import { fieldMetadataItemIdUsedInDropdownComponentState } from '@/object-record/object-filter-dropdown/states/fieldMetadataItemIdUsedInDropdownComponentState';
 import { objectFilterDropdownIsSelectingCompositeFieldComponentState } from '@/object-record/object-filter-dropdown/states/objectFilterDropdownIsSelectingCompositeFieldComponentState';
+import { objectFilterDropdownIsSelectingRelationTargetFieldComponentState } from '@/object-record/object-filter-dropdown/states/objectFilterDropdownIsSelectingRelationTargetFieldComponentState';
 import { objectFilterDropdownSubMenuFieldTypeComponentState } from '@/object-record/object-filter-dropdown/states/objectFilterDropdownSubMenuFieldTypeComponentState';
-import { isCompositeFieldType } from '@/object-record/object-filter-dropdown/utils/isCompositeFieldType';
+import { isCompositeFilterableFieldType } from '@/object-record/object-filter-dropdown/utils/isCompositeFilterableFieldType';
+import { isManyToOneRelationField } from '@/object-metadata/utils/isManyToOneRelationField';
 import { visibleRecordFieldsComponentSelector } from '@/object-record/record-field/states/visibleRecordFieldsComponentSelector';
 import { useFilterableFieldMetadataItems } from '@/object-record/record-filter/hooks/useFilterableFieldMetadataItems';
 import { DropdownContent } from '@/ui/layout/dropdown/components/DropdownContent';
 import { DropdownMenuSectionLabel } from '@/ui/layout/dropdown/components/DropdownMenuSectionLabel';
+import { usePushFocusForLeafFieldValuePicker } from '@/object-record/advanced-filter/hooks/usePushFocusForLeafFieldValuePicker';
 import { GenericDropdownContentWidth } from '@/ui/layout/dropdown/constants/GenericDropdownContentWidth';
-import { useRecoilComponentState } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentState';
-import { useSetRecoilComponentState } from '@/ui/utilities/state/component-state/hooks/useSetRecoilComponentState';
-import { shouldDisplayFormField } from '@/workflow/workflow-steps/workflow-actions/utils/shouldDisplayFormField';
+import { useAtomComponentState } from '@/ui/utilities/state/jotai/hooks/useAtomComponentState';
+import { useSetAtomComponentState } from '@/ui/utilities/state/jotai/hooks/useSetAtomComponentState';
 import { useLingui } from '@lingui/react/macro';
 import { useContext } from 'react';
 import { getFilterTypeFromFieldType } from 'twenty-shared/utils';
@@ -42,28 +44,16 @@ export const AdvancedFilterFieldSelectMenu = ({
     advancedFilterFieldSelectDropdownId,
   } = useAdvancedFilterFieldSelectDropdown(recordFilterId);
 
-  const [objectFilterDropdownSearchInput] = useRecoilComponentState(
+  const [objectFilterDropdownSearchInput] = useAtomComponentState(
     objectFilterDropdownSearchInputComponentState,
   );
 
-  const { isWorkflowFindRecords, objectMetadataItem } = useContext(
-    AdvancedFilterContext,
-  );
+  const { objectMetadataItem } = useContext(AdvancedFilterContext);
 
-  const {
-    filterableFieldMetadataItems: filterableFieldMetadataItemsForRecordIndex,
-  } = useFilterableFieldMetadataItems(objectMetadataItem.id);
+  const { filterableFieldMetadataItems: filterableFieldMetadataItems } =
+    useFilterableFieldMetadataItems(objectMetadataItem.id);
 
-  const filterableFieldMetadataItems = isWorkflowFindRecords
-    ? filterableFieldMetadataItemsForRecordIndex.filter((fieldMetadataItem) =>
-        shouldDisplayFormField({
-          fieldMetadataItem,
-          actionType: 'FIND_RECORDS',
-        }),
-      )
-    : filterableFieldMetadataItemsForRecordIndex;
-
-  const visibleRecordFields = useRecoilComponentValue(
+  const visibleRecordFields = useAtomComponentSelectorValue(
     visibleRecordFieldsComponentSelector,
   );
 
@@ -100,21 +90,29 @@ export const AdvancedFilterFieldSelectMenu = ({
     advancedFilterFieldSelectDropdownId,
   );
 
-  const { selectFieldUsedInAdvancedFilterDropdown } =
-    useSelectFieldUsedInAdvancedFilterDropdown();
+  const { applyAdvancedFilterSourceField } =
+    useApplyAdvancedFilterSourceField();
 
-  const [, setObjectFilterDropdownSubMenuFieldType] = useRecoilComponentState(
+  const [, setObjectFilterDropdownSubMenuFieldType] = useAtomComponentState(
     objectFilterDropdownSubMenuFieldTypeComponentState,
   );
 
   const [, setObjectFilterDropdownIsSelectingCompositeField] =
-    useRecoilComponentState(
+    useAtomComponentState(
       objectFilterDropdownIsSelectingCompositeFieldComponentState,
     );
 
-  const setFieldMetadataItemIdUsedInDropdown = useSetRecoilComponentState(
+  const [, setObjectFilterDropdownIsSelectingRelationTargetField] =
+    useAtomComponentState(
+      objectFilterDropdownIsSelectingRelationTargetFieldComponentState,
+    );
+
+  const setFieldMetadataItemIdUsedInDropdown = useSetAtomComponentState(
     fieldMetadataItemIdUsedInDropdownComponentState,
   );
+
+  const { pushFocusForLeafFieldValuePicker } =
+    usePushFocusForLeafFieldValuePicker();
 
   const handleFieldMetadataItemSelect = (
     selectedFieldMetadataItem: FieldMetadataItem,
@@ -125,19 +123,41 @@ export const AdvancedFilterFieldSelectMenu = ({
       selectedFieldMetadataItem.type,
     );
 
-    selectFieldUsedInAdvancedFilterDropdown({
-      fieldMetadataItemId: selectedFieldMetadataItem.id,
+    const isRelationTraversalField = isManyToOneRelationField(
+      selectedFieldMetadataItem,
+    );
+
+    const compositeSubMenuFieldType =
+      !isRelationTraversalField && isCompositeFilterableFieldType(filterType)
+        ? filterType
+        : null;
+
+    // For sub-menu paths (composite or relation traversal) we only stage
+    // the source field in the dropdown state and open the sub-menu —
+    // upsertRecordFilter happens in the sub-menu's hook once the user
+    // makes the final choice. Otherwise navigating back from the sub-menu
+    // would leave an orphan partial filter in the chip list.
+    if (isRelationTraversalField) {
+      setFieldMetadataItemIdUsedInDropdown(selectedFieldMetadataItem.id);
+      setObjectFilterDropdownIsSelectingRelationTargetField(true);
+      return;
+    }
+
+    if (compositeSubMenuFieldType !== null) {
+      setFieldMetadataItemIdUsedInDropdown(selectedFieldMetadataItem.id);
+      setObjectFilterDropdownSubMenuFieldType(compositeSubMenuFieldType);
+      setObjectFilterDropdownIsSelectingCompositeField(true);
+      return;
+    }
+
+    applyAdvancedFilterSourceField({
+      sourceFieldMetadataItem: selectedFieldMetadataItem,
       recordFilterId,
     });
 
-    if (isCompositeFieldType(filterType)) {
-      setObjectFilterDropdownSubMenuFieldType(filterType);
+    pushFocusForLeafFieldValuePicker(selectedFieldMetadataItem);
 
-      setFieldMetadataItemIdUsedInDropdown(selectedFieldMetadataItem.id);
-      setObjectFilterDropdownIsSelectingCompositeField(true);
-    } else {
-      closeAdvancedFilterFieldSelectDropdown();
-    }
+    closeAdvancedFilterFieldSelectDropdown();
   };
 
   const shouldShowVisibleFields = visibleFieldMetadataItems.length > 0;

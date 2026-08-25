@@ -1,31 +1,20 @@
 import { Logger, Scope } from '@nestjs/common';
 
 import isEqual from 'lodash.isequal';
-import { isDefined } from 'twenty-shared/utils';
 import { In } from 'typeorm';
 
+import { computeCoreWorkflowStatuses } from 'src/engine/core-modules/workflow/utils/compute-core-workflow-statuses.util';
 import { Process } from 'src/engine/core-modules/message-queue/decorators/process.decorator';
 import { Processor } from 'src/engine/core-modules/message-queue/decorators/processor.decorator';
 import { MessageQueue } from 'src/engine/core-modules/message-queue/message-queue.constants';
-import { ServerlessFunctionService } from 'src/engine/metadata-modules/serverless-function/serverless-function.service';
-import { type WorkspaceRepository } from 'src/engine/twenty-orm/repository/workspace.repository';
-import { TwentyORMGlobalManager } from 'src/engine/twenty-orm/twenty-orm-global.manager';
-import {
-  WorkflowVersionStepException,
-  WorkflowVersionStepExceptionCode,
-} from 'src/modules/workflow/common/exceptions/workflow-version-step.exception';
+import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
+import { type WorkspaceRepository } from 'src/engine/twenty-orm/repository/workspace-repository';
+import { buildSystemAuthContext } from 'src/engine/twenty-orm/utils/build-system-auth-context.util';
 import {
   WorkflowVersionStatus,
   type WorkflowVersionWorkspaceEntity,
 } from 'src/modules/workflow/common/standard-objects/workflow-version.workspace-entity';
-import {
-  WorkflowStatus,
-  type WorkflowWorkspaceEntity,
-} from 'src/modules/workflow/common/standard-objects/workflow.workspace-entity';
-import {
-  type WorkflowAction,
-  WorkflowActionType,
-} from 'src/modules/workflow/workflow-executor/workflow-actions/types/workflow-action.type';
+import { type WorkflowWorkspaceEntity } from 'src/modules/workflow/common/standard-objects/workflow.workspace-entity';
 
 export enum WorkflowVersionEventType {
   CREATE = 'CREATE',
@@ -68,57 +57,52 @@ export type WorkflowVersionBatchDelete = {
 export class WorkflowStatusesUpdateJob {
   protected readonly logger = new Logger(WorkflowStatusesUpdateJob.name);
 
-  constructor(
-    private readonly twentyORMGlobalManager: TwentyORMGlobalManager,
-    private readonly serverlessFunctionService: ServerlessFunctionService,
-  ) {}
+  constructor(private readonly workspaceOrmManager: WorkspaceOrmManager) {}
 
   @Process(WorkflowStatusesUpdateJob.name)
   async handle(event: WorkflowVersionBatchEvent): Promise<void> {
-    switch (event.type) {
-      case WorkflowVersionEventType.CREATE:
-      case WorkflowVersionEventType.DELETE:
-        await Promise.all(
-          event.workflowIds.map((workflowId) =>
-            this.handleWorkflowVersionCreatedOrDeleted({
-              workflowId,
-              workspaceId: event.workspaceId,
-            }),
-          ),
-        );
-        break;
-      case WorkflowVersionEventType.STATUS_UPDATE:
-        await Promise.all(
-          event.statusUpdates.map((statusUpdate) =>
-            this.handleWorkflowVersionStatusUpdated({
-              statusUpdate,
-              workspaceId: event.workspaceId,
-            }),
-          ),
-        );
-        break;
-      default:
-        break;
-    }
+    const authContext = buildSystemAuthContext(event.workspaceId);
+
+    await this.workspaceOrmManager.executeInWorkspaceContext(async () => {
+      switch (event.type) {
+        case WorkflowVersionEventType.CREATE:
+        case WorkflowVersionEventType.DELETE:
+          await Promise.all(
+            event.workflowIds.map((workflowId) =>
+              this.handleWorkflowVersionCreatedOrDeleted({
+                workflowId,
+              }),
+            ),
+          );
+          break;
+        case WorkflowVersionEventType.STATUS_UPDATE:
+          await Promise.all(
+            event.statusUpdates.map((statusUpdate) =>
+              this.handleWorkflowVersionStatusUpdated({
+                statusUpdate,
+              }),
+            ),
+          );
+          break;
+        default:
+          break;
+      }
+    }, authContext);
   }
 
   private async handleWorkflowVersionCreatedOrDeleted({
     workflowId,
-    workspaceId,
   }: {
     workflowId: string;
-    workspaceId: string;
   }): Promise<void> {
     const workflowRepository =
-      await this.twentyORMGlobalManager.getRepositoryForWorkspace<WorkflowWorkspaceEntity>(
-        workspaceId,
+      this.workspaceOrmManager.getRepository<WorkflowWorkspaceEntity>(
         'workflow',
         { shouldBypassPermissionChecks: true },
       );
 
     const workflowVersionRepository =
-      await this.twentyORMGlobalManager.getRepositoryForWorkspace<WorkflowVersionWorkspaceEntity>(
-        workspaceId,
+      this.workspaceOrmManager.getRepository<WorkflowVersionWorkspaceEntity>(
         'workflowVersion',
         { shouldBypassPermissionChecks: true },
       );
@@ -149,78 +133,19 @@ export class WorkflowStatusesUpdateJob {
     );
   }
 
-  private async handlePublishServerlessFunction({
-    statusUpdate,
-    workspaceId,
-    workflowVersion,
-    workflowVersionRepository,
-  }: {
-    statusUpdate: WorkflowVersionStatusUpdate;
-    workspaceId: string;
-    workflowVersion: WorkflowVersionWorkspaceEntity;
-    workflowVersionRepository: WorkspaceRepository<WorkflowVersionWorkspaceEntity>;
-  }) {
-    const shouldComputeNewSteps =
-      statusUpdate.newStatus === WorkflowVersionStatus.ACTIVE &&
-      isDefined(workflowVersion.steps) &&
-      workflowVersion.steps.filter(
-        (step) => step.type === WorkflowActionType.CODE,
-      ).length > 0;
-
-    if (shouldComputeNewSteps) {
-      const newSteps: WorkflowAction[] = [];
-
-      for (const step of workflowVersion.steps || []) {
-        const newStep = { ...step };
-
-        if (step.type === WorkflowActionType.CODE) {
-          const serverlessFunction =
-            await this.serverlessFunctionService.publishOneServerlessFunctionOrFail(
-              step.settings.input.serverlessFunctionId,
-              workspaceId,
-            );
-
-          const newStepSettings = { ...step.settings };
-
-          if (!isDefined(serverlessFunction.latestVersion)) {
-            throw new WorkflowVersionStepException(
-              `Fail to publish serverless function ${serverlessFunction.id}. Latest version is null`,
-              WorkflowVersionStepExceptionCode.CODE_STEP_FAILURE,
-            );
-          }
-
-          newStepSettings.input.serverlessFunctionVersion =
-            serverlessFunction.latestVersion;
-
-          newStep.settings = newStepSettings;
-        }
-
-        newSteps.push(newStep);
-      }
-
-      await workflowVersionRepository.update(statusUpdate.workflowVersionId, {
-        steps: newSteps,
-      });
-    }
-  }
-
   private async handleWorkflowVersionStatusUpdated({
     statusUpdate,
-    workspaceId,
   }: {
     statusUpdate: WorkflowVersionStatusUpdate;
-    workspaceId: string;
   }): Promise<void> {
     const workflowRepository =
-      await this.twentyORMGlobalManager.getRepositoryForWorkspace<WorkflowWorkspaceEntity>(
-        workspaceId,
+      this.workspaceOrmManager.getRepository<WorkflowWorkspaceEntity>(
         'workflow',
         { shouldBypassPermissionChecks: true },
       );
 
     const workflowVersionRepository =
-      await this.twentyORMGlobalManager.getRepositoryForWorkspace<WorkflowVersionWorkspaceEntity>(
-        workspaceId,
+      this.workspaceOrmManager.getRepository<WorkflowVersionWorkspaceEntity>(
         'workflowVersion',
         { shouldBypassPermissionChecks: true },
       );
@@ -229,17 +154,6 @@ export class WorkflowStatusesUpdateJob {
       where: {
         id: statusUpdate.workflowId,
       },
-    });
-
-    const workflowVersion = await workflowVersionRepository.findOneOrFail({
-      where: { id: statusUpdate.workflowVersionId },
-    });
-
-    await this.handlePublishServerlessFunction({
-      workflowVersion,
-      workflowVersionRepository,
-      workspaceId,
-      statusUpdate,
     });
 
     const newWorkflowStatuses = await this.getWorkflowStatuses({
@@ -268,8 +182,6 @@ export class WorkflowStatusesUpdateJob {
     workflowId: string;
     workflowVersionRepository: WorkspaceRepository<WorkflowVersionWorkspaceEntity>;
   }) {
-    const statuses: WorkflowStatus[] = [];
-
     const workflowVersions = await workflowVersionRepository.find({
       where: {
         workflowId,
@@ -281,30 +193,16 @@ export class WorkflowStatusesUpdateJob {
       },
     });
 
-    const hasDraftVersion = workflowVersions.some(
-      (version) => version.status === WorkflowVersionStatus.DRAFT,
-    );
-
-    if (hasDraftVersion) {
-      statuses.push(WorkflowStatus.DRAFT);
-    }
-
-    const hasActiveVersion = workflowVersions.some(
-      (version) => version.status === WorkflowVersionStatus.ACTIVE,
-    );
-
-    if (hasActiveVersion) {
-      statuses.push(WorkflowStatus.ACTIVE);
-    }
-
-    const hasDeactivatedVersion = workflowVersions.some(
-      (version) => version.status === WorkflowVersionStatus.DEACTIVATED,
-    );
-
-    if (!hasActiveVersion && hasDeactivatedVersion) {
-      statuses.push(WorkflowStatus.DEACTIVATED);
-    }
-
-    return statuses;
+    return computeCoreWorkflowStatuses({
+      hasDraftVersion: workflowVersions.some(
+        (version) => version.status === WorkflowVersionStatus.DRAFT,
+      ),
+      hasActiveVersion: workflowVersions.some(
+        (version) => version.status === WorkflowVersionStatus.ACTIVE,
+      ),
+      hasDeactivatedVersion: workflowVersions.some(
+        (version) => version.status === WorkflowVersionStatus.DEACTIVATED,
+      ),
+    });
   }
 }

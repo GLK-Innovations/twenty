@@ -1,42 +1,94 @@
 import { Test, type TestingModule } from '@nestjs/testing';
 
+import { FeatureFlagService } from 'src/engine/core-modules/feature-flag/services/feature-flag.service';
 import { MessageQueueService } from 'src/engine/core-modules/message-queue/services/message-queue.service';
-import { TwentyORMGlobalManager } from 'src/engine/twenty-orm/twenty-orm-global.manager';
+import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
+import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
+import { WorkspaceCacheService } from 'src/engine/workspace-cache/services/workspace-cache.service';
+import { type WorkspaceEventBatch } from 'src/engine/workspace-event-emitter/types/workspace-event-batch.type';
 import { AutomatedTriggerType } from 'src/modules/workflow/common/standard-objects/workflow-automated-trigger.workspace-entity';
 import { WorkflowCommonWorkspaceService } from 'src/modules/workflow/common/workspace-services/workflow-common.workspace-service';
 import { WorkflowDatabaseEventTriggerListener } from 'src/modules/workflow/workflow-trigger/automated-trigger/listeners/workflow-database-event-trigger.listener';
 import { WorkflowTriggerJob } from 'src/modules/workflow/workflow-trigger/jobs/workflow-trigger.job';
-import { getMockObjectMetadataEntity } from 'src/utils/__test__/get-object-metadata-entity.mock';
-import { getMockObjectMetadataItemWithFieldsMaps } from 'src/utils/__test__/get-object-metadata-item-with-fields-maps.mock';
 
 describe('WorkflowDatabaseEventTriggerListener', () => {
   let listener: WorkflowDatabaseEventTriggerListener;
-  let twentyORMGlobalManager: jest.Mocked<TwentyORMGlobalManager>;
+  let workspaceOrmManager: jest.Mocked<WorkspaceOrmManager>;
   let messageQueueService: jest.Mocked<MessageQueueService>;
+  let featureFlagService: jest.Mocked<FeatureFlagService>;
+  let workspaceCacheService: jest.Mocked<WorkspaceCacheService>;
 
   const mockRepository = {
     find: jest.fn(),
   };
 
+  const createMockFlatObjectMetadata = (
+    overrides: Partial<FlatObjectMetadata>,
+  ): FlatObjectMetadata =>
+    ({
+      id: 'test-object-metadata',
+      workspaceId: 'test-workspace',
+      nameSingular: 'testObject',
+      namePlural: 'testObjects',
+      labelSingular: 'Test Object',
+      labelPlural: 'Test Objects',
+      description: 'Test object for testing',
+      targetTableName: 'test_objects',
+      isSystem: false,
+      isActive: true,
+      isRemote: false,
+      isAuditLogged: true,
+      isSearchable: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      icon: 'Icon123',
+      universalIdentifier: 'test-object-metadata',
+      fieldIds: [],
+      indexMetadataIds: [],
+      viewIds: [],
+      applicationId: null,
+      ...overrides,
+    }) as FlatObjectMetadata;
+
   beforeEach(async () => {
-    twentyORMGlobalManager = {
-      getRepositoryForWorkspace: jest.fn().mockResolvedValue(mockRepository),
+    workspaceOrmManager = {
+      getRepository: jest.fn().mockReturnValue(mockRepository),
+      executeInWorkspaceContext: jest
+        .fn()
+        .mockImplementation((fn: () => any, _authContext?: any) => fn()),
     } as any;
 
     messageQueueService = {
       add: jest.fn(),
     } as any;
 
+    // Default flag off so the existing suite exercises the workspace-entity path.
+    featureFlagService = {
+      isFeatureEnabled: jest.fn().mockResolvedValue(false),
+    } as any;
+
+    workspaceCacheService = {
+      getOrRecompute: jest.fn(),
+    } as any;
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WorkflowDatabaseEventTriggerListener,
         {
-          provide: TwentyORMGlobalManager,
-          useValue: twentyORMGlobalManager,
+          provide: WorkspaceOrmManager,
+          useValue: workspaceOrmManager,
         },
         {
           provide: MessageQueueService,
           useValue: messageQueueService,
+        },
+        {
+          provide: FeatureFlagService,
+          useValue: featureFlagService,
+        },
+        {
+          provide: WorkspaceCacheService,
+          useValue: workspaceCacheService,
         },
         {
           provide: 'MESSAGE_QUEUE_workflow-queue',
@@ -46,37 +98,10 @@ describe('WorkflowDatabaseEventTriggerListener', () => {
           provide: WorkflowCommonWorkspaceService,
           useValue: {
             getWorkflowById: jest.fn(),
-            getObjectMetadataItemWithFieldsMaps: jest.fn().mockResolvedValue({
-              objectMetadataMaps: {
-                byId: {
-                  'test-object-metadata': {
-                    nameSingular: 'testObject',
-                    namePlural: 'testObjects',
-                  },
-                },
-              },
-              objectMetadataItemWithFieldsMaps:
-                getMockObjectMetadataItemWithFieldsMaps({
-                  id: 'test-object-metadata',
-                  workspaceId: 'test-workspace',
-                  nameSingular: 'testObject',
-                  namePlural: 'testObjects',
-                  labelSingular: 'Test Object',
-                  labelPlural: 'Test Objects',
-                  description: 'Test object for testing',
-                  indexMetadatas: [],
-                  targetTableName: 'test_objects',
-                  isSystem: false,
-                  isCustom: false,
-                  isActive: true,
-                  isRemote: false,
-                  isAuditLogged: true,
-                  isSearchable: true,
-                  icon: 'Icon123',
-                  fieldIdByJoinColumnName: {},
-                  fieldsById: {},
-                  fieldIdByName: {},
-                }),
+            getObjectMetadataInfo: jest.fn().mockResolvedValue({
+              flatObjectMetadata: createMockFlatObjectMetadata({}),
+              flatObjectMetadataMaps: { byId: {}, byName: {} },
+              flatFieldMetadataMaps: { byId: {}, byName: {} },
             }),
           },
         },
@@ -93,30 +118,10 @@ describe('WorkflowDatabaseEventTriggerListener', () => {
     const databaseEventName = 'testEvent';
     const workflowId = 'test-workflow';
 
-    const mockPayload = {
+    const mockPayload: WorkspaceEventBatch<any> = {
       workspaceId,
       name: databaseEventName,
-      objectMetadata: getMockObjectMetadataEntity({
-        id: 'test-object-metadata',
-        workspaceId,
-        nameSingular: 'testObject',
-        namePlural: 'testObjects',
-        labelSingular: 'Test Object',
-        labelPlural: 'Test Objects',
-        description: 'Test object for testing',
-        targetTableName: 'test_objects',
-        isSystem: false,
-        isCustom: false,
-        isActive: true,
-        isRemote: false,
-        isAuditLogged: true,
-        isSearchable: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        fields: [],
-        indexMetadatas: [],
-        icon: 'Icon123',
-      }),
+      objectMetadata: createMockFlatObjectMetadata({}),
       events: [
         {
           recordId: 'test-record',
@@ -145,6 +150,29 @@ describe('WorkflowDatabaseEventTriggerListener', () => {
 
       await listener.handleObjectRecordUpdateEvent(mockPayload);
 
+      expect(messageQueueService.add).toHaveBeenCalledWith(
+        WorkflowTriggerJob.name,
+        {
+          workspaceId,
+          workflowId,
+          payload: mockPayload.events[0],
+        },
+        { retryLimit: 3 },
+      );
+    });
+
+    it('reads listeners from the core trigger map when dispatch-from-core is enabled', async () => {
+      featureFlagService.isFeatureEnabled.mockResolvedValue(true);
+      workspaceCacheService.getOrRecompute.mockResolvedValue({
+        workflowAutomatedTriggerMaps: {
+          byWorkflowId: { [workflowId]: mockEventListeners[0] },
+        },
+      } as any);
+
+      await listener.handleObjectRecordUpdateEvent(mockPayload);
+
+      // Dispatch is driven by the core map, not the workspace entity.
+      expect(mockRepository.find).not.toHaveBeenCalled();
       expect(messageQueueService.add).toHaveBeenCalledWith(
         WorkflowTriggerJob.name,
         {
@@ -205,7 +233,7 @@ describe('WorkflowDatabaseEventTriggerListener', () => {
     });
 
     it('should handle create events correctly', async () => {
-      const createPayload = {
+      const createPayload: WorkspaceEventBatch<any> = {
         ...mockPayload,
         name: 'createEvent',
         events: [
@@ -242,7 +270,7 @@ describe('WorkflowDatabaseEventTriggerListener', () => {
     });
 
     it('should handle delete events correctly', async () => {
-      const deletePayload = {
+      const deletePayload: WorkspaceEventBatch<any> = {
         ...mockPayload,
         name: 'deleteEvent',
         events: [
@@ -279,7 +307,7 @@ describe('WorkflowDatabaseEventTriggerListener', () => {
     });
 
     it('should handle destroy events correctly', async () => {
-      const destroyPayload = {
+      const destroyPayload: WorkspaceEventBatch<any> = {
         ...mockPayload,
         name: 'destroyEvent',
         events: [
@@ -316,7 +344,7 @@ describe('WorkflowDatabaseEventTriggerListener', () => {
     });
 
     it('should handle multiple events in a batch', async () => {
-      const batchPayload = {
+      const batchPayload: WorkspaceEventBatch<any> = {
         ...mockPayload,
         events: [
           mockPayload.events[0],
@@ -366,6 +394,104 @@ describe('WorkflowDatabaseEventTriggerListener', () => {
         },
         { retryLimit: 3 },
       );
+    });
+
+    it('should trigger workflow for position-only updates when no fields are specified', async () => {
+      const positionOnlyPayload: WorkspaceEventBatch<any> = {
+        ...mockPayload,
+        events: [
+          {
+            ...mockPayload.events[0],
+            properties: {
+              updatedFields: ['position'],
+              before: { position: 1 },
+              after: { position: 2 },
+            },
+          },
+        ],
+      };
+
+      mockRepository.find.mockResolvedValue([
+        {
+          ...mockEventListeners[0],
+          settings: {
+            eventName: databaseEventName,
+            fields: undefined,
+          },
+        },
+      ]);
+
+      await listener.handleObjectRecordUpdateEvent(positionOnlyPayload);
+
+      expect(messageQueueService.add).toHaveBeenCalledWith(
+        WorkflowTriggerJob.name,
+        {
+          workspaceId,
+          workflowId,
+          payload: positionOnlyPayload.events[0],
+        },
+        { retryLimit: 3 },
+      );
+    });
+
+    it('should trigger workflow when position changes alongside another field', async () => {
+      const positionAndFieldPayload: WorkspaceEventBatch<any> = {
+        ...mockPayload,
+        events: [
+          {
+            ...mockPayload.events[0],
+            properties: {
+              updatedFields: ['field1', 'position'],
+              before: { field1: 'old', position: 1 },
+              after: { field1: 'new', position: 2 },
+            },
+          },
+        ],
+      };
+
+      mockRepository.find.mockResolvedValue([
+        {
+          ...mockEventListeners[0],
+          settings: {
+            eventName: databaseEventName,
+            fields: undefined,
+          },
+        },
+      ]);
+
+      await listener.handleObjectRecordUpdateEvent(positionAndFieldPayload);
+
+      expect(messageQueueService.add).toHaveBeenCalled();
+    });
+
+    it('should not trigger workflow for position-only updates when fields are specified', async () => {
+      const positionOnlyPayload: WorkspaceEventBatch<any> = {
+        ...mockPayload,
+        events: [
+          {
+            ...mockPayload.events[0],
+            properties: {
+              updatedFields: ['position'],
+              before: { position: 1 },
+              after: { position: 2 },
+            },
+          },
+        ],
+      };
+
+      mockRepository.find.mockResolvedValue([
+        {
+          ...mockEventListeners[0],
+          settings: {
+            eventName: databaseEventName,
+            fields: ['field1'],
+          },
+        },
+      ]);
+
+      await listener.handleObjectRecordUpdateEvent(positionOnlyPayload);
+
+      expect(messageQueueService.add).not.toHaveBeenCalled();
     });
   });
 });

@@ -11,7 +11,11 @@ export type Message = Omit<
   | 'messageParticipants'
   | 'messageThread'
   | 'messageThreadId'
+  | 'messageFolders'
   | 'id'
+  | 'messageCampaign'
+  | 'messageCampaignId'
+  | 'deliveryStatus'
 > & {
   attachments: {
     filename: string;
@@ -19,6 +23,15 @@ export type Message = Omit<
   externalId: string;
   messageThreadExternalId: string;
   direction: MessageDirection;
+  messageFolderIds?: string[];
+  messageFolderExternalIds?: string[];
+  labelIds?: string[];
+  messageHeaders?: MessageHeader[];
+};
+
+export type MessageHeader = {
+  name: string;
+  value: string;
 };
 
 export type MessageAttachment = {
@@ -39,6 +52,8 @@ export type MessageParticipant = Omit<
   | 'workspaceMember'
   | 'message'
   | 'messageId'
+  | 'messageCampaign'
+  | 'messageCampaignId'
 >;
 
 export type MessageWithParticipants = Message & {

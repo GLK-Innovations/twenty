@@ -1,10 +1,11 @@
-import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
 import { useFindOneRecord } from '@/object-record/hooks/useFindOneRecord';
+import { useEffectiveDraftVersionId } from '@/workflow/hooks/useEffectiveDraftVersionId';
 import {
   type Workflow,
   type WorkflowVersion,
   type WorkflowWithCurrentVersion,
 } from '@/workflow/types/Workflow';
+import { CoreObjectNameSingular } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 
 type WorkflowWithAllVersions = Omit<Workflow, 'versions'> & {
@@ -34,23 +35,35 @@ export const useWorkflowWithCurrentVersion = (
     skip: !isDefined(workflowId),
   });
 
-  const draftVersion = workflow?.versions.find(
+  const draftVersionFromServer = workflow?.versions.find(
     (workflowVersion) => workflowVersion.status === 'DRAFT',
   );
 
-  const workflowVersions = [...(workflow?.versions ?? [])];
+  const { effectiveDraftId, lastDiscardedDraftId } = useEffectiveDraftVersionId(
+    draftVersionFromServer,
+  );
 
-  workflowVersions.sort((a, b) => (a.createdAt > b.createdAt ? -1 : 1));
+  const workflowVersions = [...(workflow?.versions ?? [])]
+    .filter((version) => version.id !== lastDiscardedDraftId)
+    .sort((a, b) => (a.createdAt > b.createdAt ? -1 : 1));
 
   const latestVersion = workflowVersions[0];
 
-  const currentVersionWithoutSteps = draftVersion ?? latestVersion;
+  const currentVersionId = effectiveDraftId ?? latestVersion?.id;
 
   const { record: currentVersionWithSteps } = useFindOneRecord<WorkflowVersion>(
     {
       objectNameSingular: CoreObjectNameSingular.WorkflowVersion,
-      objectRecordId: currentVersionWithoutSteps?.id,
-      skip: !isDefined(currentVersionWithoutSteps?.id),
+      objectRecordId: currentVersionId,
+      recordGqlFields: {
+        id: true,
+        name: true,
+        status: true,
+        workflowId: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      skip: !isDefined(currentVersionId),
     },
   );
 

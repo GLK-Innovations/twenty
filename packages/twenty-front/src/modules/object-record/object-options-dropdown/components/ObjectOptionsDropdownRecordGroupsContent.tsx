@@ -1,12 +1,13 @@
 import { useEffect } from 'react';
 
+import { isManyToOneRelationField } from '@/object-metadata/utils/isManyToOneRelationField';
 import { OBJECT_OPTIONS_DROPDOWN_ID } from '@/object-record/object-options-dropdown/constants/ObjectOptionsDropdownId';
 import { useObjectOptionsDropdown } from '@/object-record/object-options-dropdown/hooks/useObjectOptionsDropdown';
 import { RecordGroupsVisibilityDropdownSection } from '@/object-record/record-group/components/RecordGroupsVisibilityDropdownSection';
 import { useRecordGroupVisibility } from '@/object-record/record-group/hooks/useRecordGroupVisibility';
-import { recordGroupFieldMetadataComponentState } from '@/object-record/record-group/states/recordGroupFieldMetadataComponentState';
 import { hiddenRecordGroupIdsComponentSelector } from '@/object-record/record-group/states/selectors/hiddenRecordGroupIdsComponentSelector';
 import { visibleRecordGroupIdsComponentFamilySelector } from '@/object-record/record-group/states/selectors/visibleRecordGroupIdsComponentFamilySelector';
+import { recordIndexGroupFieldMetadataItemComponentState } from '@/object-record/record-index/states/recordIndexGroupFieldMetadataComponentState';
 import { recordIndexRecordGroupSortComponentState } from '@/object-record/record-index/states/recordIndexRecordGroupSortComponentState';
 import { recordIndexShouldHideEmptyRecordGroupsComponentState } from '@/object-record/record-index/states/recordIndexShouldHideEmptyRecordGroupsComponentState';
 import { DropdownContent } from '@/ui/layout/dropdown/components/DropdownContent';
@@ -17,17 +18,22 @@ import { DropdownMenuSeparator } from '@/ui/layout/dropdown/components/DropdownM
 import { SelectableList } from '@/ui/layout/selectable-list/components/SelectableList';
 import { SelectableListItem } from '@/ui/layout/selectable-list/components/SelectableListItem';
 import { selectedItemIdComponentState } from '@/ui/layout/selectable-list/states/selectedItemIdComponentState';
-import { useRecoilComponentFamilyValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentFamilyValue';
-import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
+import { useAtomComponentFamilySelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentFamilySelectorValue';
+import { useAtomComponentSelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentSelectorValue';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
 import { useGetCurrentViewOnly } from '@/views/hooks/useGetCurrentViewOnly';
+import { ViewType } from '@/views/types/ViewType';
+import { useGetAvailableFieldsToGroupRecordsBy } from '@/views/view-picker/hooks/useGetAvailableFieldsToGroupRecordsBy';
 import { useLingui } from '@lingui/react/macro';
+import { isDefined } from 'twenty-shared/utils';
 import {
   IconChevronLeft,
   IconCircleOff,
   IconEyeOff,
   IconLayoutList,
+  IconPlus,
   IconSortDescending,
-} from 'twenty-ui/display';
+} from 'twenty-ui/icon';
 import {
   MenuItem,
   MenuItemNavigate,
@@ -46,24 +52,29 @@ export const ObjectOptionsDropdownRecordGroupsContent = () => {
 
   const { currentView } = useGetCurrentViewOnly();
 
-  const recordGroupFieldMetadata = useRecoilComponentValue(
-    recordGroupFieldMetadataComponentState,
+  const recordIndexGroupFieldMetadataItem = useAtomComponentStateValue(
+    recordIndexGroupFieldMetadataItemComponentState,
   );
 
-  const visibleRecordGroupIds = useRecoilComponentFamilyValue(
+  const visibleRecordGroupIds = useAtomComponentFamilySelectorValue(
     visibleRecordGroupIdsComponentFamilySelector,
     viewType,
   );
 
-  const hiddenRecordGroupIds = useRecoilComponentValue(
+  const hiddenRecordGroupIds = useAtomComponentSelectorValue(
     hiddenRecordGroupIdsComponentSelector,
   );
 
-  const hideEmptyRecordGroup = useRecoilComponentValue(
+  const recordIndexShouldHideEmptyRecordGroups = useAtomComponentStateValue(
     recordIndexShouldHideEmptyRecordGroupsComponentState,
   );
 
-  const recordGroupSort = useRecoilComponentValue(
+  const shouldHideEmptyGroups =
+    recordIndexShouldHideEmptyRecordGroups ??
+    currentView?.shouldHideEmptyGroups ??
+    false;
+
+  const recordIndexRecordGroupSort = useAtomComponentStateValue(
     recordIndexRecordGroupSortComponentState,
   );
 
@@ -71,6 +82,16 @@ export const ObjectOptionsDropdownRecordGroupsContent = () => {
     handleVisibilityChange: handleRecordGroupVisibilityChange,
     handleHideEmptyRecordGroupChange,
   } = useRecordGroupVisibility();
+
+  const { availableFieldsForGrouping } =
+    useGetAvailableFieldsToGroupRecordsBy();
+
+  const isGroupByFieldPickerDisabled =
+    availableFieldsForGrouping.length <= 1 && viewType !== ViewType.TABLE;
+
+  const isRelationGroupBy =
+    isDefined(recordIndexGroupFieldMetadataItem) &&
+    isManyToOneRelationField(recordIndexGroupFieldMetadataItem);
 
   useEffect(() => {
     if (
@@ -81,7 +102,7 @@ export const ObjectOptionsDropdownRecordGroupsContent = () => {
     }
   }, [hiddenRecordGroupIds, currentContentId, onContentChange]);
 
-  const selectedItemId = useRecoilComponentValue(
+  const selectedItemId = useAtomComponentStateValue(
     selectedItemIdComponentState,
     OBJECT_OPTIONS_DROPDOWN_ID,
   );
@@ -103,7 +124,7 @@ export const ObjectOptionsDropdownRecordGroupsContent = () => {
           />
         }
       >
-        Group
+        {t`Group`}
       </DropdownMenuHeader>
       <DropdownMenuItemsContainer>
         <SelectableList
@@ -115,14 +136,18 @@ export const ObjectOptionsDropdownRecordGroupsContent = () => {
             <>
               <SelectableListItem
                 itemId="GroupBy"
-                onEnter={() => onContentChange('recordGroupFields')}
+                onEnter={() =>
+                  !isGroupByFieldPickerDisabled &&
+                  onContentChange('recordGroupFields')
+                }
               >
                 <MenuItem
                   focused={selectedItemId === 'GroupBy'}
+                  disabled={isGroupByFieldPickerDisabled}
                   onClick={() => onContentChange('recordGroupFields')}
                   LeftIcon={IconLayoutList}
                   text={t`Group by`}
-                  contextualText={recordGroupFieldMetadata?.label}
+                  contextualText={recordIndexGroupFieldMetadataItem?.label}
                   contextualTextPosition="right"
                   hasSubMenu
                 />
@@ -136,7 +161,7 @@ export const ObjectOptionsDropdownRecordGroupsContent = () => {
                   onClick={() => onContentChange('recordGroupSort')}
                   LeftIcon={IconSortDescending}
                   text={t`Sort`}
-                  contextualText={recordGroupSort}
+                  contextualText={recordIndexRecordGroupSort}
                   contextualTextPosition="right"
                   hasSubMenu
                 />
@@ -151,7 +176,7 @@ export const ObjectOptionsDropdownRecordGroupsContent = () => {
               focused={selectedItemId === 'HideEmptyGroups'}
               LeftIcon={IconCircleOff}
               onToggleChange={handleHideEmptyRecordGroupChange}
-              toggled={hideEmptyRecordGroup}
+              toggled={shouldHideEmptyGroups}
               text={t`Hide empty groups`}
               toggleSize="small"
             />
@@ -171,6 +196,18 @@ export const ObjectOptionsDropdownRecordGroupsContent = () => {
           />
         </>
       )}
+      {isRelationGroupBy && currentView?.key !== 'INDEX' && (
+        <>
+          <DropdownMenuSeparator />
+          <DropdownMenuItemsContainer scrollable={false}>
+            <MenuItem
+              onClick={() => onContentChange('addRecordGroup')}
+              LeftIcon={IconPlus}
+              text={t`New group`}
+            />
+          </DropdownMenuItemsContainer>
+        </>
+      )}
       {hiddenRecordGroupIds.length > 0 && (
         <>
           <DropdownMenuSeparator />
@@ -187,7 +224,7 @@ export const ObjectOptionsDropdownRecordGroupsContent = () => {
                 <MenuItemNavigate
                   onClick={() => onContentChange('hiddenRecordGroups')}
                   LeftIcon={IconEyeOff}
-                  text={`Hidden ${recordGroupFieldMetadata?.label ?? ''}`}
+                  text={`${t`Hidden`} ${recordIndexGroupFieldMetadataItem?.label ?? ''}`}
                 />
               </SelectableListItem>
             </SelectableList>

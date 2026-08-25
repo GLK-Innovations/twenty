@@ -5,7 +5,9 @@ export const GET_CHAT_MESSAGES = gql`
     chatMessages(threadId: $threadId) {
       id
       threadId
+      turnId
       role
+      status
       createdAt
       parts {
         id
@@ -19,6 +21,7 @@ export const GET_CHAT_MESSAGES = gql`
         toolInput
         toolOutput
         state
+        providerExecuted
         errorMessage
         errorDetails
         sourceUrlSourceId
@@ -31,8 +34,17 @@ export const GET_CHAT_MESSAGES = gql`
         fileMediaType
         fileFilename
         fileUrl
+        fileId
         providerMetadata
         createdAt
+      }
+    }
+    chatStreamCatchupChunks(threadId: $threadId) {
+      chunks
+      maxSeq
+      error {
+        code
+        message
       }
     }
   }

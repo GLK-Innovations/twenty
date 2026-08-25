@@ -9,7 +9,7 @@ type CalendarEventDataSeed = {
   externalUpdatedAt: string;
   description: string;
   location: string;
-  iCalUID: string;
+  iCalUid: string;
   conferenceSolution: string;
   conferenceLinkPrimaryLinkLabel: string;
   conferenceLinkPrimaryLinkUrl: string;
@@ -27,7 +27,7 @@ export const CALENDAR_EVENT_DATA_SEED_COLUMNS: (keyof CalendarEventDataSeed)[] =
     'externalUpdatedAt',
     'description',
     'location',
-    'iCalUID',
+    'iCalUid',
     'conferenceSolution',
     'conferenceLinkPrimaryLinkLabel',
     'conferenceLinkPrimaryLinkUrl',
@@ -184,7 +184,6 @@ const GENERATE_CALENDAR_EVENT_SEEDS = (): CalendarEventDataSeed[] => {
       END_TIME.setMinutes(END_TIME.getMinutes() + TEMPLATE.duration);
     }
 
-    // Random location and conference solution
     const LOCATION =
       TEMPLATE.locations[Math.floor(Math.random() * TEMPLATE.locations.length)];
     const CONFERENCE_SOLUTION =
@@ -192,10 +191,8 @@ const GENERATE_CALENDAR_EVENT_SEEDS = (): CalendarEventDataSeed[] => {
         Math.floor(Math.random() * TEMPLATE.conferenceSolutions.length)
       ];
 
-    // 5% chance of being cancelled
     const IS_CANCELLED = Math.random() < 0.05;
 
-    // Generate conference link if it's an online meeting
     const CONFERENCE_LINK = ['Zoom', 'Teams', 'Google Meet'].includes(
       CONFERENCE_SOLUTION,
     )
@@ -217,7 +214,7 @@ const GENERATE_CALENDAR_EVENT_SEEDS = (): CalendarEventDataSeed[] => {
       ).toISOString(),
       description: TEMPLATE.description,
       location: LOCATION,
-      iCalUID: `event${INDEX}@calendar.twentycrm.com`,
+      iCalUid: `event${INDEX}@calendar.twentycrm.com`,
       conferenceSolution: CONFERENCE_SOLUTION,
       conferenceLinkPrimaryLinkLabel: CONFERENCE_LINK,
       conferenceLinkPrimaryLinkUrl: CONFERENCE_LINK,

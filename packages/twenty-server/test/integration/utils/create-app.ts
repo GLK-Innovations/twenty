@@ -1,4 +1,3 @@
-import { APP_FILTER } from '@nestjs/core';
 import { type NestExpressApplication } from '@nestjs/platform-express';
 import {
   Test,
@@ -6,14 +5,20 @@ import {
   type TestingModuleBuilder,
 } from '@nestjs/testing';
 
+import bytes from 'bytes';
+import graphqlUploadExpress from 'graphql-upload/graphqlUploadExpress.mjs';
+
 import { AppModule } from 'src/app.module';
-import { CommandModule } from 'src/command/command.module';
+import { settings } from 'src/engine/constants/settings';
+import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
+import { applyCredentialedCors } from 'src/engine/core-modules/user-session/utils/apply-credentialed-cors.util';
 import { StripeSDKMockService } from 'src/engine/core-modules/billing/stripe/stripe-sdk/mocks/stripe-sdk-mock.service';
 import { StripeSDKService } from 'src/engine/core-modules/billing/stripe/stripe-sdk/services/stripe-sdk.service';
-import { CAPTCHA_DRIVER } from 'src/engine/core-modules/captcha/constants/captcha-driver.constants';
+import { CaptchaDriverFactory } from 'src/engine/core-modules/captcha/captcha-driver.factory';
 import { ExceptionHandlerService } from 'src/engine/core-modules/exception-handler/exception-handler.service';
 import { ExceptionHandlerMockService } from 'src/engine/core-modules/exception-handler/mocks/exception-handler-mock.service';
-import { MockedUnhandledExceptionFilter } from 'src/engine/core-modules/exception-handler/mocks/mock-unhandled-exception.filter';
+import { JobsModule } from 'src/engine/core-modules/message-queue/jobs.module';
+import { MessageQueueModule } from 'src/engine/core-modules/message-queue/message-queue.module';
 
 interface TestingModuleCreatePreHook {
   (moduleBuilder: TestingModuleBuilder): TestingModuleBuilder;
@@ -38,21 +43,17 @@ export const createApp = async (
   const stripeSDKMockService = new StripeSDKMockService();
   const mockExceptionHandlerService = new ExceptionHandlerMockService();
   let moduleBuilder: TestingModuleBuilder = Test.createTestingModule({
-    imports: [AppModule, CommandModule],
-    providers: [
-      {
-        provide: APP_FILTER,
-        useClass: MockedUnhandledExceptionFilter,
-      },
-    ],
+    imports: [AppModule, JobsModule, MessageQueueModule.registerExplorer()],
   })
     .overrideProvider(StripeSDKService)
     .useValue(stripeSDKMockService)
     .overrideProvider(ExceptionHandlerService)
     .useValue(mockExceptionHandlerService)
-    .overrideProvider(CAPTCHA_DRIVER)
+    .overrideProvider(CaptchaDriverFactory)
     .useValue({
-      validate: async () => ({ success: true }),
+      getCurrentDriver: () => ({
+        validate: async () => ({ success: true }),
+      }),
     });
 
   if (config.moduleBuilderHook) {
@@ -63,8 +64,27 @@ export const createApp = async (
 
   const app = moduleFixture.createNestApplication<NestExpressApplication>({
     rawBody: true,
-    cors: true,
   });
+
+  // The production CORS setup, not the Nest wildcard default, so integration
+  // tests exercise the credentialed-origin allowlist the deployment runs.
+  applyCredentialedCors(app, app.get(TwentyConfigService));
+
+  app.use(
+    '/graphql',
+    graphqlUploadExpress({
+      maxFieldSize: bytes(settings.storage.maxFileSize)!,
+      maxFiles: 10,
+    }),
+  );
+
+  app.use(
+    '/metadata',
+    graphqlUploadExpress({
+      maxFieldSize: bytes(settings.storage.maxFileSize)!,
+      maxFiles: 10,
+    }),
+  );
 
   if (config.appInitHook) {
     await config.appInitHook(app);

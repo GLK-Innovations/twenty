@@ -1,26 +1,37 @@
-import { type ConnectedAccountWorkspaceEntity } from 'src/modules/connected-account/standard-objects/connected-account.workspace-entity';
-import { type MessageChannelWorkspaceEntity } from 'src/modules/messaging/common/standard-objects/message-channel.workspace-entity';
-import { type MessageFolderWorkspaceEntity } from 'src/modules/messaging/common/standard-objects/message-folder.workspace-entity';
+import { type MessageChannelEntity } from 'src/engine/metadata-modules/message-channel/entities/message-channel.entity';
+import { type ConnectedAccountEntity } from 'src/engine/metadata-modules/connected-account/entities/connected-account.entity';
+import { type MessageFolderEntity } from 'src/engine/metadata-modules/message-folder/entities/message-folder.entity';
 
-export type MessageFolder = Pick<
-  MessageFolderWorkspaceEntity,
+export type DiscoveredMessageFolder = Pick<
+  MessageFolderEntity,
   'name' | 'isSynced' | 'isSentFolder' | 'externalId' | 'parentFolderId'
 >;
 
-export interface MessageFolderDriver {
+export type MessageFolder = Pick<
+  MessageFolderEntity,
+  | 'name'
+  | 'isSynced'
+  | 'isSentFolder'
+  | 'externalId'
+  | 'parentFolderId'
+  | 'id'
+  | 'syncCursor'
+  | 'pendingSyncAction'
+>;
+
+export type MessageFolderDriver = {
   getAllMessageFolders(
     connectedAccount: Pick<
-      ConnectedAccountWorkspaceEntity,
+      ConnectedAccountEntity,
       | 'provider'
       | 'accessToken'
       | 'refreshToken'
       | 'id'
       | 'handle'
       | 'connectionParameters'
+      | 'workspaceId'
     >,
-    messageChannel: Pick<
-      MessageChannelWorkspaceEntity,
-      'messageFolderImportPolicy'
-    >,
-  ): Promise<MessageFolder[]>;
-}
+    messageChannel: Pick<MessageChannelEntity, 'messageFolderImportPolicy'>,
+    existingFolders: MessageFolder[],
+  ): Promise<DiscoveredMessageFolder[]>;
+};

@@ -1,9 +1,10 @@
+import { t } from '@lingui/core/macro';
 import { useMemo } from 'react';
 
 import { FormSelectFieldInput } from '@/object-record/record-field/ui/form-types/components/FormSelectFieldInput';
 import { type VariablePickerComponent } from '@/object-record/record-field/ui/form-types/types/VariablePickerComponent';
 import { useCountries } from '@/ui/input/components/internal/hooks/useCountries';
-import { IconCircleOff, type IconComponentProps } from 'twenty-ui/display';
+import { IconCircleOff, type IconComponentProps } from 'twenty-ui/icon';
 import { type SelectOption } from 'twenty-ui/input';
 
 export const FormCountrySelectInput = ({
@@ -32,7 +33,7 @@ export const FormCountrySelectInput = ({
     );
     return [
       {
-        label: 'No country',
+        label: t`No country`,
         value: '',
         Icon: IconCircleOff,
       },

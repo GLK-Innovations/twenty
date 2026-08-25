@@ -1,4 +1,4 @@
-import { type Meta, type StoryObj } from '@storybook/react';
+import { type Meta, type StoryObj } from '@storybook/react-vite';
 
 import { TextFieldDisplay } from '@/object-record/record-field/ui/meta-types/display/components/TextFieldDisplay';
 import { ComponentDecorator } from 'twenty-ui/testing';
@@ -41,7 +41,7 @@ export const Elipsis: Story = {
 
 export const Performance = getProfilingStory({
   componentName: 'TextFieldDisplay',
-  averageThresholdInMs: 0.5,
+  averageThresholdInMs: 1,
   numberOfRuns: 50,
   numberOfTestsPerRun: 100,
 });

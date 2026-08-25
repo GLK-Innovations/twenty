@@ -1,7 +1,11 @@
-import styled from '@emotion/styled';
-import { type Decorator, type Meta, type StoryObj } from '@storybook/react';
-import { expect, userEvent, waitFor, within } from '@storybook/test';
-import { type PlayFunction } from '@storybook/types';
+import { styled } from '@linaria/react';
+import {
+  type Decorator,
+  type Meta,
+  type StoryObj,
+} from '@storybook/react-vite';
+import { type PlayFunction } from 'storybook/internal/types';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 // TEMP_DISABLED_TEST: Commented out unused import
 // import { useState } from 'react';
 
@@ -9,27 +13,17 @@ import { DropdownMenuSkeletonItem } from '@/ui/input/relation-picker/components/
 
 import { DropdownContent } from '@/ui/layout/dropdown/components/DropdownContent';
 import { DropdownMenuHeaderLeftComponent } from '@/ui/layout/dropdown/components/DropdownMenuHeader/internal/DropdownMenuHeaderLeftComponent';
-// TEMP_DISABLED_TEST: Commented out unused imports due to commented tests
-// import { Modal } from '@/ui/layout/modal/components/Modal';
-// import { isModalOpenedComponentState } from '@/ui/layout/modal/states/isModalOpenedComponentState';
-// import { focusStackState } from '@/ui/utilities/focus/states/focusStackState';
-// import { FocusComponentType } from '@/ui/utilities/focus/types/FocusComponentType';
-// import { type SetRecoilState } from 'recoil';
-import {
-  // TEMP_DISABLED_TEST: Commented out unused import
-  // Avatar,
-  IconChevronLeft,
-} from 'twenty-ui/display';
+import { Dropdown } from '@/ui/layout/dropdown/components/Dropdown';
+import { DropdownMenuHeader } from '@/ui/layout/dropdown/components/DropdownMenuHeader/DropdownMenuHeader';
+import { DropdownMenuInput } from '@/ui/layout/dropdown/components/DropdownMenuInput';
+import { DropdownMenuItemsContainer } from '@/ui/layout/dropdown/components/DropdownMenuItemsContainer';
+import { DropdownMenuSearchInput } from '@/ui/layout/dropdown/components/DropdownMenuSearchInput';
+import { DropdownMenuSeparator } from '@/ui/layout/dropdown/components/DropdownMenuSeparator';
+import { StyledDropdownMenuSubheader } from '@/ui/layout/dropdown/components/StyledDropdownMenuSubheader';
+import { IconChevronLeft } from 'twenty-ui/icon';
 import { Button } from 'twenty-ui/input';
 import { MenuItem } from 'twenty-ui/navigation';
 import { ComponentDecorator } from 'twenty-ui/testing';
-import { Dropdown } from '../Dropdown';
-import { DropdownMenuHeader } from '../DropdownMenuHeader/DropdownMenuHeader';
-import { DropdownMenuInput } from '../DropdownMenuInput';
-import { DropdownMenuItemsContainer } from '../DropdownMenuItemsContainer';
-import { DropdownMenuSearchInput } from '../DropdownMenuSearchInput';
-import { DropdownMenuSeparator } from '../DropdownMenuSeparator';
-import { StyledDropdownMenuSubheader } from '../StyledDropdownMenuSubheader';
 
 const meta: Meta<typeof Dropdown> = {
   title: 'UI/Layout/Dropdown/Dropdown',
@@ -87,8 +81,8 @@ export const Empty: Story = {
       </DropdownContent>
     ),
   },
-  play: async () => {
-    const canvas = within(document.body);
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement.ownerDocument.body);
 
     const buttons = await canvas.findAllByRole('button');
     await userEvent.click(buttons[0]);
@@ -150,10 +144,6 @@ const optionsMock = [
     avatarUrl,
   },
 ];
-
-// TEMP_DISABLED_TEST: Commented out unused component
-// const FakeSelectableMenuItemList = ({ hasAvatar }: { hasAvatar?: boolean }) => {
-//   const [selectedItem, setSelectedItem] = useState<string | null>(null);
 
 //   return (
 //     <DropdownContent>
@@ -218,8 +208,8 @@ const optionsMock = [
 //   );
 // };
 
-const playInteraction: PlayFunction<any, any> = async () => {
-  const canvas = within(document.body);
+const playInteraction: PlayFunction<any, any> = async ({ canvasElement }) => {
+  const canvas = within(canvasElement.ownerDocument.body);
 
   const buttons = await canvas.findAllByRole('button');
   await userEvent.click(buttons[0]);
@@ -275,8 +265,8 @@ export const SearchWithLoadingMenu: Story = {
       </DropdownContent>
     ),
   },
-  play: async () => {
-    const canvas = within(document.body);
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement.ownerDocument.body);
 
     const buttons = await canvas.findAllByRole('button');
 
@@ -316,24 +306,6 @@ export const WithInput: Story = {
   play: playInteraction,
 };
 
-// TEMP_DISABLED_TEST: Temporarily commented out due to test failure
-// export const SelectableMenuItemWithAvatar: Story = {
-//   decorators: [WithContentBelowDecorator],
-//   args: {
-//     dropdownComponents: <FakeSelectableMenuItemList hasAvatar />,
-//   },
-//   play: playInteraction,
-// };
-
-// TEMP_DISABLED_TEST: Temporarily commented out due to test failure
-// export const CheckableMenuItemWithAvatar: Story = {
-//   decorators: [WithContentBelowDecorator],
-//   args: {
-//     dropdownComponents: <FakeCheckableMenuItemList hasAvatar />,
-//   },
-//   play: playInteraction,
-// };
-
 // TEMP_DISABLED_TEST: Commented out unused variable
 // const modalId = 'dropdown-modal-test';
 
@@ -372,15 +344,6 @@ export const WithInput: Story = {
 //   );
 // };
 
-// TEMP_DISABLED_TEST: Commented out unused function
-// const initializeModalState = ({ set }: { set: SetRecoilState }) => {
-//   set(
-//     isModalOpenedComponentState.atomFamily({
-//       instanceId: modalId,
-//     }),
-//     true,
-//   );
-
 //   set(focusStackState, [
 //     {
 //       focusId: modalId,
@@ -394,25 +357,4 @@ export const WithInput: Story = {
 //       },
 //     },
 //   ]);
-// };
-
-// TEMP_DISABLED_TEST: Temporarily commented out due to test failure
-// export const DropdownInsideModal: Story = {
-//   decorators: [I18nFrontDecorator, RootDecorator, ComponentDecorator],
-//   parameters: {
-//     initializeState: initializeModalState,
-//     disableHotkeyInitialization: true,
-//   },
-//   render: () => <ModalWithDropdown />,
-//   play: async () => {
-//     const canvas = within(document.body);
-
-//     const dropdownButton = await canvas.findByTestId('dropdown-button');
-
-//     await userEvent.click(dropdownButton);
-
-//     const dropdownContent = await canvas.findByTestId('dropdown-content');
-
-//     expect(dropdownContent).toBeVisible();
-//   },
 // };

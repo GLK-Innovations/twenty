@@ -1,11 +1,13 @@
 import { FormCountrySelectInput } from '@/object-record/record-field/ui/form-types/components/FormCountrySelectInput';
-import { FormFieldInputContainer } from '@/object-record/record-field/ui/form-types/components/FormFieldInputContainer';
+import { FormFieldInputContainer } from '@/ui/input/components/FormFieldInputContainer';
 import { FormNestedFieldInputContainer } from '@/object-record/record-field/ui/form-types/components/FormNestedFieldInputContainer';
 import { FormTextFieldInput } from '@/object-record/record-field/ui/form-types/components/FormTextFieldInput';
 import { type VariablePickerComponent } from '@/object-record/record-field/ui/form-types/types/VariablePickerComponent';
 import { type FieldAddressDraftValue } from '@/object-record/record-field/ui/types/FieldInputDraftValue';
 import { type FieldAddressValue } from '@/object-record/record-field/ui/types/FieldMetadata';
-import { InputLabel } from '@/ui/input/components/InputLabel';
+import { Field } from 'twenty-ui/input';
+import { t } from '@lingui/core/macro';
+import { normalizeAddressFieldValueForPersist } from '~/utils/normalize-address-field-value-for-persist';
 
 type FormAddressFieldInputProps = {
   label?: string;
@@ -35,55 +37,55 @@ export const FormAddressFieldInput = ({
         addressLng: defaultValue?.addressLng ?? null,
         [field]: updatedAddressPart,
       };
-      onChange(updatedAddress);
+      onChange(normalizeAddressFieldValueForPersist(updatedAddress));
     };
 
   return (
     <FormFieldInputContainer>
-      {label ? <InputLabel>{label}</InputLabel> : null}
+      {label ? <Field.Label>{label}</Field.Label> : null}
       <FormNestedFieldInputContainer>
         <FormTextFieldInput
-          label="Address 1"
+          label={t`Address 1`}
           defaultValue={defaultValue?.addressStreet1 ?? ''}
           onChange={handleChange('addressStreet1')}
           readonly={readonly}
           VariablePicker={VariablePicker}
-          placeholder="Street address"
+          placeholder={t`Street address`}
         />
         <FormTextFieldInput
-          label="Address 2"
+          label={t`Address 2`}
           defaultValue={defaultValue?.addressStreet2 ?? ''}
           onChange={handleChange('addressStreet2')}
           readonly={readonly}
           VariablePicker={VariablePicker}
-          placeholder="Street address 2"
+          placeholder={t`Street address 2`}
         />
         <FormTextFieldInput
-          label="City"
+          label={t`City`}
           defaultValue={defaultValue?.addressCity ?? ''}
           onChange={handleChange('addressCity')}
           readonly={readonly}
           VariablePicker={VariablePicker}
-          placeholder="City"
+          placeholder={t`City`}
         />
         <FormTextFieldInput
-          label="State"
+          label={t`State`}
           defaultValue={defaultValue?.addressState ?? ''}
           onChange={handleChange('addressState')}
           readonly={readonly}
           VariablePicker={VariablePicker}
-          placeholder="State"
+          placeholder={t`State`}
         />
         <FormTextFieldInput
-          label="Post Code"
+          label={t`Post Code`}
           defaultValue={defaultValue?.addressPostcode ?? ''}
           onChange={handleChange('addressPostcode')}
           readonly={readonly}
           VariablePicker={VariablePicker}
-          placeholder="Post Code"
+          placeholder={t`Post Code`}
         />
         <FormCountrySelectInput
-          label="Country"
+          label={t`Country`}
           selectedCountryName={defaultValue?.addressCountry ?? ''}
           onChange={handleChange('addressCountry')}
           readonly={readonly}

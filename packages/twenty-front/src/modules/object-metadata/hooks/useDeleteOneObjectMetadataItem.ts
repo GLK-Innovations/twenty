@@ -1,24 +1,27 @@
-import { useDeleteOneObjectMetadataItemMutation } from '~/generated-metadata/graphql';
+import { useMutation } from '@apollo/client/react';
+import { DeleteOneObjectMetadataItemDocument } from '~/generated-metadata/graphql';
 
+import { useInvalidateMetadataStore } from '@/metadata-store/hooks/useInvalidateMetadataStore';
+import { useCleanMorphRelationsTargetingObjectMetadataId } from '@/metadata-store/hooks/useCleanMorphRelationsTargetingObjectMetadataId';
 import { useMetadataErrorHandler } from '@/metadata-error-handler/hooks/useMetadataErrorHandler';
-import { useRefreshObjectMetadataItems } from '@/object-metadata/hooks/useRefreshObjectMetadataItems';
+import { useUpdateMetadataStoreDraft } from '@/metadata-store/hooks/useUpdateMetadataStoreDraft';
 import { type MetadataRequestResult } from '@/object-metadata/types/MetadataRequestResult.type';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
-import { useRefreshAllCoreViews } from '@/views/hooks/useRefreshAllCoreViews';
-import { ApolloError } from '@apollo/client';
+import { CombinedGraphQLErrors } from '@apollo/client/errors';
 import { t } from '@lingui/core/macro';
+import { CrudOperationType } from 'twenty-shared/types';
 
 export const useDeleteOneObjectMetadataItem = () => {
-  const [deleteOneObjectMetadataItemMutation] =
-    useDeleteOneObjectMetadataItemMutation();
-
-  const { refreshObjectMetadataItems } =
-    useRefreshObjectMetadataItems('network-only');
-
-  const { refreshAllCoreViews } = useRefreshAllCoreViews();
+  const [deleteOneObjectMetadataItemMutation] = useMutation(
+    DeleteOneObjectMetadataItemDocument,
+  );
 
   const { handleMetadataError } = useMetadataErrorHandler();
   const { enqueueErrorSnackBar } = useSnackBar();
+  const { removeFromDraft, applyChanges } = useUpdateMetadataStoreDraft();
+  const { invalidateMetadataStore } = useInvalidateMetadataStore();
+  const { cleanMorphRelations } =
+    useCleanMorphRelationsTargetingObjectMetadataId();
 
   const deleteOneObjectMetadataItem = async (
     idToDelete: string,
@@ -34,17 +37,21 @@ export const useDeleteOneObjectMetadataItem = () => {
         },
       });
 
-      await refreshObjectMetadataItems();
-      await refreshAllCoreViews();
+      removeFromDraft({ key: 'objectMetadataItems', itemIds: [idToDelete] });
+      cleanMorphRelations(idToDelete);
+      applyChanges();
+
+      invalidateMetadataStore();
 
       return {
         status: 'successful',
         response,
       };
     } catch (error) {
-      if (error instanceof ApolloError) {
+      if (CombinedGraphQLErrors.is(error)) {
         handleMetadataError(error, {
           primaryMetadataName: 'objectMetadata',
+          operationType: CrudOperationType.DELETE,
         });
       } else {
         enqueueErrorSnackBar({ message: t`An error occurred.` });

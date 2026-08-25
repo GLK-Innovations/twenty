@@ -1,7 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
-import { RecoilRoot } from 'recoil';
-import { WorkflowVisualizerComponentInstanceContext } from '../../../workflow-diagram/states/contexts/WorkflowVisualizerComponentInstanceContext';
-import { useCreateStep } from '../useCreateStep';
+import { WorkflowVisualizerComponentInstanceContext } from '@/workflow/workflow-diagram/states/contexts/WorkflowVisualizerComponentInstanceContext';
+import { useCreateStep } from '@/workflow/workflow-steps/hooks/useCreateStep';
 
 const mockGetUpdatableWorkflowVersion = jest.fn();
 const mockCreateWorkflowVersionStep = jest.fn().mockResolvedValue({
@@ -33,22 +32,23 @@ jest.mock('@/workflow/hooks/useGetUpdatableWorkflowVersionOrThrow', () => ({
   }),
 }));
 
-jest.mock('uuid', () => ({ v4: () => 'step-id' }));
+jest.mock('uuid', () => ({
+  ...jest.requireActual('uuid'),
+  v4: () => 'step-id',
+}));
 
 const wrapper = ({ children }: { children: React.ReactNode }) => {
   const workflowVisualizerComponentInstanceId =
     'workflow-visualizer-instance-id';
 
   return (
-    <RecoilRoot>
-      <WorkflowVisualizerComponentInstanceContext.Provider
-        value={{
-          instanceId: workflowVisualizerComponentInstanceId,
-        }}
-      >
-        {children}
-      </WorkflowVisualizerComponentInstanceContext.Provider>
-    </RecoilRoot>
+    <WorkflowVisualizerComponentInstanceContext.Provider
+      value={{
+        instanceId: workflowVisualizerComponentInstanceId,
+      }}
+    >
+      {children}
+    </WorkflowVisualizerComponentInstanceContext.Provider>
   );
 };
 

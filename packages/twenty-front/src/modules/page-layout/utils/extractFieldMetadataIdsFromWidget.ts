@@ -1,13 +1,11 @@
+import { type PageLayoutWidget } from '@/page-layout/types/PageLayoutWidget';
 import { isDefined } from 'twenty-shared/utils';
-import {
-  type PageLayoutWidget,
-  WidgetType,
-} from '~/generated-metadata/graphql';
+import { WidgetType } from '~/generated-metadata/graphql';
 
 export const extractFieldMetadataIdsFromWidget = (
   widget: PageLayoutWidget,
 ): string[] => {
-  if (widget.type !== WidgetType.GRAPH || !widget.configuration) {
+  if (widget.type !== WidgetType.GRAPH || !isDefined(widget.configuration)) {
     return [];
   }
 
@@ -35,9 +33,6 @@ export const extractFieldMetadataIdsFromWidget = (
       ].filter(isDefined);
 
     case 'AggregateChartConfiguration':
-      return [config.aggregateFieldMetadataId].filter(isDefined);
-
-    case 'GaugeChartConfiguration':
       return [config.aggregateFieldMetadataId].filter(isDefined);
 
     case 'IframeConfiguration':

@@ -1,12 +1,10 @@
-import { SidePanelHeader } from '@/command-menu/components/SidePanelHeader';
 import { FormArrayFieldInput } from '@/object-record/record-field/ui/form-types/components/FormArrayFieldInput';
+import { FormBooleanFieldToggleInput } from '@/object-record/record-field/ui/form-types/components/FormBooleanFieldToggleInput';
 import { type FieldArrayValue } from '@/object-record/record-field/ui/types/FieldMetadata';
 import { type WorkflowIteratorAction } from '@/workflow/types/Workflow';
-import { isStandaloneVariableString } from '@/workflow/utils/isStandaloneVariableString';
+import { isStandaloneVariableString } from 'twenty-shared/workflow';
 import { WorkflowStepBody } from '@/workflow/workflow-steps/components/WorkflowStepBody';
 import { WorkflowStepFooter } from '@/workflow/workflow-steps/components/WorkflowStepFooter';
-import { ITERATOR_ACTION } from '@/workflow/workflow-steps/workflow-actions/constants/actions/IteratorAction';
-import { useWorkflowActionHeader } from '@/workflow/workflow-steps/workflow-actions/hooks/useWorkflowActionHeader';
 import { WorkflowVariablePicker } from '@/workflow/workflow-variables/components/WorkflowVariablePicker';
 import { useLingui } from '@lingui/react/macro';
 import { isArray, isString } from '@sniptt/guards';
@@ -44,12 +42,6 @@ export const WorkflowEditActionIterator = ({
   action,
   actionOptions,
 }: WorkflowEditActionIteratorProps) => {
-  const { headerTitle, headerIcon, headerIconColor, headerType, getIcon } =
-    useWorkflowActionHeader({
-      action,
-      defaultTitle: ITERATOR_ACTION.defaultLabel,
-    });
-
   const { t } = useLingui();
 
   const defaultItems = isDefined(action.settings.input.items)
@@ -65,6 +57,8 @@ export const WorkflowEditActionIterator = ({
   const [formData, setFormData] = useState({
     items: parsedItems,
     initialLoopStepIds: action.settings.input.initialLoopStepIds || [],
+    shouldContinueOnIterationFailure:
+      action.settings.input.shouldContinueOnIterationFailure ?? false,
   });
 
   const saveAction = useDebouncedCallback(
@@ -80,6 +74,8 @@ export const WorkflowEditActionIterator = ({
           input: {
             items: updatedFormData.items,
             initialLoopStepIds: updatedFormData.initialLoopStepIds,
+            shouldContinueOnIterationFailure:
+              updatedFormData.shouldContinueOnIterationFailure,
           },
         },
       });
@@ -89,7 +85,7 @@ export const WorkflowEditActionIterator = ({
 
   const handleFieldChange = (
     field: string,
-    value: string | FieldArrayValue,
+    value: string | FieldArrayValue | boolean,
   ) => {
     if (actionOptions.readonly === true) {
       return;
@@ -100,28 +96,8 @@ export const WorkflowEditActionIterator = ({
     saveAction(updatedFormData);
   };
 
-  const handleTitleChange = (newName: string) => {
-    if (actionOptions.readonly === true) {
-      return;
-    }
-
-    actionOptions.onActionUpdate?.({
-      ...action,
-      name: newName,
-    });
-  };
-
   return (
     <>
-      <SidePanelHeader
-        onTitleChange={handleTitleChange}
-        Icon={getIcon(headerIcon || 'IconRepeat')}
-        iconColor={headerIconColor}
-        initialTitle={headerTitle}
-        headerType={headerType}
-        disabled={actionOptions.readonly}
-        iconTooltip={ITERATOR_ACTION.defaultLabel}
-      />
       <WorkflowStepBody>
         <FormArrayFieldInput
           label={t`Items to iterate over`}
@@ -132,6 +108,15 @@ export const WorkflowEditActionIterator = ({
           }
           readonly={actionOptions.readonly}
           VariablePicker={WorkflowVariablePicker}
+        />
+        <FormBooleanFieldToggleInput
+          description={t`Continue on iteration failure`}
+          value={formData.shouldContinueOnIterationFailure}
+          onChange={(value) =>
+            handleFieldChange('shouldContinueOnIterationFailure', value)
+          }
+          disabled={actionOptions.readonly}
+          hint={t`Will continue to the next iteration even if the current one fails`}
         />
       </WorkflowStepBody>
       {!actionOptions.readonly && <WorkflowStepFooter stepId={action.id} />}

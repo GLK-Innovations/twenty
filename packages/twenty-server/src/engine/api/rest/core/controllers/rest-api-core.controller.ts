@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 
 import { Response } from 'express';
+import { ApiPath } from 'twenty-shared/types';
 
 import { RestApiCoreService } from 'src/engine/api/rest/core/services/rest-api-core.service';
 import { RestApiExceptionFilter } from 'src/engine/api/rest/rest-api-exception.filter';
@@ -21,14 +22,14 @@ import { CustomPermissionGuard } from 'src/engine/guards/custom-permission.guard
 import { JwtAuthGuard } from 'src/engine/guards/jwt-auth.guard';
 import { WorkspaceAuthGuard } from 'src/engine/guards/workspace-auth.guard';
 
-@Controller('rest')
+@Controller(ApiPath.Rest)
 @UseGuards(JwtAuthGuard, WorkspaceAuthGuard, CustomPermissionGuard)
 @UseFilters(RestApiExceptionFilter)
 export class RestApiCoreController {
   private readonly logger = new Logger(RestApiCoreController.name);
   constructor(private readonly restApiCoreService: RestApiCoreService) {}
 
-  @Post('batch/*')
+  @Post('batch/*path')
   async handleApiPostBatch(
     @Req() request: AuthenticatedRequest,
     @Res() res: Response,
@@ -41,7 +42,7 @@ export class RestApiCoreController {
     res.status(201).send(result);
   }
 
-  @Post('*/duplicates')
+  @Post('*path/duplicates')
   async handleApiFindDuplicates(
     @Req() request: AuthenticatedRequest,
     @Res() res: Response,
@@ -54,7 +55,7 @@ export class RestApiCoreController {
     res.status(200).send(result);
   }
 
-  @Post('*')
+  @Post('*path')
   async handleApiPost(
     @Req() request: AuthenticatedRequest,
     @Res() res: Response,
@@ -67,8 +68,7 @@ export class RestApiCoreController {
     res.status(201).send(result);
   }
 
-  //TODO: Refacto-common - Document this endpoint
-  @Get('*/groupBy')
+  @Get('*path/groupBy')
   async handleApiGroupBy(
     @Req() request: AuthenticatedRequest,
     @Res() res: Response,
@@ -81,7 +81,7 @@ export class RestApiCoreController {
     res.status(200).send(result);
   }
 
-  @Get('*')
+  @Get('*path')
   async handleApiGet(
     @Req() request: AuthenticatedRequest,
     @Res() res: Response,
@@ -94,7 +94,7 @@ export class RestApiCoreController {
     res.status(200).send(result);
   }
 
-  @Delete('*')
+  @Delete('*path')
   async handleApiDelete(
     @Req() request: AuthenticatedRequest,
     @Res() res: Response,
@@ -107,7 +107,7 @@ export class RestApiCoreController {
     res.status(200).send(result);
   }
 
-  @Patch('restore/*')
+  @Patch('*path/restore')
   async handleApiRestore(
     @Req() request: AuthenticatedRequest,
     @Res() res: Response,
@@ -120,7 +120,7 @@ export class RestApiCoreController {
     res.status(200).send(result);
   }
 
-  @Patch('*/merge')
+  @Patch('*path/merge')
   async handleApiMerge(
     @Req() request: AuthenticatedRequest,
     @Res() res: Response,
@@ -133,7 +133,7 @@ export class RestApiCoreController {
     res.status(200).send(result);
   }
 
-  @Patch('*')
+  @Patch('*path')
   async handleApiPatch(
     @Req() request: AuthenticatedRequest,
     @Res() res: Response,
@@ -149,7 +149,7 @@ export class RestApiCoreController {
   // This endpoint is not documented in the OpenAPI schema.
   // We keep it to avoid a breaking change since it initially used PUT instead
   // of PATCH, and because the PUT verb is often used as a PATCH.
-  @Put('*')
+  @Put('*path')
   async handleApiPut(
     @Req() request: AuthenticatedRequest,
     @Res() res: Response,

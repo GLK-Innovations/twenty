@@ -1,6 +1,8 @@
+import { useObjectMetadataItems } from '@/object-metadata/hooks/useObjectMetadataItems';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
 import { type FieldMetadataItem } from '@/object-metadata/types/FieldMetadataItem';
-import { type ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
 import { formatFieldMetadataItemAsColumnDefinition } from '@/object-metadata/utils/formatFieldMetadataItemAsColumnDefinition';
+import { useObjectPermissions } from '@/object-record/hooks/useObjectPermissions';
 import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
 import { useIsRecordFieldReadOnly } from '@/object-record/read-only/hooks/useIsRecordFieldReadOnly';
 import {
@@ -8,10 +10,11 @@ import {
   type RecordUpdateHook,
   type RecordUpdateHookParams,
 } from '@/object-record/record-field/ui/contexts/FieldContext';
-import { FieldFocusContextProvider } from '@/object-record/record-field/ui/contexts/FieldFocusContextProvider';
+import { FieldFocusStaticFocusedProvider } from '@/object-record/record-field/ui/contexts/FieldFocusContextProvider';
 import { RecordFieldComponentInstanceContext } from '@/object-record/record-field/ui/states/contexts/RecordFieldComponentInstanceContext';
+import { isJunctionRelationForbidden } from '@/object-record/record-field/ui/utils/junction/isJunctionRelationForbidden';
 import { RecordInlineCellAnchoredPortalContext } from '@/object-record/record-inline-cell/components/RecordInlineCellAnchoredPortalContext';
-import { RecordInlineCellCloseOnCommandMenuOpeningEffect } from '@/object-record/record-inline-cell/components/RecordInlineCellCloseOnCommandMenuOpeningEffect';
+import { RecordInlineCellCloseOnSidePanelOpeningEffect } from '@/object-record/record-inline-cell/components/RecordInlineCellCloseOnSidePanelOpeningEffect';
 import { getRecordFieldInputInstanceId } from '@/object-record/utils/getRecordFieldInputId';
 import { createPortal } from 'react-dom';
 import { isDefined } from 'twenty-shared/utils';
@@ -19,12 +22,21 @@ import { isDefined } from 'twenty-shared/utils';
 type RecordInlineCellAnchoredPortalProps = {
   fieldMetadataItem: Pick<
     FieldMetadataItem,
-    'id' | 'name' | 'type' | 'createdAt' | 'updatedAt' | 'label'
+    | 'id'
+    | 'universalIdentifier'
+    | 'name'
+    | 'type'
+    | 'createdAt'
+    | 'updatedAt'
+    | 'label'
+    | 'settings'
+    | 'relation'
   >;
-  objectMetadataItem: ObjectMetadataItem;
+  objectMetadataItem: EnrichedObjectMetadataItem;
   recordId: string;
   instanceIdPrefix: string;
   children: React.ReactNode;
+  onCloseEditMode?: () => void;
 };
 
 export const RecordInlineCellAnchoredPortal = ({
@@ -33,6 +45,7 @@ export const RecordInlineCellAnchoredPortal = ({
   recordId,
   instanceIdPrefix,
   children,
+  onCloseEditMode,
 }: RecordInlineCellAnchoredPortalProps) => {
   const fieldInstanceId = getRecordFieldInputInstanceId({
     recordId,
@@ -40,9 +53,7 @@ export const RecordInlineCellAnchoredPortal = ({
     prefix: instanceIdPrefix,
   });
 
-  const anchorElement = document.body.querySelector<HTMLAnchorElement>(
-    `#${fieldInstanceId}`,
-  );
+  const anchorElement = document.getElementById(fieldInstanceId);
 
   const isRecordFieldReadOnly = useIsRecordFieldReadOnly({
     fieldMetadataId: fieldMetadataItem.id,
@@ -50,13 +61,22 @@ export const RecordInlineCellAnchoredPortal = ({
     recordId: recordId ?? '',
   });
 
-  const { updateOneRecord } = useUpdateOneRecord({
-    objectNameSingular: objectMetadataItem.nameSingular,
+  const { objectPermissionsByObjectMetadataId } = useObjectPermissions();
+  const { objectMetadataItems } = useObjectMetadataItems();
+
+  const isForbidden = isJunctionRelationForbidden({
+    fieldMetadataItem,
+    sourceObjectMetadataId: objectMetadataItem.id,
+    objectMetadataItems,
+    objectPermissionsByObjectMetadataId,
   });
+
+  const { updateOneRecord } = useUpdateOneRecord();
 
   const useUpdateOneObjectRecordMutation: RecordUpdateHook = () => {
     const updateEntity = ({ variables }: RecordUpdateHookParams) => {
-      updateOneRecord?.({
+      updateOneRecord({
+        objectNameSingular: objectMetadataItem.nameSingular,
         idToUpdate: variables.where.id as string,
         updateOneRecordInput: variables.updateOneRecordInput,
       });
@@ -70,7 +90,7 @@ export const RecordInlineCellAnchoredPortal = ({
   }
 
   return (
-    <FieldFocusContextProvider isFocused={true}>
+    <FieldFocusStaticFocusedProvider>
       <FieldContext.Provider
         key={recordId + fieldMetadataItem.id}
         value={{
@@ -87,6 +107,8 @@ export const RecordInlineCellAnchoredPortal = ({
           useUpdateRecord: useUpdateOneObjectRecordMutation,
           isDisplayModeFixHeight: true,
           isRecordFieldReadOnly,
+          isForbidden,
+          onCloseEditMode,
         }}
       >
         <>
@@ -98,13 +120,14 @@ export const RecordInlineCellAnchoredPortal = ({
             >
               <RecordInlineCellAnchoredPortalContext>
                 {children}
+
+                <RecordInlineCellCloseOnSidePanelOpeningEffect />
               </RecordInlineCellAnchoredPortalContext>
-              <RecordInlineCellCloseOnCommandMenuOpeningEffect />
             </RecordFieldComponentInstanceContext.Provider>,
             anchorElement,
           )}
         </>
       </FieldContext.Provider>
-    </FieldFocusContextProvider>
+    </FieldFocusStaticFocusedProvider>
   );
 };

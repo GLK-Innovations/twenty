@@ -16,6 +16,7 @@ import {
   getFindDuplicatesResponse200,
   getFindManyResponse200,
   getFindOneResponse200,
+  getGroupByResponse200,
   getJsonResponse,
   getMergeManyResponse200,
   getRestoreManyResponse200,
@@ -23,10 +24,10 @@ import {
   getUpdateManyResponse200,
   getUpdateOneResponse200,
 } from 'src/engine/core-modules/open-api/utils/responses.utils';
-import { type ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
+import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
 
 export const computeBatchPath = (
-  item: ObjectMetadataEntity,
+  item: Pick<FlatObjectMetadata, 'nameSingular' | 'namePlural'>,
 ): OpenAPIV3_1.PathItemObject => {
   return {
     post: {
@@ -48,7 +49,7 @@ export const computeBatchPath = (
 };
 
 export const computeManyResultPath = (
-  item: ObjectMetadataEntity,
+  item: Pick<FlatObjectMetadata, 'nameSingular' | 'namePlural'>,
 ): OpenAPIV3_1.PathItemObject => {
   return {
     get: {
@@ -65,7 +66,7 @@ export const computeManyResultPath = (
         { $ref: '#/components/parameters/endingBefore' },
       ],
       responses: {
-        '200': getFindManyResponse200(item),
+        '200': getFindManyResponse200({ item }),
         '400': { $ref: '#/components/responses/400' },
         '401': { $ref: '#/components/responses/401' },
       },
@@ -118,7 +119,7 @@ export const computeManyResultPath = (
 };
 
 export const computeSingleResultPath = (
-  item: ObjectMetadataEntity,
+  item: Pick<FlatObjectMetadata, 'nameSingular' | 'namePlural'>,
 ): OpenAPIV3_1.PathItemObject => {
   return {
     get: {
@@ -189,7 +190,7 @@ export const computeOpenApiPath = (
 };
 
 export const computeDuplicatesResultPath = (
-  item: ObjectMetadataEntity,
+  item: Pick<FlatObjectMetadata, 'nameSingular' | 'namePlural'>,
 ): OpenAPIV3_1.PathItemObject => {
   return {
     post: {
@@ -209,7 +210,7 @@ export const computeDuplicatesResultPath = (
 };
 
 export const computeRestoreOneResultPath = (
-  item: ObjectMetadataEntity,
+  item: Pick<FlatObjectMetadata, 'nameSingular' | 'namePlural'>,
 ): OpenAPIV3_1.PathItemObject => {
   return {
     patch: {
@@ -230,7 +231,7 @@ export const computeRestoreOneResultPath = (
 };
 
 export const computeRestoreManyResultPath = (
-  item: ObjectMetadataEntity,
+  item: Pick<FlatObjectMetadata, 'nameSingular' | 'namePlural'>,
 ): OpenAPIV3_1.PathItemObject => {
   return {
     patch: {
@@ -251,7 +252,7 @@ export const computeRestoreManyResultPath = (
 };
 
 export const computeMergeManyResultPath = (
-  item: ObjectMetadataEntity,
+  item: Pick<FlatObjectMetadata, 'nameSingular' | 'namePlural'>,
 ): OpenAPIV3_1.PathItemObject => {
   return {
     patch: {
@@ -264,6 +265,32 @@ export const computeMergeManyResultPath = (
         '200': getMergeManyResponse200(item),
         '400': { $ref: '#/components/responses/400' },
         '401': { $ref: '#/components/responses/401' },
+      },
+    },
+  } as OpenAPIV3_1.PathItemObject;
+};
+
+export const computeGroupByResultPath = (
+  item: Pick<FlatObjectMetadata, 'nameSingular' | 'namePlural'>,
+): OpenAPIV3_1.PathItemObject => {
+  return {
+    get: {
+      tags: [item.namePlural],
+      summary: `Group By ${item.namePlural}`,
+      description: `Groups **${item.namePlural}** by specified fields and optionally computes aggregate values for each group.`,
+      operationId: `groupBy${capitalize(item.namePlural)}`,
+      parameters: [
+        { $ref: '#/components/parameters/groupBy' },
+        { $ref: '#/components/parameters/filter' },
+        { $ref: '#/components/parameters/orderBy' },
+        { $ref: '#/components/parameters/limit' },
+        { $ref: '#/components/parameters/viewId' },
+        { $ref: '#/components/parameters/aggregate' },
+        { $ref: '#/components/parameters/includeRecordsSample' },
+        { $ref: '#/components/parameters/orderByForRecords' },
+      ],
+      responses: {
+        '200': getGroupByResponse200(item),
       },
     },
   } as OpenAPIV3_1.PathItemObject;

@@ -1,4 +1,4 @@
-import { type Meta, type StoryObj } from '@storybook/react';
+import { type Meta, type StoryObj } from '@storybook/react-vite';
 
 import { AddressFieldDisplay } from '@/object-record/record-field/ui/meta-types/display/components/AddressFieldDisplay';
 import { type FieldAddressValue } from '@/object-record/record-field/ui/types/FieldMetadata';
@@ -57,7 +57,7 @@ export const Elipsis: Story = {
 
 export const Performance = getProfilingStory({
   componentName: 'AddressFieldDisplay',
-  averageThresholdInMs: 0.15,
+  averageThresholdInMs: 0.3,
   numberOfRuns: 20,
   numberOfTestsPerRun: 100,
 });

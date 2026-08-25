@@ -1,152 +1,49 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Twenty is an open-source CRM — an Nx / Yarn 4 monorepo. Main packages: `twenty-front` (React 18, Jotai, Linaria, Vite), `twenty-server` (NestJS, TypeORM, PostgreSQL, Redis, GraphQL), `twenty-shared` (isomorphic types/utils), `twenty-ui`, `twenty-sdk` (application SDK + CLI), `twenty-e2e-testing` (Playwright).
 
-## Project Overview
+Match the surrounding code — the adjacent files in the directory you are editing beat any written rule, including for file naming, which varies by area.
 
-Twenty is an open-source CRM built with modern technologies in a monorepo structure. The codebase is organized as an Nx workspace with multiple packages.
+## House rules
 
-## Key Commands
+Where this repo differs from your defaults:
 
-### Development
+- Short-form `//` comments, never JSDoc blocks; comment only WHY (a constraint the code cannot express, still true for a reader who never saw your change), never WHAT.
+- Types over interfaces (except when extending third-party interfaces); string literals over enums (except GraphQL enums); no `any`; descriptive generics (`TData`, not `T`).
+- Named exports only. Functional components only.
+- Prefer event handlers over `useEffect` for state updates.
+- No abbreviations in names (`fieldMetadata`, not `fm`); constants in SCREAMING_SNAKE_CASE; component props types suffixed `Props`.
+- Use `twenty-shared/utils` guards (`isDefined`, `isNonEmptyString`, …) and other existing helpers before writing your own — reimplementing an existing util is the most common AI-authored defect here.
+- Lingui for user-facing strings; Linaria (zero-runtime, styled-components pattern) for twenty-front styling.
+- Test behavior, not implementation: query by user-visible text/roles, `@testing-library/user-event` for interactions.
+
+Longer-form guides remain in `.cursor/rules/` (from the Cursor era).
+
+## Commands
+
 ```bash
-# Start development environment (frontend + backend + worker)
-yarn start
+bash packages/twenty-utils/setup-dev-env.sh   # Postgres/Redis + DB init; only for tasks needing a running app
+yarn start                                    # front + server + worker
 
-# Individual package development
-npx nx start twenty-front     # Start frontend dev server
-npx nx start twenty-server    # Start backend server
-npx nx run twenty-server:worker  # Start background worker
+npx jest path/to/file.spec.ts --config=packages/<pkg>/jest.config.mjs   # single test file (preferred)
+npx nx test twenty-server                     # package unit tests (same for twenty-front, ...)
+npx nx run twenty-server:test:integration:with-db-reset
+npx nx storybook:build twenty-front && npx nx storybook:test twenty-front
+
+npx nx lint:diff-with-main twenty-server      # diff-based lint (fast; add --configuration=fix); run with typecheck after changes
+npx nx fmt <pkg>                              # format
+npx nx build twenty-shared                    # required before building/testing packages that depend on it
+npx nx database:reset twenty-server
+npx nx run twenty-front:graphql:generate      # after GraphQL schema changes (--configuration=metadata for metadata schema)
 ```
 
-### Testing
-```bash
-# Run tests
-npx nx test twenty-front      # Frontend unit tests
-npx nx test twenty-server     # Backend unit tests
-npx nx run twenty-server:test:integration:with-db-reset  # Integration tests with DB reset
+## Gotchas
 
-# Storybook
-npx nx storybook:build twenty-front         # Build Storybook
-npx nx storybook:serve-and-test:static twenty-front     # Run Storybook tests
-
-
-When testing the UI end to end, click on "Continue with Email" and use the prefilled credentials.
-```
-
-### Code Quality
-```bash
-# Linting
-npx nx lint twenty-front      # Frontend linting
-npx nx lint twenty-server     # Backend linting
-npx nx lint twenty-front --fix  # Auto-fix linting issues
-
-# Type checking
-npx nx typecheck twenty-front
-npx nx typecheck twenty-server
-
-# Format code
-npx nx fmt twenty-front
-npx nx fmt twenty-server
-```
-
-### Build
-```bash
-# Build packages
-npx nx build twenty-front
-npx nx build twenty-server
-```
-
-### Database Operations
-```bash
-# Database management
-npx nx database:reset twenty-server         # Reset database
-npx nx run twenty-server:database:init:prod # Initialize database
-npx nx run twenty-server:database:migrate:prod # Run migrations
-
-# Generate migration
-npx nx run twenty-server:typeorm migration:generate src/database/typeorm/core/migrations/common/[name] -d src/database/typeorm/core/core.datasource.ts
-
-# Sync metadata
-npx nx run twenty-server:command workspace:sync-metadata
-```
-
-### GraphQL
-```bash
-# Generate GraphQL types
-npx nx run twenty-front:graphql:generate
-```
-
-## Architecture Overview
-
-### Tech Stack
-- **Frontend**: React 18, TypeScript, Recoil (state management), Emotion (styling), Vite
-- **Backend**: NestJS, TypeORM, PostgreSQL, Redis, GraphQL (with GraphQL Yoga)
-- **Monorepo**: Nx workspace managed with Yarn 4
-
-### Package Structure
-```
-packages/
-├── twenty-front/          # React frontend application
-├── twenty-server/         # NestJS backend API
-├── twenty-ui/             # Shared UI components library
-├── twenty-shared/         # Common types and utilities
-├── twenty-emails/         # Email templates with React Email
-├── twenty-website/        # Next.js documentation website
-├── twenty-zapier/         # Zapier integration
-└── twenty-e2e-testing/    # Playwright E2E tests
-```
-
-### Key Development Principles
-- **Functional components only** (no class components)
-- **Named exports only** (no default exports)
-- **Types over interfaces** (except when extending third-party interfaces)
-- **String literals over enums** (except for GraphQL enums)
-- **No 'any' type allowed**
-- **Event handlers preferred over useEffect** for state updates
-
-### State Management
-- **Recoil** for global state management
-- Component-specific state with React hooks
-- GraphQL cache managed by Apollo Client
-
-### Backend Architecture
-- **NestJS modules** for feature organization
-- **TypeORM** for database ORM with PostgreSQL
-- **GraphQL** API with code-first approach
-- **Redis** for caching and session management
-- **BullMQ** for background job processing
-
-### Database
-- **PostgreSQL** as primary database
-- **Redis** for caching and sessions
-- **TypeORM migrations** for schema management
-- **ClickHouse** for analytics (when enabled)
-
-## Development Workflow
-
-IMPORTANT: Use Context7 for code generation, setup or configuration steps, or library/API documentation. Automatically use the Context7 MCP tools to resolve library IDs and get library docs without waiting for explicit requests.
-
-### Before Making Changes
-1. Always run linting and type checking after code changes
-2. Test changes with relevant test suites
-3. Ensure database migrations are properly structured
-4. Check that GraphQL schema changes are backward compatible
-
-### Code Style Notes
-- Use **Emotion** for styling with styled-components pattern
-- Follow **Nx** workspace conventions for imports
-- Use **Lingui** for internationalization
-- Components should be in their own directories with tests and stories
-
-### Testing Strategy
-- **Unit tests** with Jest for both frontend and backend
-- **Integration tests** for critical backend workflows
-- **Storybook** for component development and testing
-- **E2E tests** with Playwright for critical user flows
-
-## Important Files
-- `nx.json` - Nx workspace configuration with task definitions
-- `tsconfig.base.json` - Base TypeScript configuration
-- `package.json` - Root package with workspace definitions
-- `.cursor/rules/` - Development guidelines and best practices
+- **`twenty-shared/dist` is per-branch state nothing tracks.** After switching branches or editing `twenty-shared`, run `npx nx build twenty-shared --skip-nx-cache` before trusting any typecheck or test failure in a dependent package.
+- **Nx caching can serve a stale pass.** To verify a fix, run `npx tsgo -p tsconfig.json --noEmit` in the package directly rather than `nx typecheck`.
+- **Do not commit translation catalogs unless translations are the task.** `lingui extract`/`compile` regenerate `packages/twenty-server/src/engine/core-modules/i18n/locales/*.po` and `locales/generated/*` with thousands of lines of churn as a side effect of touching any `msg` string. The i18n pipeline maintains them; leave them out of your commit.
+- **Commit messages must not carry AI attribution.** CI rejects commits containing `@anthropic.com` co-author trailers or "Generated with Claude Code" lines.
+- **Upgrade commands** (`packages/twenty-server/src/database/commands/upgrade-version-command/`): add or edit files only under the current `TWENTY_CURRENT_VERSION` directory, with a real epoch-ms timestamp strictly greater than every existing one in that directory — CI enforces both, and the upgrade cursor silently skips a command that sorts before an already-applied one. Include `up` and `down`; never rewrite committed command logic. See `packages/twenty-server/docs/UPGRADE_COMMANDS.md`.
+- **Entity file changes need a generated instance command**: `npx nx run twenty-server:database:migrate:generate --name <name> --type <fast|slow>` (slow = adds a data-backfill step).
+- A read-only Postgres MCP server is configured in `.mcp.json` for inspecting workspace data, metadata, and migration results. Writes go through the CLI commands above.
+- E2E login: click "Continue with Email" and use the prefilled credentials.

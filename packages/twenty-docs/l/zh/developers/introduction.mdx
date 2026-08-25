@@ -1,44 +1,28 @@
 ---
-title: 概覽
-description: 為參與者和開發者提供的技術文檔，用於與 Twenty 協作。
+title: 开发者
+description: 构建应用、使用 API、进行自托管，或为代码库做出贡献。
 ---
 
 import { CardTitle } from "/snippets/card-title.mdx"
 
-## Getting started
-
-<CardGroup cols={2}>
-  <Card href="/l/zh/developers/local-setup" img="/images/user-guide/fields/field.png">
-    <CardTitle>本地設定</CardTitle>
-    The guide for contributors (or curious developers) who want to run Twenty locally (on laptop, PC...)
+<CardGroup cols={3}>
+  <Card href="/l/zh/developers/extend/apps/getting-started/快速启动" img="/images/user-guide/halftone/dev-apps.png">
+    <CardTitle>应用</CardTitle>
+    使用自定义对象、服务器端逻辑、UI 组件和 AI 代理扩展 Twenty——全部以 TypeScript 软件包形式提供。
   </Card>
 
-  <Card href="/l/zh/developers/self-hosting/docker-compose" img="/images/user-guide/integrations/plug.png">
-    <CardTitle>Self-Hosting</CardTitle>
-    Learn how to host Twenty on your own server
+  <Card href="/l/zh/developers/extend/api" img="/images/user-guide/halftone/dev-api.png">
+    <CardTitle>API</CardTitle>
+    REST 和 GraphQL API、Webhook 回调和 OAuth。
   </Card>
 
-  <Card href="/l/zh/developers/api-and-webhooks/api" img="/images/user-guide/api/api.png">
-    <CardTitle>API 和 Webhooks</CardTitle>
-    REST and GraphQL APIs, webhooks, and integrations
-  </Card>
-</CardGroup>
-
-## 貢獻
-
-<CardGroup cols={2}>
-  <Card href="/l/zh/developers/bug-and-requests" img="/images/user-guide/api/api.png">
-    <CardTitle>錯誤和請求</CardTitle>
-    Ask for help on GitHub or Discord
+  <Card href="/l/zh/developers/self-host/capabilities/docker-compose" img="/images/user-guide/halftone/dev-self-host.png">
+    <CardTitle>自托管</CardTitle>
+    在您自己的基础设施上运行 Twenty。
   </Card>
 
-  <Card href="/l/zh/developers/frontend-development/frontend-commands" img="/images/user-guide/create-workspace/workspace-cover.png">
-    <CardTitle>前端開發</CardTitle>
-    Frontend commands, Figma, React Best Practices...
-  </Card>
-
-  <Card href="/l/zh/developers/backend-development/server-commands" img="/images/user-guide/kanban-views/kanban.png">
-    <CardTitle>後端開發</CardTitle>
-    NestJS, Custom Objects, Queues...
+  <Card href="/l/zh/developers/contribute/capabilities/local-setup" img="/images/user-guide/halftone/dev-contribute.png">
+    <CardTitle>参与贡献</CardTitle>
+    在本地设置 monorepo 并提交 PR。
   </Card>
 </CardGroup>

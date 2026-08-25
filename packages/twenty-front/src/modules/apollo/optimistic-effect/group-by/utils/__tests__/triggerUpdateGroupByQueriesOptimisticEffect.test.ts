@@ -1,15 +1,15 @@
 import { type ApolloCache } from '@apollo/client';
 
-import { type ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
 import { type RecordGqlNode } from '@/object-record/graphql/types/RecordGqlNode';
 
-import { triggerUpdateGroupByQueriesOptimisticEffect } from '../triggerUpdateGroupByQueriesOptimisticEffect';
+import { triggerUpdateGroupByQueriesOptimisticEffect } from '@/apollo/optimistic-effect/group-by/utils/triggerUpdateGroupByQueriesOptimisticEffect';
 
 describe('triggerUpdateGroupByQueriesOptimisticEffect', () => {
-  const mockObjectMetadataItem: ObjectMetadataItem = {
+  const mockObjectMetadataItem: EnrichedObjectMetadataItem = {
     nameSingular: 'person',
     namePlural: 'people',
-  } as ObjectMetadataItem;
+  } as EnrichedObjectMetadataItem;
 
   const mockRecord: RecordGqlNode = {
     __typename: 'Person',
@@ -21,11 +21,12 @@ describe('triggerUpdateGroupByQueriesOptimisticEffect', () => {
     const mockModify = jest.fn();
     const mockCache = {
       modify: mockModify,
-    } as unknown as ApolloCache<unknown>;
+    } as unknown as ApolloCache;
 
     triggerUpdateGroupByQueriesOptimisticEffect({
       cache: mockCache,
       objectMetadataItem: mockObjectMetadataItem,
+      objectMetadataItems: [mockObjectMetadataItem],
       operation: 'create',
       records: [mockRecord],
       shouldMatchRootQueryFilter: false,
@@ -43,11 +44,12 @@ describe('triggerUpdateGroupByQueriesOptimisticEffect', () => {
     const mockModify = jest.fn();
     const mockCache = {
       modify: mockModify,
-    } as unknown as ApolloCache<unknown>;
+    } as unknown as ApolloCache;
 
     triggerUpdateGroupByQueriesOptimisticEffect({
       cache: mockCache,
       objectMetadataItem: mockObjectMetadataItem,
+      objectMetadataItems: [mockObjectMetadataItem],
       operation: 'update',
       records: [mockRecord],
       shouldMatchRootQueryFilter: false,
@@ -60,11 +62,12 @@ describe('triggerUpdateGroupByQueriesOptimisticEffect', () => {
     const mockModify = jest.fn();
     const mockCache = {
       modify: mockModify,
-    } as unknown as ApolloCache<unknown>;
+    } as unknown as ApolloCache;
 
     triggerUpdateGroupByQueriesOptimisticEffect({
       cache: mockCache,
       objectMetadataItem: mockObjectMetadataItem,
+      objectMetadataItems: [mockObjectMetadataItem],
       operation: 'delete',
       records: [mockRecord],
       shouldMatchRootQueryFilter: false,
@@ -77,11 +80,12 @@ describe('triggerUpdateGroupByQueriesOptimisticEffect', () => {
     const mockModify = jest.fn();
     const mockCache = {
       modify: mockModify,
-    } as unknown as ApolloCache<unknown>;
+    } as unknown as ApolloCache;
 
     triggerUpdateGroupByQueriesOptimisticEffect({
       cache: mockCache,
       objectMetadataItem: mockObjectMetadataItem,
+      objectMetadataItems: [mockObjectMetadataItem],
       operation: 'create',
       records: [],
       shouldMatchRootQueryFilter: false,

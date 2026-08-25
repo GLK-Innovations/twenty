@@ -1,10 +1,15 @@
-import styled from '@emotion/styled';
-import { useRecoilValue } from 'recoil';
+import { styled } from '@linaria/react';
 
 import { ParticipantChip } from '@/activities/components/ParticipantChip';
 import { type EmailThreadMessageParticipant } from '@/activities/emails/types/EmailThreadMessageParticipant';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { AppTooltip, TooltipPosition } from 'twenty-ui/surfaces';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
 import { dateLocaleState } from '~/localization/states/dateLocaleState';
-import { beautifyPastDateRelativeToNow } from '~/utils/date-utils';
+import {
+  beautifyPastDateRelativeToNow,
+  formatToHumanReadableDate,
+} from '~/utils/date-utils';
 
 const StyledEmailThreadMessageSender = styled.div`
   display: flex;
@@ -13,9 +18,9 @@ const StyledEmailThreadMessageSender = styled.div`
 
 const StyledThreadMessageSentAt = styled.div`
   align-items: flex-end;
+  color: ${themeCssVariables.font.color.tertiary};
   display: flex;
-  color: ${({ theme }) => theme.font.color.tertiary};
-  font-size: ${({ theme }) => theme.font.size.sm};
+  font-size: ${themeCssVariables.font.size.sm};
 `;
 
 type EmailThreadMessageSenderProps = {
@@ -27,14 +32,20 @@ export const EmailThreadMessageSender = ({
   sender,
   sentAt,
 }: EmailThreadMessageSenderProps) => {
-  const { localeCatalog } = useRecoilValue(dateLocaleState);
+  const { localeCatalog } = useAtomStateValue(dateLocaleState);
+  const tooltipId = `date-tooltip-${sentAt.replace(/[^a-zA-Z0-9]/g, '-')}`;
 
   return (
     <StyledEmailThreadMessageSender>
       <ParticipantChip participant={sender} variant="bold" />
-      <StyledThreadMessageSentAt>
+      <StyledThreadMessageSentAt id={tooltipId}>
         {beautifyPastDateRelativeToNow(sentAt, localeCatalog)}
       </StyledThreadMessageSentAt>
+      <AppTooltip
+        anchorSelect={`#${tooltipId}`}
+        content={formatToHumanReadableDate(sentAt)}
+        place={TooltipPosition.Top}
+      />
     </StyledEmailThreadMessageSender>
   );
 };

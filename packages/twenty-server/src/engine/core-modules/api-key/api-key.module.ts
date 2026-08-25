@@ -1,19 +1,23 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
-import { ApiKeyRoleService } from 'src/engine/core-modules/api-key/api-key-role.service';
 import { ApiKeyEntity } from 'src/engine/core-modules/api-key/api-key.entity';
 import { ApiKeyResolver } from 'src/engine/core-modules/api-key/api-key.resolver';
-import { ApiKeyService } from 'src/engine/core-modules/api-key/api-key.service';
+import { GenerateApiKeyCommand } from 'src/engine/core-modules/api-key/commands/generate-api-key.command';
+import { ApiKeyRoleService } from 'src/engine/core-modules/api-key/services/api-key-role.service';
+import { ApiKeyService } from 'src/engine/core-modules/api-key/services/api-key.service';
+import { WorkspaceApiKeyMapCacheService } from 'src/engine/core-modules/api-key/services/workspace-api-key-map-cache.service';
 import { TokenModule } from 'src/engine/core-modules/auth/token/token.module';
 import { FeatureFlagModule } from 'src/engine/core-modules/feature-flag/feature-flag.module';
 import { JwtModule } from 'src/engine/core-modules/jwt/jwt.module';
 import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
 import { PermissionsModule } from 'src/engine/metadata-modules/permissions/permissions.module';
-import { RoleTargetsEntity } from 'src/engine/metadata-modules/role/role-targets.entity';
+import { RoleTargetEntity } from 'src/engine/metadata-modules/role-target/role-target.entity';
+import { RoleTargetModule } from 'src/engine/metadata-modules/role-target/role-target.module';
 import { RoleEntity } from 'src/engine/metadata-modules/role/role.entity';
-import { WorkspacePermissionsCacheModule } from 'src/engine/metadata-modules/workspace-permissions-cache/workspace-permissions-cache.module';
+import { provideWorkspaceScopedRepository } from 'src/engine/twenty-orm/workspace-scoped-repository/provide-workspace-scoped-repository';
 import { WorkspaceCacheStorageModule } from 'src/engine/workspace-cache-storage/workspace-cache-storage.module';
+import { WorkspaceCacheModule } from 'src/engine/workspace-cache/workspace-cache.module';
 
 import { ApiKeyController } from './controllers/api-key.controller';
 
@@ -21,19 +25,34 @@ import { ApiKeyController } from './controllers/api-key.controller';
   imports: [
     TypeOrmModule.forFeature([
       ApiKeyEntity,
-      RoleTargetsEntity,
+      RoleTargetEntity,
       RoleEntity,
       WorkspaceEntity,
     ]),
     JwtModule,
-    TokenModule,
-    WorkspacePermissionsCacheModule,
+    WorkspaceCacheModule,
     WorkspaceCacheStorageModule,
-    PermissionsModule,
     FeatureFlagModule,
+    RoleTargetModule,
+    TokenModule,
+    PermissionsModule,
   ],
-  providers: [ApiKeyService, ApiKeyResolver, ApiKeyRoleService],
+  providers: [
+    ApiKeyService,
+    ApiKeyResolver,
+    ApiKeyRoleService,
+    WorkspaceApiKeyMapCacheService,
+    GenerateApiKeyCommand,
+    provideWorkspaceScopedRepository(ApiKeyEntity),
+    provideWorkspaceScopedRepository(RoleEntity),
+    provideWorkspaceScopedRepository(RoleTargetEntity),
+  ],
   controllers: [ApiKeyController],
-  exports: [ApiKeyService, ApiKeyRoleService, TypeOrmModule],
+  exports: [
+    ApiKeyService,
+    ApiKeyRoleService,
+    TypeOrmModule,
+    GenerateApiKeyCommand,
+  ],
 })
 export class ApiKeyModule {}

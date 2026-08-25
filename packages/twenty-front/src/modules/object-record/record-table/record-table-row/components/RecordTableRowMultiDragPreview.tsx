@@ -1,19 +1,26 @@
+import { RecordDragMultiDragCounterChip } from '@/object-record/record-drag/components/RecordDragMultiDragCounterChip';
 import { isRecordIdPrimaryDragMultipleComponentFamilyState } from '@/object-record/record-drag/states/isRecordIdPrimaryDragMultipleComponentFamilyState';
-import { useRecordTableRowContextOrThrow } from '@/object-record/record-table/contexts/RecordTableRowContext';
-import { RecordTableRowMultiDragCounterChip } from '@/object-record/record-table/record-table-row/components/RecordTableRowMultiDragCounterChip';
-import { useRecoilComponentFamilyValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentFamilyValue';
+import { useRecordIndexContextOrThrow } from '@/object-record/record-index/contexts/RecordIndexContext';
+import { useAtomComponentFamilyStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentFamilyStateValue';
 
-export const RecordTableRowMultiDragPreview = () => {
-  const { recordId } = useRecordTableRowContextOrThrow();
+type RecordTableRowMultiDragPreviewProps = {
+  recordId: string;
+};
 
-  const isRecordIdPrimaryDragMultiple = useRecoilComponentFamilyValue(
+export const RecordTableRowMultiDragPreview = ({
+  recordId,
+}: RecordTableRowMultiDragPreviewProps) => {
+  const { recordIndexId } = useRecordIndexContextOrThrow();
+
+  const isRecordIdPrimaryDragMultiple = useAtomComponentFamilyStateValue(
     isRecordIdPrimaryDragMultipleComponentFamilyState,
     { recordId },
+    recordIndexId,
   );
 
   if (!isRecordIdPrimaryDragMultiple) {
     return null;
   }
 
-  return <RecordTableRowMultiDragCounterChip />;
+  return <RecordDragMultiDragCounterChip />;
 };

@@ -1,20 +1,20 @@
-import { useRecoilState } from 'recoil';
-
 import { currentWorkspaceState } from '@/auth/states/currentWorkspaceState';
+import { useAtomState } from '@/ui/utilities/state/jotai/hooks/useAtomState';
 import { SettingsOptionCardContentToggle } from '@/settings/components/SettingsOptions/SettingsOptionCardContentToggle';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
-import { ApolloError } from '@apollo/client';
+import { CombinedGraphQLErrors } from '@apollo/client/errors';
 import { t } from '@lingui/core/macro';
-import { IconLifebuoy } from 'twenty-ui/display';
-import { useUpdateWorkspaceMutation } from '~/generated-metadata/graphql';
+import { IconLifebuoy } from 'twenty-ui/icon';
+import { useMutation } from '@apollo/client/react';
+import { UpdateWorkspaceDocument } from '~/generated-metadata/graphql';
 
 export const Toggle2FA = () => {
   const { enqueueErrorSnackBar } = useSnackBar();
-  const [currentWorkspace, setCurrentWorkspace] = useRecoilState(
+  const [currentWorkspace, setCurrentWorkspace] = useAtomState(
     currentWorkspaceState,
   );
 
-  const [updateWorkspace] = useUpdateWorkspaceMutation();
+  const [updateWorkspace] = useMutation(UpdateWorkspaceDocument);
 
   const handleChange = async () => {
     if (!currentWorkspace?.id) {
@@ -24,7 +24,6 @@ export const Toggle2FA = () => {
     const newEnforceValue = !currentWorkspace.isTwoFactorAuthenticationEnforced;
 
     try {
-      // Optimistic update
       setCurrentWorkspace({
         ...currentWorkspace,
         isTwoFactorAuthenticationEnforced: newEnforceValue,
@@ -38,13 +37,12 @@ export const Toggle2FA = () => {
         },
       });
     } catch (err: any) {
-      // Rollback optimistic update if error
       setCurrentWorkspace({
         ...currentWorkspace,
         isTwoFactorAuthenticationEnforced: !newEnforceValue,
       });
       enqueueErrorSnackBar({
-        apolloError: err instanceof ApolloError ? err : undefined,
+        apolloError: CombinedGraphQLErrors.is(err) ? err : undefined,
         message: err?.message,
       });
     }

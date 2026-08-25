@@ -1,16 +1,18 @@
 import { type ObjectPermissions } from 'twenty-shared/types';
-import { createState } from 'twenty-ui/utilities';
-import { type UserWorkspace } from '~/generated/graphql';
+import { createAtomState } from '@/ui/utilities/state/jotai/utils/createAtomState';
+import { type UserWorkspace } from '~/generated-metadata/graphql';
 
 export type CurrentUserWorkspace = Pick<
   UserWorkspace,
-  'permissionFlags' | 'twoFactorAuthenticationMethodSummary'
+  'permissionFlags' | 'twoFactorAuthenticationMethodSummary' | 'isImpersonating'
 > & {
   objectsPermissions: Array<ObjectPermissions & { objectMetadataId: string }>;
 };
 
 export const currentUserWorkspaceState =
-  createState<CurrentUserWorkspace | null>({
+  createAtomState<CurrentUserWorkspace | null>({
     key: 'currentUserWorkspaceState',
     defaultValue: null,
+    useLocalStorage: true,
+    localStorageOptions: { getOnInit: true },
   });

@@ -1,14 +1,17 @@
-import { useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
-import { useRecoilValue, useSetRecoilState } from 'recoil';
+import { styled } from '@linaria/react';
 
+import { currentMobileNavigationDrawerState } from '@/navigation/states/currentMobileNavigationDrawerState';
 import { isNavigationDrawerExpandedState } from '@/ui/navigation/states/isNavigationDrawerExpanded';
 import { navigationDrawerExpandedMemorizedState } from '@/ui/navigation/states/navigationDrawerExpandedMemorizedState';
 import { navigationMemorizedUrlState } from '@/ui/navigation/states/navigationMemorizedUrlState';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { useSetAtomState } from '@/ui/utilities/state/jotai/hooks/useSetAtomState';
 import { useIsWorkspaceActivationStatusEqualsTo } from '@/workspace/hooks/useIsWorkspaceActivationStatusEqualsTo';
 import { WorkspaceActivationStatus } from 'twenty-shared/workspace';
-import { IconX } from 'twenty-ui/display';
+import { useContext } from 'react';
+import { IconX } from 'twenty-ui/icon';
 import { UndecoratedLink } from 'twenty-ui/navigation';
+import { ThemeContext, themeCssVariables } from 'twenty-ui/theme-constants';
 
 type NavigationDrawerBackButtonProps = {
   title: string;
@@ -17,19 +20,22 @@ type NavigationDrawerBackButtonProps = {
 const StyledIconAndButtonContainer = styled.button`
   align-items: center;
   background: inherit;
-  border: none;
-  color: ${({ theme }) => theme.font.color.secondary};
+  border: 1px solid transparent;
+  border-radius: ${themeCssVariables.border.radius.md};
+  box-sizing: border-box;
+  color: ${themeCssVariables.font.color.primary};
   cursor: pointer;
   display: flex;
   flex-direction: row;
-  font-weight: ${({ theme }) => theme.font.weight.medium};
-  gap: ${({ theme }) => theme.spacing(2)};
-  padding: ${({ theme }) => theme.spacing(1.5, 1)};
-  width: 100%;
-  font-family: ${({ theme }) => theme.font.family};
+  font-family: ${themeCssVariables.font.family};
+  font-size: ${themeCssVariables.font.size.md};
+  font-weight: ${themeCssVariables.font.weight.medium};
+  gap: ${themeCssVariables.spacing[2]};
+  height: ${themeCssVariables.spacing[7]};
+  padding: 2px ${themeCssVariables.spacing[1]} 2px 2px;
+  width: fit-content;
   &:hover {
-    background: ${({ theme }) => theme.background.transparent.light};
-    border-radius: ${({ theme }) => theme.border.radius.sm};
+    background: ${themeCssVariables.background.transparent.light};
   }
 `;
 
@@ -37,21 +43,24 @@ const StyledContainer = styled.div`
   align-items: center;
   display: flex;
   flex-direction: row;
-  height: ${({ theme }) => theme.spacing(8)};
+  flex-shrink: 0;
+  height: ${themeCssVariables.spacing[8]};
   justify-content: space-between;
-  padding-left: ${({ theme }) => theme.spacing(5)};
 `;
 
 export const NavigationDrawerBackButton = ({
   title,
 }: NavigationDrawerBackButtonProps) => {
-  const theme = useTheme();
-  const navigationMemorizedUrl = useRecoilValue(navigationMemorizedUrlState);
+  const { theme } = useContext(ThemeContext);
+  const navigationMemorizedUrl = useAtomStateValue(navigationMemorizedUrlState);
 
-  const setIsNavigationDrawerExpanded = useSetRecoilState(
+  const setIsNavigationDrawerExpanded = useSetAtomState(
     isNavigationDrawerExpandedState,
   );
-  const navigationDrawerExpandedMemorized = useRecoilValue(
+  const setCurrentMobileNavigationDrawer = useSetAtomState(
+    currentMobileNavigationDrawerState,
+  );
+  const navigationDrawerExpandedMemorized = useAtomStateValue(
     navigationDrawerExpandedMemorizedState,
   );
 
@@ -68,15 +77,16 @@ export const NavigationDrawerBackButton = ({
       <UndecoratedLink
         to={navigationMemorizedUrl}
         replace
-        onClick={() =>
-          setIsNavigationDrawerExpanded(navigationDrawerExpandedMemorized)
-        }
+        onClick={() => {
+          setIsNavigationDrawerExpanded(navigationDrawerExpandedMemorized);
+          setCurrentMobileNavigationDrawer('main');
+        }}
       >
         <StyledIconAndButtonContainer>
           <IconX
             size={theme.icon.size.md}
-            stroke={theme.icon.stroke.lg}
-            color={theme.font.color.tertiary}
+            stroke={theme.icon.stroke.sm}
+            color={theme.font.color.secondary}
           />
           <span>{title}</span>
         </StyledIconAndButtonContainer>

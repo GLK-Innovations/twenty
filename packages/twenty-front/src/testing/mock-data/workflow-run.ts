@@ -1,4 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// oxlint-disable-next-line typescript/ban-ts-comment
 // @ts-ignore
 import { type WorkflowRun } from '@/workflow/types/Workflow';
 import { StepStatus } from 'twenty-shared/workflow';
@@ -16,16 +16,15 @@ export const oneSucceededWorkflowRunQueryResult = {
         steps: [
           {
             id: '212a171a-f887-4213-8892-e39c2a3ecc30',
-            name: 'Code - Serverless Function',
+            name: 'Code - Logic Function',
             type: 'CODE',
             valid: false,
             settings: {
               input: {
-                serverlessFunctionId: 'e031ae6a-5b9e-496b-9a98-ba015f7b5508',
-                serverlessFunctionInput: {
+                logicFunctionId: 'e031ae6a-5b9e-496b-9a98-ba015f7b5508',
+                logicFunctionInput: {
                   userId: '{{trigger.userId}}',
                 },
-                serverlessFunctionVersion: '1',
               },
               outputSchema: {
                 link: {
@@ -48,14 +47,13 @@ export const oneSucceededWorkflowRunQueryResult = {
           },
           {
             id: 'a01b2953-9aa7-4d9a-aded-8e9bafbd6c30',
-            name: 'Code - Serverless Function',
+            name: 'Code - Logic Function',
             type: 'CODE',
             valid: false,
             settings: {
               input: {
-                serverlessFunctionId: '605efcda-6689-43b3-b24c-2eb76948f523',
-                serverlessFunctionInput: {},
-                serverlessFunctionVersion: '2',
+                logicFunctionId: '605efcda-6689-43b3-b24c-2eb76948f523',
+                logicFunctionInput: {},
               },
               outputSchema: {
                 link: {
@@ -869,7 +867,7 @@ export const oneSucceededWorkflowRunQueryResult = {
                         createdAt: '2025-03-05T15:41:09.390Z',
                         updatedAt: '2025-03-05T15:41:09.390Z',
                         isNullable: true,
-                        standardId: '20202020-cb17-4a61-8f8f-3be6730480de',
+                        standardId: '9d7b0087-7037-55dc-bb59-456064455694',
                         description: 'Tasks tied to the company',
                         workspaceId: '20202020-1c25-4d02-bf25-6aeccf7ea419',
                         defaultValue: null,
@@ -894,7 +892,7 @@ export const oneSucceededWorkflowRunQueryResult = {
                         createdAt: '2025-03-05T15:41:09.390Z',
                         updatedAt: '2025-03-05T15:41:09.390Z',
                         isNullable: true,
-                        standardId: '20202020-bae0-4556-a74a-a9c686f77a88',
+                        standardId: '0b28db77-8099-5ce3-a11f-86a5778d7740',
                         description: 'Notes tied to the company',
                         workspaceId: '20202020-1c25-4d02-bf25-6aeccf7ea419',
                         defaultValue: null,
@@ -969,7 +967,7 @@ export const oneSucceededWorkflowRunQueryResult = {
                         createdAt: '2025-03-05T15:41:09.390Z',
                         updatedAt: '2025-03-05T15:41:09.390Z',
                         isNullable: true,
-                        standardId: '20202020-c1b5-4120-b0f0-987ca401ed53',
+                        standardId: 'a4399ae3-fe89-59fe-a282-aec77d4e63a8',
                         description: 'Attachments linked to the company',
                         workspaceId: '20202020-1c25-4d02-bf25-6aeccf7ea419',
                         defaultValue: null,
@@ -994,7 +992,7 @@ export const oneSucceededWorkflowRunQueryResult = {
                         createdAt: '2025-03-05T15:41:09.390Z',
                         updatedAt: '2025-03-05T15:41:09.390Z',
                         isNullable: true,
-                        standardId: '20202020-0414-4daf-9c0d-64fe7b27f89f',
+                        standardId: '28ec0f8f-ad23-5317-b2d9-1a487bcefee2',
                         description:
                           'Timeline Activities linked to the company',
                         workspaceId: '20202020-1c25-4d02-bf25-6aeccf7ea419',
@@ -2050,7 +2048,7 @@ export const oneSucceededWorkflowRunQueryResult = {
                   createdAt: '2025-03-05T15:41:09.390Z',
                   updatedAt: '2025-03-05T15:41:09.390Z',
                   isNullable: true,
-                  standardId: '20202020-cb17-4a61-8f8f-3be6730480de',
+                  standardId: '9d7b0087-7037-55dc-bb59-456064455694',
                   description: 'Tasks tied to the company',
                   workspaceId: '20202020-1c25-4d02-bf25-6aeccf7ea419',
                   defaultValue: null,
@@ -2088,7 +2086,7 @@ export const oneSucceededWorkflowRunQueryResult = {
                   createdAt: '2025-03-05T15:41:09.390Z',
                   updatedAt: '2025-03-05T15:41:09.390Z',
                   isNullable: true,
-                  standardId: '20202020-bae0-4556-a74a-a9c686f77a88',
+                  standardId: '0b28db77-8099-5ce3-a11f-86a5778d7740',
                   description: 'Notes tied to the company',
                   workspaceId: '20202020-1c25-4d02-bf25-6aeccf7ea419',
                   defaultValue: null,
@@ -2202,7 +2200,7 @@ export const oneSucceededWorkflowRunQueryResult = {
                   createdAt: '2025-03-05T15:41:09.390Z',
                   updatedAt: '2025-03-05T15:41:09.390Z',
                   isNullable: true,
-                  standardId: '20202020-c1b5-4120-b0f0-987ca401ed53',
+                  standardId: 'a4399ae3-fe89-59fe-a282-aec77d4e63a8',
                   description: 'Attachments linked to the company',
                   workspaceId: '20202020-1c25-4d02-bf25-6aeccf7ea419',
                   defaultValue: null,
@@ -2240,7 +2238,7 @@ export const oneSucceededWorkflowRunQueryResult = {
                   createdAt: '2025-03-05T15:41:09.390Z',
                   updatedAt: '2025-03-05T15:41:09.390Z',
                   isNullable: true,
-                  standardId: '20202020-0414-4daf-9c0d-64fe7b27f89f',
+                  standardId: '28ec0f8f-ad23-5317-b2d9-1a487bcefee2',
                   description: 'Timeline Activities linked to the company',
                   workspaceId: '20202020-1c25-4d02-bf25-6aeccf7ea419',
                   defaultValue: null,
@@ -2530,7 +2528,7 @@ export const oneSucceededWorkflowRunQueryResult = {
                   createdAt: '2025-03-05T15:41:09.390Z',
                   updatedAt: '2025-03-05T15:41:09.390Z',
                   isNullable: true,
-                  standardId: '20202020-0414-4daf-9c0d-64fe7b27f89f',
+                  standardId: '28ec0f8f-ad23-5317-b2d9-1a487bcefee2',
                   description: 'Timeline Activities linked to the company',
                   workspaceId: '20202020-1c25-4d02-bf25-6aeccf7ea419',
                   defaultValue: null,
@@ -2568,7 +2566,7 @@ export const oneSucceededWorkflowRunQueryResult = {
                   createdAt: '2025-03-05T15:41:09.390Z',
                   updatedAt: '2025-03-05T15:41:09.390Z',
                   isNullable: true,
-                  standardId: '20202020-c1b5-4120-b0f0-987ca401ed53',
+                  standardId: 'a4399ae3-fe89-59fe-a282-aec77d4e63a8',
                   description: 'Attachments linked to the company',
                   workspaceId: '20202020-1c25-4d02-bf25-6aeccf7ea419',
                   defaultValue: null,
@@ -3043,7 +3041,7 @@ export const oneSucceededWorkflowRunQueryResult = {
                   createdAt: '2025-03-05T15:41:09.390Z',
                   updatedAt: '2025-03-05T15:41:09.390Z',
                   isNullable: true,
-                  standardId: '20202020-bae0-4556-a74a-a9c686f77a88',
+                  standardId: '0b28db77-8099-5ce3-a11f-86a5778d7740',
                   description: 'Notes tied to the company',
                   workspaceId: '20202020-1c25-4d02-bf25-6aeccf7ea419',
                   defaultValue: null,
@@ -3268,7 +3266,7 @@ export const oneSucceededWorkflowRunQueryResult = {
                   createdAt: '2025-03-05T15:41:09.390Z',
                   updatedAt: '2025-03-05T15:41:09.390Z',
                   isNullable: true,
-                  standardId: '20202020-cb17-4a61-8f8f-3be6730480de',
+                  standardId: '9d7b0087-7037-55dc-bb59-456064455694',
                   description: 'Tasks tied to the company',
                   workspaceId: '20202020-1c25-4d02-bf25-6aeccf7ea419',
                   defaultValue: null,
@@ -3920,7 +3918,7 @@ export const oneSucceededWorkflowRunQueryResult = {
                   createdAt: '2025-03-05T15:41:09.390Z',
                   updatedAt: '2025-03-05T15:41:09.390Z',
                   isNullable: true,
-                  standardId: '20202020-c1b5-4120-b0f0-987ca401ed53',
+                  standardId: 'a4399ae3-fe89-59fe-a282-aec77d4e63a8',
                   description: 'Attachments linked to the company',
                   workspaceId: '20202020-1c25-4d02-bf25-6aeccf7ea419',
                   defaultValue: null,
@@ -3958,7 +3956,7 @@ export const oneSucceededWorkflowRunQueryResult = {
                   createdAt: '2025-03-05T15:41:09.390Z',
                   updatedAt: '2025-03-05T15:41:09.390Z',
                   isNullable: true,
-                  standardId: '20202020-bae0-4556-a74a-a9c686f77a88',
+                  standardId: '0b28db77-8099-5ce3-a11f-86a5778d7740',
                   description: 'Notes tied to the company',
                   workspaceId: '20202020-1c25-4d02-bf25-6aeccf7ea419',
                   defaultValue: null,
@@ -3996,7 +3994,7 @@ export const oneSucceededWorkflowRunQueryResult = {
                   createdAt: '2025-03-05T15:41:09.390Z',
                   updatedAt: '2025-03-05T15:41:09.390Z',
                   isNullable: true,
-                  standardId: '20202020-cb17-4a61-8f8f-3be6730480de',
+                  standardId: '9d7b0087-7037-55dc-bb59-456064455694',
                   description: 'Tasks tied to the company',
                   workspaceId: '20202020-1c25-4d02-bf25-6aeccf7ea419',
                   defaultValue: null,
@@ -4220,7 +4218,7 @@ export const oneSucceededWorkflowRunQueryResult = {
                   createdAt: '2025-03-05T15:41:09.390Z',
                   updatedAt: '2025-03-05T15:41:09.390Z',
                   isNullable: true,
-                  standardId: '20202020-0414-4daf-9c0d-64fe7b27f89f',
+                  standardId: '28ec0f8f-ad23-5317-b2d9-1a487bcefee2',
                   description: 'Timeline Activities linked to the company',
                   workspaceId: '20202020-1c25-4d02-bf25-6aeccf7ea419',
                   defaultValue: null,
@@ -4485,16 +4483,15 @@ export const oneSucceededWorkflowRunQueryResult = {
       steps: [
         {
           id: '212a171a-f887-4213-8892-e39c2a3ecc30',
-          name: 'Code - Serverless Function',
+          name: 'Code - Logic Function',
           type: 'CODE',
           valid: false,
           settings: {
             input: {
-              serverlessFunctionId: 'e031ae6a-5b9e-496b-9a98-ba015f7b5508',
-              serverlessFunctionInput: {
+              logicFunctionId: 'e031ae6a-5b9e-496b-9a98-ba015f7b5508',
+              logicFunctionInput: {
                 userId: '{{trigger.userId}}',
               },
-              serverlessFunctionVersion: '1',
             },
             outputSchema: {
               link: {
@@ -4517,14 +4514,13 @@ export const oneSucceededWorkflowRunQueryResult = {
         },
         {
           id: 'a01b2953-9aa7-4d9a-aded-8e9bafbd6c30',
-          name: 'Code - Serverless Function',
+          name: 'Code - Logic Function',
           type: 'CODE',
           valid: false,
           settings: {
             input: {
-              serverlessFunctionId: '605efcda-6689-43b3-b24c-2eb76948f523',
-              serverlessFunctionInput: {},
-              serverlessFunctionVersion: '2',
+              logicFunctionId: '605efcda-6689-43b3-b24c-2eb76948f523',
+              logicFunctionInput: {},
             },
             outputSchema: {
               link: {
@@ -5320,7 +5316,7 @@ export const oneSucceededWorkflowRunQueryResult = {
                       createdAt: '2025-03-05T15:41:09.390Z',
                       updatedAt: '2025-03-05T15:41:09.390Z',
                       isNullable: true,
-                      standardId: '20202020-cb17-4a61-8f8f-3be6730480de',
+                      standardId: '9d7b0087-7037-55dc-bb59-456064455694',
                       description: 'Tasks tied to the company',
                       workspaceId: '20202020-1c25-4d02-bf25-6aeccf7ea419',
                       defaultValue: null,
@@ -5344,7 +5340,7 @@ export const oneSucceededWorkflowRunQueryResult = {
                       createdAt: '2025-03-05T15:41:09.390Z',
                       updatedAt: '2025-03-05T15:41:09.390Z',
                       isNullable: true,
-                      standardId: '20202020-bae0-4556-a74a-a9c686f77a88',
+                      standardId: '0b28db77-8099-5ce3-a11f-86a5778d7740',
                       description: 'Notes tied to the company',
                       workspaceId: '20202020-1c25-4d02-bf25-6aeccf7ea419',
                       defaultValue: null,
@@ -5416,7 +5412,7 @@ export const oneSucceededWorkflowRunQueryResult = {
                       createdAt: '2025-03-05T15:41:09.390Z',
                       updatedAt: '2025-03-05T15:41:09.390Z',
                       isNullable: true,
-                      standardId: '20202020-c1b5-4120-b0f0-987ca401ed53',
+                      standardId: 'a4399ae3-fe89-59fe-a282-aec77d4e63a8',
                       description: 'Attachments linked to the company',
                       workspaceId: '20202020-1c25-4d02-bf25-6aeccf7ea419',
                       defaultValue: null,
@@ -5440,7 +5436,7 @@ export const oneSucceededWorkflowRunQueryResult = {
                       createdAt: '2025-03-05T15:41:09.390Z',
                       updatedAt: '2025-03-05T15:41:09.390Z',
                       isNullable: true,
-                      standardId: '20202020-0414-4daf-9c0d-64fe7b27f89f',
+                      standardId: '28ec0f8f-ad23-5317-b2d9-1a487bcefee2',
                       description: 'Timeline Activities linked to the company',
                       workspaceId: '20202020-1c25-4d02-bf25-6aeccf7ea419',
                       defaultValue: null,

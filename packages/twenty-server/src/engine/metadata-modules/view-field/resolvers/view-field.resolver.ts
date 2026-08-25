@@ -1,8 +1,7 @@
 import { UseFilters, UseGuards } from '@nestjs/common';
-import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
+import { Args, Mutation, Query } from '@nestjs/graphql';
 
-import { FeatureFlagKey } from 'src/engine/core-modules/feature-flag/enums/feature-flag-key.enum';
-import { FeatureFlagService } from 'src/engine/core-modules/feature-flag/services/feature-flag.service';
+import { MetadataResolver } from 'src/engine/api/graphql/graphql-config/decorators/metadata-resolver.decorator';
 import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
 import { AuthWorkspace } from 'src/engine/decorators/auth/auth-workspace.decorator';
 import { NoPermissionGuard } from 'src/engine/guards/no-permission.guard';
@@ -12,165 +11,93 @@ import { DeleteViewFieldInput } from 'src/engine/metadata-modules/view-field/dto
 import { DestroyViewFieldInput } from 'src/engine/metadata-modules/view-field/dtos/inputs/destroy-view-field.input';
 import { UpdateViewFieldInput } from 'src/engine/metadata-modules/view-field/dtos/inputs/update-view-field.input';
 import { ViewFieldDTO } from 'src/engine/metadata-modules/view-field/dtos/view-field.dto';
-import { ViewFieldEntity } from 'src/engine/metadata-modules/view-field/entities/view-field.entity';
-import {
-  ViewFieldException,
-  ViewFieldExceptionCode,
-} from 'src/engine/metadata-modules/view-field/exceptions/view-field.exception';
-import { ViewFieldV2Service } from 'src/engine/metadata-modules/view-field/services/view-field-v2.service';
 import { ViewFieldService } from 'src/engine/metadata-modules/view-field/services/view-field.service';
-import { CreateViewFieldPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/create-view-field-permission.guard';
-import { DeleteViewFieldPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/delete-view-field-permission.guard';
-import { DestroyViewFieldPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/destroy-view-field-permission.guard';
-import { UpdateViewFieldPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/update-view-field-permission.guard';
 import { ViewGraphqlApiExceptionFilter } from 'src/engine/metadata-modules/view/utils/view-graphql-api-exception.filter';
+import { CreateViewChildEntityPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/create-view-child-entity-permission.guard';
+import { ViewChildEntityPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/view-child-entity-permission.guard';
 
-@Resolver(() => ViewFieldDTO)
+@MetadataResolver(() => ViewFieldDTO)
 @UseFilters(ViewGraphqlApiExceptionFilter)
 @UseGuards(WorkspaceAuthGuard)
 export class ViewFieldResolver {
-  constructor(
-    private readonly viewFieldService: ViewFieldService,
-    private readonly featureFlagService: FeatureFlagService,
-    private readonly viewFieldV2Service: ViewFieldV2Service,
-  ) {}
+  constructor(private readonly viewFieldService: ViewFieldService) {}
 
   @Query(() => [ViewFieldDTO])
   @UseGuards(NoPermissionGuard)
-  async getCoreViewFields(
+  async getViewFields(
     @Args('viewId', { type: () => String }) viewId: string,
     @AuthWorkspace() workspace: WorkspaceEntity,
-  ): Promise<ViewFieldEntity[]> {
+  ): Promise<ViewFieldDTO[]> {
     return this.viewFieldService.findByViewId(workspace.id, viewId);
   }
 
   @Query(() => ViewFieldDTO, { nullable: true })
   @UseGuards(NoPermissionGuard)
-  async getCoreViewField(
+  async getViewField(
     @Args('id', { type: () => String }) id: string,
     @AuthWorkspace() workspace: WorkspaceEntity,
-  ): Promise<ViewFieldEntity | null> {
+  ): Promise<ViewFieldDTO | null> {
     return this.viewFieldService.findById(id, workspace.id);
   }
 
   @Mutation(() => ViewFieldDTO)
-  @UseGuards(UpdateViewFieldPermissionGuard)
-  async updateCoreViewField(
+  @UseGuards(ViewChildEntityPermissionGuard('viewField'))
+  async updateViewField(
     @Args('input') updateViewFieldInput: UpdateViewFieldInput,
     @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,
   ): Promise<ViewFieldDTO> {
-    const isWorkspaceMigrationV2Enabled =
-      await this.featureFlagService.isFeatureEnabled(
-        FeatureFlagKey.IS_WORKSPACE_MIGRATION_V2_ENABLED,
-        workspaceId,
-      );
-
-    if (isWorkspaceMigrationV2Enabled) {
-      return await this.viewFieldV2Service.updateOne({
-        updateViewFieldInput,
-        workspaceId,
-      });
-    }
-
-    return this.viewFieldService.update(
-      updateViewFieldInput.id,
+    return await this.viewFieldService.updateOne({
+      updateViewFieldInput,
       workspaceId,
-      updateViewFieldInput.update,
-    );
+    });
   }
 
   @Mutation(() => ViewFieldDTO)
-  @UseGuards(CreateViewFieldPermissionGuard)
-  async createCoreViewField(
+  @UseGuards(CreateViewChildEntityPermissionGuard)
+  async createViewField(
     @Args('input') createViewFieldInput: CreateViewFieldInput,
     @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,
   ): Promise<ViewFieldDTO> {
-    const isWorkspaceMigrationV2Enabled =
-      await this.featureFlagService.isFeatureEnabled(
-        FeatureFlagKey.IS_WORKSPACE_MIGRATION_V2_ENABLED,
-        workspaceId,
-      );
-
-    if (isWorkspaceMigrationV2Enabled) {
-      return await this.viewFieldV2Service.createOne({
-        createViewFieldInput,
-        workspaceId,
-      });
-    }
-
-    return this.viewFieldService.create({
-      ...createViewFieldInput,
+    return await this.viewFieldService.createOne({
+      createViewFieldInput,
       workspaceId,
     });
   }
 
   @Mutation(() => [ViewFieldDTO])
-  @UseGuards(CreateViewFieldPermissionGuard)
-  async createManyCoreViewFields(
+  @UseGuards(CreateViewChildEntityPermissionGuard)
+  async createManyViewFields(
     @Args('inputs', { type: () => [CreateViewFieldInput] })
     createViewFieldInputs: CreateViewFieldInput[],
     @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,
   ): Promise<ViewFieldDTO[]> {
-    const isWorkspaceMigrationV2Enabled =
-      await this.featureFlagService.isFeatureEnabled(
-        FeatureFlagKey.IS_WORKSPACE_MIGRATION_V2_ENABLED,
-        workspaceId,
-      );
-
-    if (!isWorkspaceMigrationV2Enabled) {
-      throw new ViewFieldException(
-        'Not implemented in v1, please active IS_WORKSPACE_MIGRATION_V2_ENABLED',
-        ViewFieldExceptionCode.INVALID_VIEW_FIELD_DATA,
-      );
-    }
-
-    return await this.viewFieldV2Service.createMany({
+    return await this.viewFieldService.createMany({
       createViewFieldInputs,
       workspaceId,
     });
   }
 
   @Mutation(() => ViewFieldDTO)
-  @UseGuards(DeleteViewFieldPermissionGuard)
-  async deleteCoreViewField(
+  @UseGuards(ViewChildEntityPermissionGuard('viewField'))
+  async deleteViewField(
     @Args('input') deleteViewFieldInput: DeleteViewFieldInput,
     @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,
   ): Promise<ViewFieldDTO> {
-    const isWorkspaceMigrationV2Enabled =
-      await this.featureFlagService.isFeatureEnabled(
-        FeatureFlagKey.IS_WORKSPACE_MIGRATION_V2_ENABLED,
-        workspaceId,
-      );
-
-    if (isWorkspaceMigrationV2Enabled) {
-      return await this.viewFieldV2Service.deleteOne({
-        deleteViewFieldInput,
-        workspaceId,
-      });
-    }
-
-    return this.viewFieldService.delete(deleteViewFieldInput.id, workspaceId);
+    return await this.viewFieldService.deleteOne({
+      deleteViewFieldInput,
+      workspaceId,
+    });
   }
 
   @Mutation(() => ViewFieldDTO)
-  @UseGuards(DestroyViewFieldPermissionGuard)
-  async destroyCoreViewField(
+  @UseGuards(ViewChildEntityPermissionGuard('viewField'))
+  async destroyViewField(
     @Args('input') destroyViewFieldInput: DestroyViewFieldInput,
     @AuthWorkspace() { id: workspaceId }: WorkspaceEntity,
   ): Promise<ViewFieldDTO> {
-    const isWorkspaceMigrationV2Enabled =
-      await this.featureFlagService.isFeatureEnabled(
-        FeatureFlagKey.IS_WORKSPACE_MIGRATION_V2_ENABLED,
-        workspaceId,
-      );
-
-    if (isWorkspaceMigrationV2Enabled) {
-      return await this.viewFieldV2Service.destroyOne({
-        destroyViewFieldInput,
-        workspaceId,
-      });
-    }
-
-    return this.viewFieldService.destroy(destroyViewFieldInput.id, workspaceId);
+    return await this.viewFieldService.destroyOne({
+      destroyViewFieldInput,
+      workspaceId,
+    });
   }
 }

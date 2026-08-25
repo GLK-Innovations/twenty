@@ -1,6 +1,8 @@
 import { isDefined } from 'twenty-shared/utils';
 import { StepStatus, type WorkflowRunStepInfos } from 'twenty-shared/workflow';
 
+import { findParentSteps } from 'src/modules/workflow/workflow-executor/utils/find-parent-steps.util';
+import { getEffectiveParentStatus } from 'src/modules/workflow/workflow-executor/utils/get-effective-parent-status.util';
 import { stepHasBeenStarted } from 'src/modules/workflow/workflow-executor/utils/step-has-been-started.util';
 import { getAllStepIdsInLoop } from 'src/modules/workflow/workflow-executor/workflow-actions/iterator/utils/get-all-step-ids-in-loop.util';
 import {
@@ -17,10 +19,7 @@ export const shouldSkipIteratorStepExecution = ({
   steps: WorkflowAction[];
   stepInfos: WorkflowRunStepInfos;
 }) => {
-  const stepsTargetingIterator = steps.filter(
-    (parentStep) =>
-      isDefined(parentStep) && parentStep.nextStepIds?.includes(step.id),
-  );
+  const allParentSteps = findParentSteps({ step, steps });
 
   const initialLoopStepIds = step.settings.input.initialLoopStepIds;
 
@@ -32,17 +31,25 @@ export const shouldSkipIteratorStepExecution = ({
       })
     : [];
 
-  const parentSteps = stepsTargetingIterator.filter(
-    (step) => !stepIdsInLoop.includes(step.id),
+  const parentSteps = allParentSteps.filter(
+    (parentStep) => !stepIdsInLoop.includes(parentStep.id),
   );
 
   if (stepHasBeenStarted(step.id, stepInfos) || parentSteps.length === 0) {
     return false;
   }
 
-  return parentSteps.every(
-    (step) =>
-      stepInfos[step.id]?.status === StepStatus.SKIPPED ||
-      stepInfos[step.id]?.status === StepStatus.STOPPED,
-  );
+  return parentSteps.every((parentStep) => {
+    const status = getEffectiveParentStatus({
+      parentStep,
+      childStepId: step.id,
+      stepInfos,
+    });
+
+    return (
+      status === StepStatus.SKIPPED ||
+      status === StepStatus.STOPPED ||
+      status === StepStatus.FAILED_SAFELY
+    );
+  });
 };

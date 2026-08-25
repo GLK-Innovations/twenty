@@ -1,11 +1,13 @@
+import { usePageLayoutDraftState } from '@/page-layout/hooks/usePageLayoutDraftState';
 import { act, renderHook } from '@testing-library/react';
 import {
+  AggregateOperations,
+  BarChartLayout,
   GraphOrderBy,
-  GraphType,
+  PageLayoutType,
+  WidgetConfigurationType,
   WidgetType,
 } from '~/generated-metadata/graphql';
-import { AggregateOperations, PageLayoutType } from '~/generated/graphql';
-import { usePageLayoutDraftState } from '../usePageLayoutDraftState';
 import {
   PAGE_LAYOUT_TEST_INSTANCE_ID,
   PageLayoutTestWrapper,
@@ -85,8 +87,12 @@ describe('usePageLayoutDraftState', () => {
         objectMetadataId: null,
         tabs: [
           {
+            isSystemSideEffect: false,
+            universalIdentifier: 'universal-identifier-mock',
             id: 'tab-1',
+            applicationId: '',
             title: 'Tab 1',
+            isActive: true,
             position: 0,
             pageLayoutId: '',
             createdAt: new Date().toISOString(),
@@ -94,13 +100,18 @@ describe('usePageLayoutDraftState', () => {
             deletedAt: null,
             widgets: [
               {
+                isSystemSideEffect: false,
+                universalIdentifier: 'universal-identifier-mock',
                 id: 'widget-1',
+                applicationId: '',
                 pageLayoutTabId: 'tab-1',
                 title: 'New Widget',
+                isActive: true,
                 type: WidgetType.GRAPH,
                 gridPosition: { row: 2, column: 2, rowSpan: 2, columnSpan: 2 },
                 configuration: {
-                  graphType: GraphType.VERTICAL_BAR,
+                  configurationType: WidgetConfigurationType.BAR_CHART,
+                  layout: BarChartLayout.VERTICAL,
                   aggregateOperation: AggregateOperations.COUNT,
                   aggregateFieldMetadataId: 'id',
                   primaryAxisGroupByFieldMetadataId: 'createdAt',

@@ -10,8 +10,9 @@ import { Process } from 'src/engine/core-modules/message-queue/decorators/proces
 import { Processor } from 'src/engine/core-modules/message-queue/decorators/processor.decorator';
 import { MessageQueue } from 'src/engine/core-modules/message-queue/message-queue.constants';
 import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
-import { TwentyORMGlobalManager } from 'src/engine/twenty-orm/twenty-orm-global.manager';
-import { type MessageChannelWorkspaceEntity } from 'src/modules/messaging/common/standard-objects/message-channel.workspace-entity';
+import { MessageChannelEntity } from 'src/engine/metadata-modules/message-channel/entities/message-channel.entity';
+import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
+import { buildSystemAuthContext } from 'src/engine/twenty-orm/utils/build-system-auth-context.util';
 import { MessagingMonitoringService } from 'src/modules/messaging/monitoring/services/messaging-monitoring.service';
 
 export const MESSAGING_MESSAGE_CHANNEL_SYNC_STATUS_MONITORING_CRON_PATTERN =
@@ -23,7 +24,9 @@ export class MessagingMessageChannelSyncStatusMonitoringCronJob {
     @InjectRepository(WorkspaceEntity)
     private readonly workspaceRepository: Repository<WorkspaceEntity>,
     private readonly messagingMonitoringService: MessagingMonitoringService,
-    private readonly twentyORMGlobalManager: TwentyORMGlobalManager,
+    private readonly workspaceOrmManager: WorkspaceOrmManager,
+    @InjectRepository(MessageChannelEntity)
+    private readonly messageChannelRepository: Repository<MessageChannelEntity>,
     private readonly exceptionHandlerService: ExceptionHandlerService,
   ) {}
 
@@ -46,29 +49,33 @@ export class MessagingMessageChannelSyncStatusMonitoringCronJob {
 
     for (const activeWorkspace of activeWorkspaces) {
       try {
-        const messageChannelRepository =
-          await this.twentyORMGlobalManager.getRepositoryForWorkspace<MessageChannelWorkspaceEntity>(
-            activeWorkspace.id,
-            'messageChannel',
-          );
-        const messageChannels = await messageChannelRepository.find({
-          select: ['id', 'syncStatus', 'connectedAccountId'],
-        });
+        const authContext = buildSystemAuthContext(activeWorkspace.id);
 
-        for (const messageChannel of messageChannels) {
-          if (!messageChannel.syncStatus) {
-            continue;
-          }
-          await this.messagingMonitoringService.track({
-            eventName: `message_channel.monitoring.sync_status.${snakeCase(
-              messageChannel.syncStatus,
-            )}`,
-            workspaceId: activeWorkspace.id,
-            connectedAccountId: messageChannel.connectedAccountId,
-            messageChannelId: messageChannel.id,
-            message: messageChannel.syncStatus,
-          });
-        }
+        await this.workspaceOrmManager.executeInWorkspaceContext(
+          async () => {
+            const messageChannels = await this.messageChannelRepository.find({
+              select: ['id', 'syncStatus', 'connectedAccountId'],
+              where: { workspaceId: activeWorkspace.id },
+            });
+
+            for (const messageChannel of messageChannels) {
+              if (!messageChannel.syncStatus) {
+                continue;
+              }
+              await this.messagingMonitoringService.track({
+                eventName: `message_channel.monitoring.sync_status.${snakeCase(
+                  messageChannel.syncStatus,
+                )}`,
+                workspaceId: activeWorkspace.id,
+                connectedAccountId: messageChannel.connectedAccountId,
+                messageChannelId: messageChannel.id,
+                message: messageChannel.syncStatus,
+              });
+            }
+          },
+          authContext,
+          { lite: true },
+        );
       } catch (error) {
         this.exceptionHandlerService.captureExceptions([error], {
           workspace: {

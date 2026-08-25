@@ -7,18 +7,24 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseFilters,
   UseGuards,
 } from '@nestjs/common';
 
+import { ApiPath } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 
-import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
+import { type WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
+import { paginateMetadataRestItems } from 'src/engine/api/rest/metadata/utils/paginate-metadata-rest-items.util';
+import { type AuthenticatedRequest } from 'src/engine/api/rest/types/authenticated-request';
 import { AuthWorkspace } from 'src/engine/decorators/auth/auth-workspace.decorator';
 import { NoPermissionGuard } from 'src/engine/guards/no-permission.guard';
 import { WorkspaceAuthGuard } from 'src/engine/guards/workspace-auth.guard';
-import { CreateViewFilterGroupInput } from 'src/engine/metadata-modules/view-filter-group/dtos/inputs/create-view-filter-group.input';
-import { UpdateViewFilterGroupInput } from 'src/engine/metadata-modules/view-filter-group/dtos/inputs/update-view-filter-group.input';
+import { FlatEntityMapsRestApiExceptionFilter } from 'src/engine/metadata-modules/flat-entity/filters/flat-entity-maps-rest-api-exception.filter';
+import { PermissionsRestApiExceptionFilter } from 'src/engine/metadata-modules/permissions/utils/permissions-rest-api-exception.filter';
+import { type CreateViewFilterGroupInput } from 'src/engine/metadata-modules/view-filter-group/dtos/inputs/create-view-filter-group.input';
+import { type UpdateViewFilterGroupInput } from 'src/engine/metadata-modules/view-filter-group/dtos/inputs/update-view-filter-group.input';
 import { type ViewFilterGroupDTO } from 'src/engine/metadata-modules/view-filter-group/dtos/view-filter-group.dto';
 import {
   generateViewFilterGroupExceptionMessage,
@@ -29,13 +35,18 @@ import {
 } from 'src/engine/metadata-modules/view-filter-group/exceptions/view-filter-group.exception';
 import { ViewFilterGroupRestApiExceptionFilter } from 'src/engine/metadata-modules/view-filter-group/filters/view-filter-group-rest-api-exception.filter';
 import { ViewFilterGroupService } from 'src/engine/metadata-modules/view-filter-group/services/view-filter-group.service';
-import { CreateViewFilterGroupPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/create-view-filter-group-permission.guard';
-import { DeleteViewFilterGroupPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/delete-view-filter-group-permission.guard';
-import { UpdateViewFilterGroupPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/update-view-filter-group-permission.guard';
+import { WorkspaceMigrationRunnerRestApiExceptionFilter } from 'src/engine/workspace-manager/workspace-migration/filters/workspace-migration-runner-rest-api-exception.filter';
+import { CreateViewChildEntityPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/create-view-child-entity-permission.guard';
+import { ViewChildEntityPermissionGuard } from 'src/engine/metadata-modules/view-permissions/guards/view-child-entity-permission.guard';
 
-@Controller('rest/metadata/viewFilterGroups')
+@Controller(`${ApiPath.Rest}/metadata/viewFilterGroups`)
 @UseGuards(WorkspaceAuthGuard)
-@UseFilters(ViewFilterGroupRestApiExceptionFilter)
+@UseFilters(
+  PermissionsRestApiExceptionFilter,
+  ViewFilterGroupRestApiExceptionFilter,
+  FlatEntityMapsRestApiExceptionFilter,
+  WorkspaceMigrationRunnerRestApiExceptionFilter,
+)
 export class ViewFilterGroupController {
   constructor(
     private readonly viewFilterGroupService: ViewFilterGroupService,
@@ -44,14 +55,15 @@ export class ViewFilterGroupController {
   @Get()
   @UseGuards(NoPermissionGuard)
   async findMany(
+    @Req() request: AuthenticatedRequest,
     @AuthWorkspace() workspace: WorkspaceEntity,
     @Query('viewId') viewId?: string,
-  ): Promise<ViewFilterGroupDTO[]> {
-    if (viewId) {
-      return this.viewFilterGroupService.findByViewId(workspace.id, viewId);
-    }
+  ) {
+    const items = viewId
+      ? await this.viewFilterGroupService.findByViewId(workspace.id, viewId)
+      : await this.viewFilterGroupService.findByWorkspaceId(workspace.id);
 
-    return this.viewFilterGroupService.findByWorkspaceId(workspace.id);
+    return paginateMetadataRestItems({ items, request });
   }
 
   @Get(':id')
@@ -85,43 +97,41 @@ export class ViewFilterGroupController {
   }
 
   @Post()
-  @UseGuards(CreateViewFilterGroupPermissionGuard)
+  @UseGuards(CreateViewChildEntityPermissionGuard)
   async create(
     @Body() input: CreateViewFilterGroupInput,
     @AuthWorkspace() workspace: WorkspaceEntity,
   ): Promise<ViewFilterGroupDTO> {
-    return this.viewFilterGroupService.create({
-      ...input,
+    return this.viewFilterGroupService.createOne({
+      createViewFilterGroupInput: input,
       workspaceId: workspace.id,
     });
   }
 
   @Patch(':id')
-  @UseGuards(UpdateViewFilterGroupPermissionGuard)
+  @UseGuards(ViewChildEntityPermissionGuard('viewFilterGroup'))
   async update(
     @Param('id') id: string,
     @Body() input: UpdateViewFilterGroupInput,
     @AuthWorkspace() workspace: WorkspaceEntity,
   ): Promise<ViewFilterGroupDTO> {
-    const updatedViewFilterGroup = await this.viewFilterGroupService.update(
+    return this.viewFilterGroupService.updateOne({
       id,
-      workspace.id,
-      input,
-    );
-
-    return updatedViewFilterGroup;
+      updateViewFilterGroupInput: input,
+      workspaceId: workspace.id,
+    });
   }
 
   @Delete(':id')
-  @UseGuards(DeleteViewFilterGroupPermissionGuard)
+  @UseGuards(ViewChildEntityPermissionGuard('viewFilterGroup'))
   async delete(
     @Param('id') id: string,
     @AuthWorkspace() workspace: WorkspaceEntity,
   ): Promise<{ success: boolean }> {
-    const deletedViewFilterGroup = await this.viewFilterGroupService.delete(
-      id,
-      workspace.id,
-    );
+    const deletedViewFilterGroup = await this.viewFilterGroupService.deleteOne({
+      deleteViewFilterGroupInput: { id },
+      workspaceId: workspace.id,
+    });
 
     return { success: isDefined(deletedViewFilterGroup) };
   }

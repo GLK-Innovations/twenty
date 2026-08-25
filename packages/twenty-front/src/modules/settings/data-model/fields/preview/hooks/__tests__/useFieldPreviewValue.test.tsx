@@ -4,21 +4,23 @@ import { type FieldMetadataItemOption } from '@/object-metadata/types/FieldMetad
 import { FieldMetadataType } from '~/generated-metadata/graphql';
 
 import { getJestMetadataAndApolloMocksWrapper } from '~/testing/jest/getJestMetadataAndApolloMocksWrapper';
-import { generatedMockObjectMetadataItems } from '~/testing/utils/generatedMockObjectMetadataItems';
-import { useFieldPreviewValue } from '../useFieldPreviewValue';
+import { getTestEnrichedObjectMetadataItemsMock } from '~/testing/utils/getTestEnrichedObjectMetadataItemsMock';
+import { useFieldPreviewValue } from '@/settings/data-model/fields/preview/hooks/useFieldPreviewValue';
 
-const mockedCompanyObjectMetadataItem = generatedMockObjectMetadataItems.find(
-  (item) => item.nameSingular === 'company',
-);
+const mockedCompanyObjectMetadataItem =
+  getTestEnrichedObjectMetadataItemsMock().find(
+    (item) => item.nameSingular === 'company',
+  );
 
 const mockedOpportunityObjectMetadataItem =
-  generatedMockObjectMetadataItems.find(
+  getTestEnrichedObjectMetadataItemsMock().find(
     (item) => item.nameSingular === 'opportunity',
   );
 
-const mockedPersonObjectMetadataItem = generatedMockObjectMetadataItems.find(
-  (item) => item.nameSingular === 'person',
-);
+const mockedPersonObjectMetadataItem =
+  getTestEnrichedObjectMetadataItemsMock().find(
+    (item) => item.nameSingular === 'person',
+  );
 
 const Wrapper = getJestMetadataAndApolloMocksWrapper({
   apolloMocks: [],
@@ -26,7 +28,6 @@ const Wrapper = getJestMetadataAndApolloMocksWrapper({
 
 describe('useFieldPreviewValue', () => {
   it('returns null if skip is true', () => {
-    // Given
     const fieldName = 'amount';
     const fieldMetadataItem = mockedOpportunityObjectMetadataItem?.fields.find(
       ({ name, type }) =>
@@ -38,18 +39,15 @@ describe('useFieldPreviewValue', () => {
       throw new Error(`Field ${fieldName} not found`);
     }
 
-    // When
     const { result } = renderHook(
       () => useFieldPreviewValue({ fieldMetadataItem, skip }),
       { wrapper: Wrapper },
     );
 
-    // Then
     expect(result.current).toBeNull();
   });
 
   it("returns the field's preview value for a Currency field", () => {
-    // Given
     const fieldName = 'amount';
     const fieldMetadataItem = mockedOpportunityObjectMetadataItem?.fields.find(
       ({ name, type }) =>
@@ -60,13 +58,11 @@ describe('useFieldPreviewValue', () => {
       throw new Error(`Field ${fieldName} not found`);
     }
 
-    // When
     const { result } = renderHook(
       () => useFieldPreviewValue({ fieldMetadataItem }),
       { wrapper: Wrapper },
     );
 
-    // Then
     expect(result.current).toEqual({
       amountMicros: 2000000000,
       currencyCode: 'USD',
@@ -74,14 +70,12 @@ describe('useFieldPreviewValue', () => {
   });
 
   it("returns the relation object's label identifier preview value for a Relation field", () => {
-    // Given
     const fieldMetadataItem = {
       name: 'people',
       type: FieldMetadataType.RELATION,
     };
     const relationObjectMetadataItem = mockedPersonObjectMetadataItem;
 
-    // When
     const { result } = renderHook(
       () =>
         useFieldPreviewValue({
@@ -91,7 +85,6 @@ describe('useFieldPreviewValue', () => {
       { wrapper: Wrapper },
     );
 
-    // Then
     expect(result.current).toEqual([
       {
         __typename: 'Person',
@@ -105,7 +98,6 @@ describe('useFieldPreviewValue', () => {
   });
 
   it("returns the field's preview value for a Select field", () => {
-    // Given
     const fieldName = 'stage';
     const fieldMetadataItem = mockedOpportunityObjectMetadataItem?.fields.find(
       ({ name, type }) =>
@@ -116,18 +108,15 @@ describe('useFieldPreviewValue', () => {
       throw new Error(`Field ${fieldName} not found`);
     }
 
-    // When
     const { result } = renderHook(
       () => useFieldPreviewValue({ fieldMetadataItem }),
       { wrapper: Wrapper },
     );
 
-    // Then
     expect(result.current).toBe('NEW');
   });
 
   it("returns the field's preview value for a Multi-Select field", () => {
-    // Given
     const options: FieldMetadataItemOption[] = [
       {
         color: 'blue',
@@ -157,18 +146,15 @@ describe('useFieldPreviewValue', () => {
       options,
     };
 
-    // When
     const { result } = renderHook(
       () => useFieldPreviewValue({ fieldMetadataItem }),
       { wrapper: Wrapper },
     );
 
-    // Then
     expect(result.current).toEqual(options.map(({ value }) => value));
   });
 
   it("returns the field's preview value for other field types", () => {
-    // Given
     const fieldName = 'employees';
     const fieldMetadataItem = mockedCompanyObjectMetadataItem?.fields.find(
       ({ name }) => name === fieldName,
@@ -178,13 +164,11 @@ describe('useFieldPreviewValue', () => {
       throw new Error(`Field ${fieldName} not found`);
     }
 
-    // When
     const { result } = renderHook(
       () => useFieldPreviewValue({ fieldMetadataItem }),
       { wrapper: Wrapper },
     );
 
-    // Then
     expect(result.current).toBe(2000);
   });
 });

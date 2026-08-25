@@ -1,42 +1,66 @@
 import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
 
 import { msg } from '@lingui/core/macro';
-import { type ObjectsPermissionsByRoleId } from 'twenty-shared/types';
+import { FieldMetadataType } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
-import { In, Repository } from 'typeorm';
 
+import { ApplicationService } from 'src/engine/core-modules/application/application.service';
+import { UserInputError } from 'src/engine/core-modules/graphql/utils/graphql-errors.util';
 import { RelationType } from 'src/engine/metadata-modules/field-metadata/interfaces/relation-type.interface';
-
-import {
-  InternalServerError,
-  UserInputError,
-} from 'src/engine/core-modules/graphql/utils/graphql-errors.util';
-import { FieldMetadataEntity } from 'src/engine/metadata-modules/field-metadata/field-metadata.entity';
-import { isFieldMetadataTypeRelation } from 'src/engine/metadata-modules/field-metadata/utils/is-field-metadata-type-relation.util';
+import { WorkspaceManyOrAllFlatEntityMapsCacheService } from 'src/engine/metadata-modules/flat-entity/services/workspace-many-or-all-flat-entity-maps-cache.service';
+import { type FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/flat-entity-maps.type';
+import { findFlatEntityByIdInFlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/utils/find-flat-entity-by-id-in-flat-entity-maps.util';
+import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
+import { type FlatFieldPermissionMaps } from 'src/engine/metadata-modules/flat-field-permission/types/flat-field-permission-maps.type';
+import { type FlatFieldPermission } from 'src/engine/metadata-modules/flat-field-permission/types/flat-field-permission.type';
+import { fromCreateFieldPermissionInputToUniversalFlatFieldPermission } from 'src/engine/metadata-modules/flat-field-permission/utils/from-create-field-permission-input-to-universal-flat-field-permission.util';
+import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
+import { type FlatRole } from 'src/engine/metadata-modules/flat-role/types/flat-role.type';
 import { type UpsertFieldPermissionsInput } from 'src/engine/metadata-modules/object-permission/dtos/upsert-field-permissions.input';
-import { FieldPermissionEntity } from 'src/engine/metadata-modules/object-permission/field-permission/field-permission.entity';
 import {
   PermissionsException,
   PermissionsExceptionCode,
   PermissionsExceptionMessage,
 } from 'src/engine/metadata-modules/permissions/permissions.exception';
-import { RoleEntity } from 'src/engine/metadata-modules/role/role.entity';
-import { type ObjectMetadataMaps } from 'src/engine/metadata-modules/types/object-metadata-maps';
-import { WorkspacePermissionsCacheService } from 'src/engine/metadata-modules/workspace-permissions-cache/workspace-permissions-cache.service';
-import { WorkspaceCacheStorageService } from 'src/engine/workspace-cache-storage/workspace-cache-storage.service';
+import { WorkspaceCacheService } from 'src/engine/workspace-cache/services/workspace-cache.service';
+import { WorkspaceMigrationBuilderException } from 'src/engine/workspace-manager/workspace-migration/exceptions/workspace-migration-builder-exception';
+import { WorkspaceMigrationValidateBuildAndRunService } from 'src/engine/workspace-manager/workspace-migration/services/workspace-migration-validate-build-and-run-service';
+import { type UniversalFlatFieldPermission } from 'src/engine/workspace-manager/workspace-migration/universal-flat-entity/types/universal-flat-field-permission.type';
+
+type DesiredFieldPermission = {
+  objectMetadataId: string;
+  fieldMetadataId: string;
+  canReadFieldValue?: boolean | null;
+  canUpdateFieldValue?: boolean | null;
+};
+
+const keyFrom = (objectMetadataId: string, fieldMetadataId: string) =>
+  `${objectMetadataId}:${fieldMetadataId}`;
+
+const toUniversalFlatFieldPermissionToDelete = (
+  fieldPermission: FlatFieldPermission,
+): UniversalFlatFieldPermission => ({
+  universalIdentifier: fieldPermission.universalIdentifier,
+  applicationUniversalIdentifier:
+    fieldPermission.applicationUniversalIdentifier,
+  roleUniversalIdentifier: fieldPermission.roleUniversalIdentifier,
+  objectMetadataUniversalIdentifier:
+    fieldPermission.objectMetadataUniversalIdentifier,
+  fieldMetadataUniversalIdentifier:
+    fieldPermission.fieldMetadataUniversalIdentifier,
+  canReadFieldValue: fieldPermission.canReadFieldValue ?? undefined,
+  canUpdateFieldValue: fieldPermission.canUpdateFieldValue ?? undefined,
+  createdAt: fieldPermission.createdAt,
+  updatedAt: fieldPermission.updatedAt,
+});
 
 @Injectable()
 export class FieldPermissionService {
   constructor(
-    @InjectRepository(RoleEntity)
-    private readonly roleRepository: Repository<RoleEntity>,
-    @InjectRepository(FieldMetadataEntity)
-    private readonly fieldMetadataRepository: Repository<FieldMetadataEntity>,
-    @InjectRepository(FieldPermissionEntity)
-    private readonly fieldPermissionsRepository: Repository<FieldPermissionEntity>,
-    private readonly workspacePermissionsCacheService: WorkspacePermissionsCacheService,
-    private readonly workspaceCacheStorageService: WorkspaceCacheStorageService,
+    private readonly workspaceMigrationValidateBuildAndRunService: WorkspaceMigrationValidateBuildAndRunService,
+    private readonly workspaceManyOrAllFlatEntityMapsCacheService: WorkspaceManyOrAllFlatEntityMapsCacheService,
+    private readonly workspaceCacheService: WorkspaceCacheService,
+    private readonly applicationService: ApplicationService,
   ) {}
 
   public async upsertFieldPermissions({
@@ -45,146 +69,291 @@ export class FieldPermissionService {
   }: {
     workspaceId: string;
     input: UpsertFieldPermissionsInput;
-  }): Promise<FieldPermissionEntity[]> {
-    const role = await this.getRoleOrThrow({
-      roleId: input.roleId,
-      workspaceId,
-    });
+  }): Promise<FlatFieldPermission[]> {
+    const [flatMapsForRoleObjectField, flatFieldPermissionMapsResult] =
+      await Promise.all([
+        this.workspaceManyOrAllFlatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+          {
+            workspaceId,
+            flatMapsKeys: [
+              'flatRoleMaps',
+              'flatObjectMetadataMaps',
+              'flatFieldMetadataMaps',
+            ],
+          },
+        ),
+        this.workspaceCacheService.getOrRecompute(workspaceId, [
+          'flatFieldPermissionMaps',
+        ] as unknown as Parameters<WorkspaceCacheService['getOrRecompute']>[1]),
+      ]);
+    const flatRoleMaps = flatMapsForRoleObjectField.flatRoleMaps;
+    const flatObjectMetadataMaps =
+      flatMapsForRoleObjectField.flatObjectMetadataMaps;
+    const flatFieldMetadataMaps =
+      flatMapsForRoleObjectField.flatFieldMetadataMaps;
+    const flatFieldPermissionMapsResolved: FlatFieldPermissionMaps = (
+      flatFieldPermissionMapsResult as unknown as {
+        flatFieldPermissionMaps: FlatFieldPermissionMaps;
+      }
+    ).flatFieldPermissionMaps;
 
-    const { data: rolesPermissions } =
-      await this.workspacePermissionsCacheService.getRolesPermissionsFromCache({
-        workspaceId,
-      });
+    const { rolesPermissions } =
+      await this.workspaceCacheService.getOrRecompute(workspaceId, [
+        'rolesPermissions',
+      ]);
 
-    await this.validateRoleIsEditableOrThrow({
-      role,
-    });
+    const roleUniversalIdentifier =
+      flatRoleMaps.universalIdentifierById[input.roleId];
+    const flatRole: FlatRole | undefined = isDefined(roleUniversalIdentifier)
+      ? (flatRoleMaps.byUniversalIdentifier[roleUniversalIdentifier] as
+          | FlatRole
+          | undefined)
+      : undefined;
 
-    const { byId: objectMetadataMapsById } =
-      await this.workspaceCacheStorageService.getObjectMetadataMapsOrThrow(
-        workspaceId,
-      );
-
-    const existingFieldPermissions = await this.fieldPermissionsRepository.find(
-      {
-        where: {
-          roleId: input.roleId,
-          workspaceId,
-        },
-      },
+    const currentFieldPermissionsForRole = Object.values(
+      flatFieldPermissionMapsResolved.byUniversalIdentifier,
+    ).filter(
+      (fp): fp is FlatFieldPermission =>
+        isDefined(fp) && fp.roleUniversalIdentifier === roleUniversalIdentifier,
     );
 
-    const fieldPermissionsToDeleteIds: string[] = [];
+    const desiredMap = new Map<string, DesiredFieldPermission>();
 
-    input.fieldPermissions.forEach((fieldPermission) => {
+    for (const fieldPermission of input.fieldPermissions) {
       this.validateFieldPermission({
         allFieldPermissions: input.fieldPermissions,
         fieldPermission,
-        objectMetadataMapsById,
+        flatObjectMetadataMaps,
+        flatFieldMetadataMaps,
         rolesPermissions,
-        role,
+        flatRole,
       });
 
-      if (
-        fieldPermission.canReadFieldValue === null ||
-        fieldPermission.canUpdateFieldValue === null
-      ) {
-        this.checkIfFieldPermissionShouldBeDeleted({
-          fieldPermission,
-          existingFieldPermissions,
-          fieldPermissionsToDeleteIds,
-        });
+      const bothNull =
+        (fieldPermission.canReadFieldValue === null ||
+          fieldPermission.canReadFieldValue === undefined) &&
+        (fieldPermission.canUpdateFieldValue === null ||
+          fieldPermission.canUpdateFieldValue === undefined);
+
+      if (bothNull) {
+        continue;
       }
-    });
 
-    const fieldPermissions = input.fieldPermissions.map((fieldPermission) => ({
-      ...fieldPermission,
-      roleId: input.roleId,
-      workspaceId,
-    }));
-
-    const existingFieldPermissionsToDelete = existingFieldPermissions.filter(
-      (existingFieldPermissionToFilter) =>
-        fieldPermissionsToDeleteIds.includes(
-          existingFieldPermissionToFilter.id,
+      desiredMap.set(
+        keyFrom(
+          fieldPermission.objectMetadataId,
+          fieldPermission.fieldMetadataId,
         ),
-    );
-
-    const fieldPermissionsToUpsert = fieldPermissions.filter(
-      (fieldPermissionToUpsert) =>
-        !existingFieldPermissionsToDelete.some(
-          (existingFieldPermissionToDelete) =>
-            existingFieldPermissionToDelete.fieldMetadataId ===
-            fieldPermissionToUpsert.fieldMetadataId,
-        ),
-    );
-
-    const fieldMetadatasForFieldPermissions =
-      await this.fieldMetadataRepository.find({
-        where: {
-          id: In(fieldPermissions.map((fp) => fp.fieldMetadataId)),
+        {
+          objectMetadataId: fieldPermission.objectMetadataId,
+          fieldMetadataId: fieldPermission.fieldMetadataId,
+          canReadFieldValue: fieldPermission.canReadFieldValue,
+          canUpdateFieldValue: fieldPermission.canUpdateFieldValue,
         },
-      });
-
-    const relatedFieldPermissionsToUpsert =
-      this.computeFieldPermissionForRelationTargetFieldMetadata({
-        fieldPermissions: fieldPermissionsToUpsert,
-        fieldMetadatasForFieldPermissions,
-      });
-
-    await this.fieldPermissionsRepository.upsert(
-      [...fieldPermissionsToUpsert, ...relatedFieldPermissionsToUpsert],
-      {
-        conflictPaths: ['fieldMetadataId', 'roleId'],
-      },
-    );
-
-    if (fieldPermissionsToDeleteIds.length > 0) {
-      const relatedFieldPermissionToDeleteIds =
-        this.getRelatedFieldPermissionsToDeleteIds({
-          allFieldPermissions: existingFieldPermissions,
-          fieldPermissionsToDelete: existingFieldPermissionsToDelete,
-          fieldMetadatas: fieldMetadatasForFieldPermissions,
-        });
-
-      await this.fieldPermissionsRepository.delete({
-        id: In([
-          ...fieldPermissionsToDeleteIds,
-          ...relatedFieldPermissionToDeleteIds,
-        ]),
-      });
+      );
     }
 
-    await this.workspacePermissionsCacheService.recomputeRolesPermissionsCache({
-      workspaceId,
-      roleIds: [input.roleId],
+    const mirroredFieldKeys = this.addRelatedFieldPermissionsToDesired({
+      desiredMap,
+      inputFieldPermissions: input.fieldPermissions,
+      flatFieldMetadataMaps,
     });
 
-    return this.fieldPermissionsRepository.find({
-      where: {
-        roleId: input.roleId,
-        objectMetadataId: In(
-          input.fieldPermissions.map(
-            (fieldPermission) => fieldPermission.objectMetadataId,
-          ),
-        ),
-        workspaceId,
-      },
-    });
+    const inputFieldKeys = new Set(
+      input.fieldPermissions.map((fp) =>
+        keyFrom(fp.objectMetadataId, fp.fieldMetadataId),
+      ),
+    );
+
+    const { workspaceCustomFlatApplication } =
+      await this.applicationService.findWorkspaceTwentyStandardAndCustomApplicationOrThrow(
+        { workspaceId },
+      );
+
+    const flatEntityToCreate: (UniversalFlatFieldPermission & {
+      id: string;
+    })[] = [];
+    const flatEntityToUpdate: UniversalFlatFieldPermission[] = [];
+    const flatEntityToDelete: UniversalFlatFieldPermission[] = [];
+
+    const currentByKey = new Map(
+      currentFieldPermissionsForRole.map((fp) => [
+        keyFrom(fp.objectMetadataId, fp.fieldMetadataId),
+        fp,
+      ]),
+    );
+
+    for (const [key, desired] of desiredMap) {
+      const current = currentByKey.get(
+        keyFrom(desired.objectMetadataId, desired.fieldMetadataId),
+      );
+
+      if (!isDefined(current)) {
+        const canReadFieldValue = desired.canReadFieldValue ?? null;
+        const canUpdateFieldValue = desired.canUpdateFieldValue ?? null;
+
+        if (!isDefined(canReadFieldValue) && !isDefined(canUpdateFieldValue)) {
+          continue;
+        }
+
+        flatEntityToCreate.push(
+          fromCreateFieldPermissionInputToUniversalFlatFieldPermission({
+            fieldPermissionInput: {
+              objectMetadataId: desired.objectMetadataId,
+              fieldMetadataId: desired.fieldMetadataId,
+              canReadFieldValue,
+              canUpdateFieldValue,
+            },
+            roleId: input.roleId,
+            flatApplication: workspaceCustomFlatApplication,
+            flatRoleMaps,
+            flatObjectMetadataMaps,
+            flatFieldMetadataMaps,
+          }),
+        );
+      } else {
+        const effectiveCanRead =
+          desired.canReadFieldValue !== undefined
+            ? desired.canReadFieldValue
+            : current.canReadFieldValue;
+        const effectiveCanUpdate =
+          desired.canUpdateFieldValue !== undefined
+            ? desired.canUpdateFieldValue
+            : current.canUpdateFieldValue;
+
+        if (!isDefined(effectiveCanRead) && !isDefined(effectiveCanUpdate)) {
+          // The mirror pass only owns rows it could have written itself, so a row
+          // another application declared is left alone rather than silently dropped
+          const isForeignMirroredRow =
+            mirroredFieldKeys.has(key) &&
+            !inputFieldKeys.has(key) &&
+            current.applicationUniversalIdentifier !==
+              workspaceCustomFlatApplication.universalIdentifier;
+
+          if (!isForeignMirroredRow) {
+            flatEntityToDelete.push(
+              toUniversalFlatFieldPermissionToDelete(current),
+            );
+          }
+
+          continue;
+        }
+
+        const changed =
+          effectiveCanRead !== current.canReadFieldValue ||
+          effectiveCanUpdate !== current.canUpdateFieldValue;
+
+        if (changed) {
+          const now = new Date().toISOString();
+          flatEntityToUpdate.push({
+            universalIdentifier: current.universalIdentifier,
+            applicationUniversalIdentifier:
+              current.applicationUniversalIdentifier,
+            roleUniversalIdentifier: current.roleUniversalIdentifier,
+            objectMetadataUniversalIdentifier:
+              current.objectMetadataUniversalIdentifier,
+            fieldMetadataUniversalIdentifier:
+              current.fieldMetadataUniversalIdentifier,
+            canReadFieldValue: effectiveCanRead,
+            canUpdateFieldValue: effectiveCanUpdate,
+            createdAt: current.createdAt,
+            updatedAt: now,
+          });
+        }
+      }
+    }
+
+    for (const current of currentFieldPermissionsForRole) {
+      const key = keyFrom(current.objectMetadataId, current.fieldMetadataId);
+
+      if (inputFieldKeys.has(key) && !desiredMap.has(key)) {
+        flatEntityToDelete.push(
+          toUniversalFlatFieldPermissionToDelete(current),
+        );
+      }
+    }
+
+    if (
+      flatEntityToCreate.length === 0 &&
+      flatEntityToUpdate.length === 0 &&
+      flatEntityToDelete.length === 0
+    ) {
+      const desiredObjectMetadataIds = new Set(
+        input.fieldPermissions.map((fp) => fp.objectMetadataId),
+      );
+      return currentFieldPermissionsForRole.filter((fp) =>
+        desiredObjectMetadataIds.has(fp.objectMetadataId),
+      );
+    }
+
+    const buildAndRunResult =
+      await this.workspaceMigrationValidateBuildAndRunService.validateBuildAndRunWorkspaceMigration(
+        {
+          allFlatEntityOperationByMetadataName: {
+            fieldPermission: {
+              flatEntityToCreate,
+              flatEntityToUpdate,
+              flatEntityToDelete,
+            },
+          },
+          workspaceId,
+          isSystemBuild: false,
+          applicationUniversalIdentifier:
+            workspaceCustomFlatApplication.universalIdentifier,
+        } as Parameters<
+          WorkspaceMigrationValidateBuildAndRunService['validateBuildAndRunWorkspaceMigration']
+        >[0],
+      );
+
+    if (buildAndRunResult.status === 'fail') {
+      throw new WorkspaceMigrationBuilderException(
+        buildAndRunResult,
+        'Validation errors occurred while upserting field permissions',
+      );
+    }
+
+    await this.workspaceCacheService.invalidateAndRecompute(workspaceId, [
+      'rolesPermissions',
+    ]);
+
+    const freshFlatFieldPermissionMaps: FlatFieldPermissionMaps = (
+      (await this.workspaceCacheService.getOrRecompute(workspaceId, [
+        'flatFieldPermissionMaps',
+      ] as unknown as Parameters<
+        WorkspaceCacheService['getOrRecompute']
+      >[1])) as unknown as { flatFieldPermissionMaps: FlatFieldPermissionMaps }
+    ).flatFieldPermissionMaps;
+
+    const resultFieldPermissions = Object.values(
+      freshFlatFieldPermissionMaps.byUniversalIdentifier,
+    ).filter(
+      (fp): fp is FlatFieldPermission =>
+        isDefined(fp) && fp.roleUniversalIdentifier === roleUniversalIdentifier,
+    );
+
+    const desiredObjectMetadataIds = new Set(
+      input.fieldPermissions.map((fp) => fp.objectMetadataId),
+    );
+    const filtered = resultFieldPermissions.filter((fp) =>
+      desiredObjectMetadataIds.has(fp.objectMetadataId),
+    );
+    return filtered;
   }
 
   private validateFieldPermission({
     allFieldPermissions,
     fieldPermission,
-    objectMetadataMapsById,
+    flatObjectMetadataMaps,
+    flatFieldMetadataMaps,
     rolesPermissions,
-    role,
+    flatRole,
   }: {
     allFieldPermissions: UpsertFieldPermissionsInput['fieldPermissions'];
     fieldPermission: UpsertFieldPermissionsInput['fieldPermissions'][0];
-    objectMetadataMapsById: ObjectMetadataMaps['byId'];
-    rolesPermissions: ObjectsPermissionsByRoleId;
-    role: RoleEntity;
+    flatObjectMetadataMaps: FlatEntityMaps<FlatObjectMetadata>;
+    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
+    rolesPermissions: Record<string, Record<string, unknown>> | undefined;
+    flatRole: { id: string } | undefined;
   }) {
     const duplicateFieldPermissions = allFieldPermissions.filter(
       (permission) =>
@@ -196,12 +365,11 @@ export class FieldPermissionService {
         `Cannot accept more than one fieldPermission for field ${fieldPermission.fieldMetadataId} in input.`,
       );
     }
+
     if (
-      ('canUpdateFieldValue' in fieldPermission &&
-        fieldPermission.canUpdateFieldValue !== null &&
+      (isDefined(fieldPermission.canUpdateFieldValue) &&
         fieldPermission.canUpdateFieldValue !== false) ||
-      ('canReadFieldValue' in fieldPermission &&
-        fieldPermission.canReadFieldValue !== null &&
+      (isDefined(fieldPermission.canReadFieldValue) &&
         fieldPermission.canReadFieldValue !== false)
     ) {
       throw new PermissionsException(
@@ -213,10 +381,12 @@ export class FieldPermissionService {
       );
     }
 
-    const objectMetadataForFieldPermission =
-      objectMetadataMapsById[fieldPermission.objectMetadataId];
+    const flatObjectMetadata = findFlatEntityByIdInFlatEntityMaps({
+      flatEntityId: fieldPermission.objectMetadataId,
+      flatEntityMaps: flatObjectMetadataMaps,
+    });
 
-    if (!isDefined(objectMetadataForFieldPermission)) {
+    if (!isDefined(flatObjectMetadata)) {
       throw new PermissionsException(
         PermissionsExceptionMessage.OBJECT_METADATA_NOT_FOUND,
         PermissionsExceptionCode.OBJECT_METADATA_NOT_FOUND,
@@ -226,7 +396,7 @@ export class FieldPermissionService {
       );
     }
 
-    if (objectMetadataForFieldPermission.isSystem === true) {
+    if (flatObjectMetadata.isSystem === true) {
       throw new PermissionsException(
         PermissionsExceptionMessage.CANNOT_ADD_FIELD_PERMISSION_ON_SYSTEM_OBJECT,
         PermissionsExceptionCode.CANNOT_ADD_FIELD_PERMISSION_ON_SYSTEM_OBJECT,
@@ -236,12 +406,12 @@ export class FieldPermissionService {
       );
     }
 
-    const fieldMetadataForFieldPermission =
-      objectMetadataForFieldPermission.fieldsById[
-        fieldPermission.fieldMetadataId
-      ];
+    const flatFieldMetadata = findFlatEntityByIdInFlatEntityMaps({
+      flatEntityId: fieldPermission.fieldMetadataId,
+      flatEntityMaps: flatFieldMetadataMaps,
+    });
 
-    if (!isDefined(fieldMetadataForFieldPermission)) {
+    if (!isDefined(flatFieldMetadata)) {
       throw new PermissionsException(
         PermissionsExceptionMessage.FIELD_METADATA_NOT_FOUND,
         PermissionsExceptionCode.FIELD_METADATA_NOT_FOUND,
@@ -251,10 +421,11 @@ export class FieldPermissionService {
       );
     }
 
-    const rolePermissionOnObject =
-      rolesPermissions?.[role.id]?.[fieldPermission.objectMetadataId];
+    const rolePermissionOnObject = isDefined(flatRole)
+      ? rolesPermissions?.[flatRole.id]?.[fieldPermission.objectMetadataId]
+      : undefined;
 
-    if (!isDefined(rolePermissionOnObject)) {
+    if (isDefined(flatRole) && !isDefined(rolePermissionOnObject)) {
       throw new PermissionsException(
         PermissionsExceptionMessage.OBJECT_PERMISSION_NOT_FOUND,
         PermissionsExceptionCode.OBJECT_PERMISSION_NOT_FOUND,
@@ -265,194 +436,98 @@ export class FieldPermissionService {
     }
   }
 
-  private async getRoleOrThrow({
-    roleId,
-    workspaceId,
+  private addRelatedFieldPermissionsToDesired({
+    desiredMap,
+    inputFieldPermissions,
+    flatFieldMetadataMaps,
   }: {
-    roleId: string;
-    workspaceId: string;
-  }) {
-    const role = await this.roleRepository.findOne({
-      where: {
-        id: roleId,
-        workspaceId,
-      },
-      relations: ['objectPermissions', 'fieldPermissions'],
-    });
-
-    if (!isDefined(role)) {
-      throw new PermissionsException(
-        PermissionsExceptionMessage.ROLE_NOT_FOUND,
-        PermissionsExceptionCode.ROLE_NOT_FOUND,
-        {
-          userFriendlyMessage: msg`The role you are trying to modify could not be found. It may have been deleted or you may not have access to it.`,
-        },
-      );
-    }
-
-    return role;
-  }
-
-  private async validateRoleIsEditableOrThrow({ role }: { role: RoleEntity }) {
-    if (!role.isEditable) {
-      throw new PermissionsException(
-        PermissionsExceptionMessage.ROLE_NOT_EDITABLE,
-        PermissionsExceptionCode.ROLE_NOT_EDITABLE,
-        {
-          userFriendlyMessage: msg`This role cannot be modified because it is a system role. Only custom roles can be edited.`,
-        },
-      );
-    }
-  }
-
-  private checkIfFieldPermissionShouldBeDeleted({
-    fieldPermission,
-    existingFieldPermissions,
-    fieldPermissionsToDeleteIds,
-  }: {
-    fieldPermission: UpsertFieldPermissionsInput['fieldPermissions'][0];
-    existingFieldPermissions: FieldPermissionEntity[];
-    fieldPermissionsToDeleteIds: string[];
-  }) {
-    const existingFieldPermission = existingFieldPermissions.find(
-      (existingFieldPermission) =>
-        existingFieldPermission.fieldMetadataId ===
-        fieldPermission.fieldMetadataId,
+    desiredMap: Map<string, DesiredFieldPermission>;
+    inputFieldPermissions: UpsertFieldPermissionsInput['fieldPermissions'];
+    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
+  }): Set<string> {
+    const inputKeys = new Set(
+      inputFieldPermissions.map((fp) =>
+        keyFrom(fp.objectMetadataId, fp.fieldMetadataId),
+      ),
     );
+    const mirroredKeys = new Set<string>();
 
-    if (existingFieldPermission) {
-      const finalCanReadFieldValue =
-        'canReadFieldValue' in fieldPermission
-          ? fieldPermission.canReadFieldValue
-          : existingFieldPermission.canReadFieldValue;
-      const finalCanUpdateFieldValue =
-        'canUpdateFieldValue' in fieldPermission
-          ? fieldPermission.canUpdateFieldValue
-          : existingFieldPermission.canUpdateFieldValue;
+    for (const fieldPermission of inputFieldPermissions) {
+      const flatFieldMetadata = findFlatEntityByIdInFlatEntityMaps({
+        flatEntityId: fieldPermission.fieldMetadataId,
+        flatEntityMaps: flatFieldMetadataMaps,
+      });
 
       if (
-        finalCanReadFieldValue === null &&
-        finalCanUpdateFieldValue === null
+        !isDefined(flatFieldMetadata) ||
+        flatFieldMetadata.type !== FieldMetadataType.RELATION
       ) {
-        fieldPermissionsToDeleteIds.push(existingFieldPermission.id);
+        continue;
       }
-    }
-  }
 
-  private getRelatedFieldPermissionsToDeleteIds({
-    allFieldPermissions,
-    fieldPermissionsToDelete,
-    fieldMetadatas,
-  }: {
-    allFieldPermissions: FieldPermissionEntity[];
-    fieldPermissionsToDelete: FieldPermissionEntity[];
-    fieldMetadatas: FieldMetadataEntity[];
-  }) {
-    const fieldMetadatasForFieldPermissionsToDelete = fieldMetadatas.filter(
-      (fieldMetadata) =>
-        fieldPermissionsToDelete.some(
-          (existingFieldPermissionToDelete) =>
-            existingFieldPermissionToDelete.fieldMetadataId ===
-            fieldMetadata.id,
-        ),
-    );
-
-    const relationTargetFieldMetadataIds: string[] = [];
-
-    for (const fieldMetadataForFieldPermissionToDelete of fieldMetadatasForFieldPermissionsToDelete) {
+      const relationType = (
+        flatFieldMetadata.settings as { relationType?: string } | undefined
+      )?.relationType;
       if (
-        isFieldMetadataTypeRelation(fieldMetadataForFieldPermissionToDelete)
+        relationType !== RelationType.ONE_TO_MANY &&
+        relationType !== RelationType.MANY_TO_ONE
       ) {
-        if (
-          fieldMetadataForFieldPermissionToDelete.settings?.relationType ===
-            RelationType.ONE_TO_MANY ||
-          fieldMetadataForFieldPermissionToDelete.settings?.relationType ===
-            RelationType.MANY_TO_ONE
-        ) {
-          relationTargetFieldMetadataIds.push(
-            fieldMetadataForFieldPermissionToDelete.relationTargetFieldMetadataId,
-          );
-        }
+        continue;
       }
-    }
 
-    const fieldPermissionsForRelationTargetFieldMetadataIds =
-      allFieldPermissions
-        .filter((fieldPermission) =>
-          relationTargetFieldMetadataIds.includes(
-            fieldPermission.fieldMetadataId,
-          ),
-        )
-        .map((fieldPermission) => fieldPermission.id);
+      const targetObjectId =
+        flatFieldMetadata.relationTargetObjectMetadataId ?? undefined;
+      const targetFieldId =
+        flatFieldMetadata.relationTargetFieldMetadataId ?? undefined;
 
-    return fieldPermissionsForRelationTargetFieldMetadataIds;
-  }
+      if (!targetObjectId || !targetFieldId) {
+        continue;
+      }
 
-  private computeFieldPermissionForRelationTargetFieldMetadata({
-    fieldPermissions,
-    fieldMetadatasForFieldPermissions,
-  }: {
-    fieldPermissions: UpsertFieldPermissionsInput['fieldPermissions'];
-    fieldMetadatasForFieldPermissions: FieldMetadataEntity[];
-  }) {
-    return fieldPermissions
-      .map((fieldPermission) => {
-        const fieldMetadata = fieldMetadatasForFieldPermissions.find(
-          (fm) => fm.id === fieldPermission.fieldMetadataId,
+      const targetKey = keyFrom(targetObjectId, targetFieldId);
+      if (inputKeys.has(targetKey)) {
+        const targetInInput = inputFieldPermissions.find(
+          (fp) =>
+            fp.objectMetadataId === targetObjectId &&
+            fp.fieldMetadataId === targetFieldId,
         );
-
-        if (!isDefined(fieldMetadata)) {
-          throw new InternalServerError(
-            'Field metadata not found for field permission',
-          );
-        }
-
-        if (isFieldMetadataTypeRelation(fieldMetadata)) {
-          if (
-            fieldMetadata.settings?.relationType === RelationType.ONE_TO_MANY ||
-            fieldMetadata.settings?.relationType === RelationType.MANY_TO_ONE
-          ) {
-            const fieldPermissionsOnRelationTargetField =
-              fieldPermissions.filter(
-                (fieldPermissionInput) =>
-                  fieldPermissionInput.fieldMetadataId ===
-                  fieldMetadata.relationTargetFieldMetadataId,
-              );
-
-            if (fieldPermissionsOnRelationTargetField.length > 0) {
-              const firstFieldPermission =
-                fieldPermissionsOnRelationTargetField[0]; // validation rules guarantee there can only be one
-
-              const hasConflictingPermissions =
-                fieldPermission.canReadFieldValue !==
-                  firstFieldPermission.canReadFieldValue ||
-                fieldPermission.canUpdateFieldValue !==
-                  firstFieldPermission.canUpdateFieldValue;
-
-              if (hasConflictingPermissions) {
-                const fieldName = fieldMetadata.name;
-
-                throw new UserInputError(
-                  'Conflicting field permissions found for relation target field',
-                  {
-                    userFriendlyMessage: msg`Contradicting field permissions have been detected on a relation field (${fieldName}).`,
-                  },
-                );
-              }
-
-              return;
-            }
-
-            return {
-              ...fieldPermission,
-              objectMetadataId: fieldMetadata.relationTargetObjectMetadataId,
-              fieldMetadataId: fieldMetadata.relationTargetFieldMetadataId,
-            };
+        if (isDefined(targetInInput)) {
+          const hasConflict =
+            fieldPermission.canReadFieldValue !==
+              targetInInput.canReadFieldValue ||
+            fieldPermission.canUpdateFieldValue !==
+              targetInInput.canUpdateFieldValue;
+          if (hasConflict) {
+            throw new UserInputError(
+              'Conflicting field permissions found for relation target field',
+              {
+                userFriendlyMessage: msg`Contradicting field permissions have been detected on a relation field.`,
+              },
+            );
           }
         }
+        continue;
+      }
 
-        return null;
-      })
-      .filter(isDefined);
+      // A cleared source row is dropped from desiredMap by the bothNull gate above,
+      // so the mirror has to be told to clear explicitly or it survives as an orphan
+      const sourceIsCleared =
+        !isDefined(fieldPermission.canReadFieldValue) &&
+        !isDefined(fieldPermission.canUpdateFieldValue);
+
+      desiredMap.set(targetKey, {
+        objectMetadataId: targetObjectId,
+        fieldMetadataId: targetFieldId,
+        canReadFieldValue: sourceIsCleared
+          ? null
+          : fieldPermission.canReadFieldValue,
+        canUpdateFieldValue: sourceIsCleared
+          ? null
+          : fieldPermission.canUpdateFieldValue,
+      });
+      mirroredKeys.add(targetKey);
+    }
+
+    return mirroredKeys;
   }
 }

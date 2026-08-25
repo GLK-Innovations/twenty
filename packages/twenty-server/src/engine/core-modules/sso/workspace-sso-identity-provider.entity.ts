@@ -1,21 +1,16 @@
 /* @license Enterprise */
 
-import { ObjectType, registerEnumType } from '@nestjs/graphql';
-
-import { IDField } from '@ptc-org/nestjs-query-graphql';
+import { Field, ObjectType, registerEnumType } from '@nestjs/graphql';
 import {
   Column,
   CreateDateColumn,
   Entity,
-  JoinColumn,
-  ManyToOne,
   PrimaryGeneratedColumn,
-  Relation,
   UpdateDateColumn,
 } from 'typeorm';
 
 import { UUIDScalarType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/scalars';
-import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
+import { WorkspaceRelatedEntity } from 'src/engine/workspace-manager/types/workspace-related-entity';
 
 export enum IdentityProviderType {
   OIDC = 'OIDC',
@@ -46,9 +41,9 @@ registerEnumType(SSOIdentityProviderStatus, {
 
 @Entity({ name: 'workspaceSSOIdentityProvider', schema: 'core' })
 @ObjectType('WorkspaceSSOIdentityProvider')
-export class WorkspaceSSOIdentityProviderEntity {
+export class WorkspaceSSOIdentityProviderEntity extends WorkspaceRelatedEntity {
   // COMMON
-  @IDField(() => UUIDScalarType)
+  @Field(() => UUIDScalarType)
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -61,19 +56,6 @@ export class WorkspaceSSOIdentityProviderEntity {
     default: SSOIdentityProviderStatus.Active,
   })
   status: SSOIdentityProviderStatus;
-
-  @ManyToOne(
-    () => WorkspaceEntity,
-    (workspace) => workspace.workspaceSSOIdentityProviders,
-    {
-      onDelete: 'CASCADE',
-    },
-  )
-  @JoinColumn({ name: 'workspaceId' })
-  workspace: Relation<WorkspaceEntity>;
-
-  @Column({ nullable: false, type: 'uuid' })
-  workspaceId: string;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;

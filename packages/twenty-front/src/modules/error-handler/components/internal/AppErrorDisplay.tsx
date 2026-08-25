@@ -1,6 +1,6 @@
 import { type AppErrorDisplayProps } from '@/error-handler/types/AppErrorDisplayProps';
 import { t } from '@lingui/core/macro';
-import { IconRefresh } from 'twenty-ui/display';
+import { IconRefresh } from 'twenty-ui/icon';
 import { Button } from 'twenty-ui/input';
 import {
   AnimatedPlaceholder,
@@ -8,11 +8,11 @@ import {
   AnimatedPlaceholderEmptySubTitle,
   AnimatedPlaceholderEmptyTextContainer,
   AnimatedPlaceholderEmptyTitle,
-} from 'twenty-ui/layout';
+} from 'twenty-ui/feedback';
 
 export const AppErrorDisplay = ({
   resetErrorBoundary,
-  title = 'Sorry, something went wrong',
+  title = t`Sorry, something went wrong`,
 }: AppErrorDisplayProps) => {
   return (
     <AnimatedPlaceholderEmptyContainer>

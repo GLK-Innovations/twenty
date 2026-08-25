@@ -1,18 +1,21 @@
+import { deleteOneFieldMetadata } from 'test/integration/metadata/suites/field-metadata/utils/delete-one-field-metadata.util';
 import { findManyFieldsMetadataQueryFactory } from 'test/integration/metadata/suites/field-metadata/utils/find-many-fields-metadata-query-factory.util';
+import { updateOneFieldMetadata } from 'test/integration/metadata/suites/field-metadata/utils/update-one-field-metadata.util';
 import { createOneObjectMetadata } from 'test/integration/metadata/suites/object-metadata/utils/create-one-object-metadata.util';
 import { deleteOneObjectMetadata } from 'test/integration/metadata/suites/object-metadata/utils/delete-one-object-metadata.util';
 import { findManyObjectMetadataQueryFactory } from 'test/integration/metadata/suites/object-metadata/utils/find-many-object-metadata-query-factory.util';
 import { updateOneObjectMetadata } from 'test/integration/metadata/suites/object-metadata/utils/update-one-object-metadata.util';
 import { makeMetadataAPIRequest } from 'test/integration/metadata/suites/utils/make-metadata-api-request.util';
 import { FieldMetadataType } from 'twenty-shared/types';
+import { capitalize } from 'twenty-shared/utils';
 
 describe('Custom object renaming', () => {
   let listingObjectId = '';
+  const uniqueSuffix = Date.now().toString().slice(-8);
 
   const STANDARD_OBJECT_RELATIONS = [
     'noteTarget',
     'attachment',
-    'favorite',
     'taskTarget',
     'timelineActivity',
   ];
@@ -24,6 +27,7 @@ describe('Custom object renaming', () => {
         objectMetadataId: '',
         foreignKeyFieldMetadataId: '',
         relationFieldMetadataId: '',
+        relationFieldMetadataUniversalIdentifier: '',
       },
     }),
     {},
@@ -35,9 +39,7 @@ describe('Custom object renaming', () => {
     nameSingular
   `,
     input: {
-      filter: {
-        isCustom: { isNot: true },
-      },
+      filter: {},
       paging: { first: 1000 },
     },
   });
@@ -48,6 +50,7 @@ describe('Custom object renaming', () => {
         name
         label
         type
+        universalIdentifier
         object {
           id
         }
@@ -65,13 +68,14 @@ describe('Custom object renaming', () => {
       standardObjectRelationsMap[relation].objectMetadataId =
         standardObjects.body.data.objects.edges.find(
           // @ts-expect-error legacy noImplicitAny
-          (object) => object.node.nameSingular === relation,
+          (object) =>
+            object.node.nameSingular === relation ||
+            object.node.nameSingular === `target${relation}`,
         ).node.id;
     });
   };
 
   it('1. should create one custom object with standard relations', async () => {
-    // Arrange
     const standardObjects = await makeMetadataAPIRequest(
       standardObjectsGraphqlOperation,
     );
@@ -79,16 +83,15 @@ describe('Custom object renaming', () => {
     fillStandardObjectRelationsMapObjectMetadataId(standardObjects);
 
     const CUSTOM_OBJECT = {
-      namePlural: 'customObjectNamePlural',
-      nameSingular: 'customObjectNameSingular',
-      labelPlural: 'customObjectLabelPlural',
-      labelSingular: 'customObjectLabelSingular',
+      namePlural: `customObjects${uniqueSuffix}`,
+      nameSingular: `customObject${uniqueSuffix}`,
+      labelPlural: `Custom Objects ${uniqueSuffix}`,
+      labelSingular: `Custom Object ${uniqueSuffix}`,
       description: 'Custom object description',
       icon: 'IconListNumbers',
       isLabelSyncedWithName: false,
     };
 
-    // Act
     const { data } = await createOneObjectMetadata({
       expectToFail: false,
       input: CUSTOM_OBJECT,
@@ -98,7 +101,6 @@ describe('Custom object renaming', () => {
       `,
     });
 
-    // Assert
     expect(data.createOneObject.nameSingular).toBe(CUSTOM_OBJECT.nameSingular);
 
     listingObjectId = data.createOneObject.id;
@@ -109,38 +111,48 @@ describe('Custom object renaming', () => {
       .filter(
         // @ts-expect-error legacy noImplicitAny
         (field) =>
-          field.node.name === `${CUSTOM_OBJECT.nameSingular}` &&
-          field.node.type === FieldMetadataType.RELATION,
+          (field.node.name === `${CUSTOM_OBJECT.nameSingular}` &&
+            FieldMetadataType.RELATION) ||
+          (field.node.name ===
+            `target${capitalize(CUSTOM_OBJECT.nameSingular)}` &&
+            FieldMetadataType.MORPH_RELATION),
       )
       // @ts-expect-error legacy noImplicitAny
       .map((field) => field.node);
 
     STANDARD_OBJECT_RELATIONS.forEach((relation) => {
-      // relation field
-      const relationFieldMetadataId = relationFieldsMetadataForListing.find(
+      const relationFieldMetadata = relationFieldsMetadataForListing.find(
         // @ts-expect-error legacy noImplicitAny
         (field) =>
           field.object.id ===
           // @ts-expect-error legacy noImplicitAny
           standardObjectRelationsMap[relation].objectMetadataId,
-      ).id;
+      );
+
+      const relationFieldMetadataId = relationFieldMetadata?.id;
 
       expect(relationFieldMetadataId).not.toBeUndefined();
+      // Reverse system relation fields carry the engine-derived label
+      // (capitalized source object nameSingular)
+      expect(relationFieldMetadata?.label).toBe(
+        capitalize(CUSTOM_OBJECT.nameSingular),
+      );
 
       // @ts-expect-error legacy noImplicitAny
       standardObjectRelationsMap[relation].relationFieldMetadataId =
         relationFieldMetadataId;
+      // @ts-expect-error legacy noImplicitAny
+      standardObjectRelationsMap[relation].relationFieldMetadataUniversalIdentifier =
+        relationFieldMetadata?.universalIdentifier;
     });
   });
 
   it('2. should rename custom object', async () => {
-    // Arrange
-    const HOUSE_NAME_SINGULAR = 'house';
-    const HOUSE_NAME_PLURAL = 'houses';
-    const HOUSE_LABEL_SINGULAR = 'House';
-    const HOUSE_LABEL_PLURAL = 'Houses';
+    const HOUSE_NAME_SINGULAR = `house${uniqueSuffix}`;
+    const HOUSE_NAME_PLURAL = `houses${uniqueSuffix}`;
+    const HOUSE_LABEL_SINGULAR = `House ${uniqueSuffix}`;
+    const HOUSE_LABEL_PLURAL = `Houses ${uniqueSuffix}`;
 
-    // Act
     const { data } = await updateOneObjectMetadata({
       expectToFail: false,
       gqlFields: `
@@ -160,14 +172,99 @@ describe('Custom object renaming', () => {
       },
     });
 
-    // Assert
     expect(data.updateOneObject.nameSingular).toBe(HOUSE_NAME_SINGULAR);
     expect(data.updateOneObject.namePlural).toBe(HOUSE_NAME_PLURAL);
     expect(data.updateOneObject.labelSingular).toBe(HOUSE_LABEL_SINGULAR);
     expect(data.updateOneObject.labelPlural).toBe(HOUSE_LABEL_PLURAL);
+
+    // The reverse morph fields on the standard objects must be renamed in place
+    // (name and engine-derived label follow the new object name) while keeping
+    // their universal identifier stable, so the rename stays lossless.
+    const expectedReverseFieldName = `target${capitalize(HOUSE_NAME_SINGULAR)}`;
+    const expectedReverseFieldLabel = capitalize(HOUSE_NAME_SINGULAR);
+    const fields = await makeMetadataAPIRequest(fieldsGraphqlOperation);
+
+    STANDARD_OBJECT_RELATIONS.forEach((relation) => {
+      // @ts-expect-error legacy noImplicitAny
+      const relationEntry = standardObjectRelationsMap[relation];
+      const relationFieldMetadataId = relationEntry.relationFieldMetadataId;
+      const relationFieldMetadataUniversalIdentifier =
+        relationEntry.relationFieldMetadataUniversalIdentifier;
+
+      const renamedReverseField = fields.body.data.fields.edges
+        // @ts-expect-error legacy noImplicitAny
+        .map((field) => field.node)
+        // @ts-expect-error legacy noImplicitAny
+        .find((field) => field.id === relationFieldMetadataId);
+
+      expect(renamedReverseField).toBeDefined();
+      expect(renamedReverseField.name).toBe(expectedReverseFieldName);
+      expect(renamedReverseField.label).toBe(expectedReverseFieldLabel);
+      expect(renamedReverseField.universalIdentifier).toBe(
+        relationFieldMetadataUniversalIdentifier,
+      );
+    });
   });
 
-  it('3. should delete custom object', async () => {
+  it('3. should reject direct deletion of a system side-effect relation field', async () => {
+    // @ts-expect-error legacy noImplicitAny
+    const timelineActivityRelation = standardObjectRelationsMap['timelineActivity'];
+    const relationFieldMetadataId =
+      timelineActivityRelation.relationFieldMetadataId;
+
+    const { errors } = await deleteOneFieldMetadata({
+      expectToFail: true,
+      input: { idToDelete: relationFieldMetadataId },
+    });
+
+    expect(errors).toBeDefined();
+    expect(errors.length).toBeGreaterThan(0);
+  });
+
+  it('4. should reject direct edition of a system side-effect relation field', async () => {
+    // @ts-expect-error legacy noImplicitAny
+    const timelineActivityRelation = standardObjectRelationsMap['timelineActivity'];
+    const relationFieldMetadataId =
+      timelineActivityRelation.relationFieldMetadataId;
+
+    const { errors } = await updateOneFieldMetadata({
+      expectToFail: true,
+      input: {
+        idToUpdate: relationFieldMetadataId,
+        updatePayload: { label: 'Should not be editable' },
+      },
+    });
+
+    expect(errors).toBeDefined();
+    expect(errors.length).toBeGreaterThan(0);
+  });
+
+  it('5. should reject a morph relations update payload on a system side-effect relation field', async () => {
+    // @ts-expect-error legacy noImplicitAny
+    const timelineActivityRelation = standardObjectRelationsMap['timelineActivity'];
+    const relationFieldMetadataId =
+      timelineActivityRelation.relationFieldMetadataId;
+
+    // morphRelationsUpdatePayload is not an editable property, so it must be
+    // rejected explicitly for engine-owned fields instead of silently creating
+    // relation fields and indexes on them
+    const { errors } = await updateOneFieldMetadata({
+      expectToFail: true,
+      input: {
+        idToUpdate: relationFieldMetadataId,
+        updatePayload: {
+          morphRelationsUpdatePayload: [
+            { targetObjectMetadataId: listingObjectId },
+          ],
+        },
+      },
+    });
+
+    expect(errors).toBeDefined();
+    expect(errors.length).toBeGreaterThan(0);
+  });
+
+  it('6. should delete custom object', async () => {
     await updateOneObjectMetadata({
       expectToFail: false,
       input: {

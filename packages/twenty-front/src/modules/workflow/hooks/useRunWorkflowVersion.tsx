@@ -1,10 +1,10 @@
 import { triggerCreateRecordsOptimisticEffect } from '@/apollo/optimistic-effect/utils/triggerCreateRecordsOptimisticEffect';
 import { currentWorkspaceMemberState } from '@/auth/states/currentWorkspaceMemberState';
-import { useOpenRecordInCommandMenu } from '@/command-menu/hooks/useOpenRecordInCommandMenu';
+import { useOpenRecordInSidePanel } from '@/side-panel/hooks/useOpenRecordInSidePanel';
 import { useApolloCoreClient } from '@/object-metadata/hooks/useApolloCoreClient';
 import { useObjectMetadataItem } from '@/object-metadata/hooks/useObjectMetadataItem';
 import { useObjectMetadataItems } from '@/object-metadata/hooks/useObjectMetadataItems';
-import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
+import { CoreObjectNameSingular } from 'twenty-shared/types';
 import { useCreateOneRecordInCache } from '@/object-record/cache/hooks/useCreateOneRecordInCache';
 import { useUpsertFindOneRecordQueryInCache } from '@/object-record/cache/hooks/useUpsertFindOneRecordQueryInCache';
 import { getObjectTypename } from '@/object-record/cache/utils/getObjectTypename';
@@ -15,18 +15,23 @@ import { useUpsertRecordsInStore } from '@/object-record/record-store/hooks/useU
 import { recordStoreFamilyState } from '@/object-record/record-store/states/recordStoreFamilyState';
 import { computeOptimisticCreateRecordBaseRecordInput } from '@/object-record/utils/computeOptimisticCreateRecordBaseRecordInput';
 import { computeOptimisticRecordFromInput } from '@/object-record/utils/computeOptimisticRecordFromInput';
+import { useChangeQueryListenState } from '@/sse-db-event/hooks/useChangeQueryListenState';
 import { RUN_WORKFLOW_VERSION } from '@/workflow/graphql/mutations/runWorkflowVersion';
+import { getWorkflowRunSseQueryId } from '@/workflow/utils/getWorkflowRunSseQueryId';
 import { type WorkflowRun } from '@/workflow/types/Workflow';
-import { useMutation } from '@apollo/client';
-import { useRecoilCallback, useRecoilValue } from 'recoil';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { useCallback } from 'react';
+import { useMutation } from '@apollo/client/react';
 import { isDefined } from 'twenty-shared/utils';
 import { v4 } from 'uuid';
 import {
   type RunWorkflowVersionMutation,
   type RunWorkflowVersionMutationVariables,
-} from '~/generated-metadata/graphql';
+} from '~/generated/graphql';
+import { useStore } from 'jotai';
 
 export const useRunWorkflowVersion = () => {
+  const store = useStore();
   const apolloCoreClient = useApolloCoreClient();
   const { upsertRecordsInStore } = useUpsertRecordsInStore();
 
@@ -39,7 +44,7 @@ export const useRunWorkflowVersion = () => {
   const createOneRecordInCache = useCreateOneRecordInCache<WorkflowRun>({
     objectMetadataItem,
   });
-  const currentWorkspaceMember = useRecoilValue(currentWorkspaceMemberState);
+  const currentWorkspaceMember = useAtomStateValue(currentWorkspaceMemberState);
 
   const [mutate] = useMutation<
     RunWorkflowVersionMutation,
@@ -59,14 +64,14 @@ export const useRunWorkflowVersion = () => {
       recordGqlFields: computedRecordGqlFields,
     });
 
-  const { openRecordInCommandMenu } = useOpenRecordInCommandMenu();
+  const { openRecordInSidePanel } = useOpenRecordInSidePanel();
+  const { changeQueryIdListenState } = useChangeQueryListenState();
 
-  const setRecordInStore = useRecoilCallback(
-    ({ set }) =>
-      (workflowRun: WorkflowRun) => {
-        set(recordStoreFamilyState(workflowRun.id), workflowRun);
-      },
-    [],
+  const setRecordInStore = useCallback(
+    (workflowRun: WorkflowRun) => {
+      store.set(recordStoreFamilyState.atomFamily(workflowRun.id), workflowRun);
+    },
+    [store],
   );
 
   const runWorkflowVersion = async ({
@@ -135,13 +140,28 @@ export const useRunWorkflowVersion = () => {
 
     setRecordInStore(recordCreatedInCache);
 
-    openRecordInCommandMenu({
+    const sseQueryId = getWorkflowRunSseQueryId(workflowRunId);
+    const sseOperationSignature = {
+      objectNameSingular: CoreObjectNameSingular.WorkflowRun,
+      variables: {
+        filter: { id: { eq: workflowRunId } },
+      },
+    };
+
+    changeQueryIdListenState(true, sseQueryId, sseOperationSignature);
+
+    try {
+      await mutate({
+        variables: { input: { workflowVersionId, workflowRunId, payload } },
+      });
+    } catch (error) {
+      changeQueryIdListenState(false, sseQueryId, sseOperationSignature);
+      throw error;
+    }
+
+    openRecordInSidePanel({
       objectNameSingular: CoreObjectNameSingular.WorkflowRun,
       recordId: workflowRunId,
-    });
-
-    await mutate({
-      variables: { input: { workflowVersionId, workflowRunId, payload } },
     });
   };
 

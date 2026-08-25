@@ -1,11 +1,11 @@
-import { getOperationName } from '@apollo/client/utilities';
-import { type Meta, type StoryObj } from '@storybook/react';
-import { within } from '@storybook/test';
+import { getOperationName } from '~/utils/getOperationName';
+import { type Meta, type StoryObj } from '@storybook/react-vite';
 import { HttpResponse, graphql } from 'msw';
-
-import { GET_CURRENT_USER } from '@/users/graphql/queries/getCurrentUser';
+import { within } from 'storybook/test';
 import { AppPath } from 'twenty-shared/types';
-import { OnboardingStatus } from '~/generated/graphql';
+
+import { OnboardingStatus } from '~/generated-metadata/graphql';
+import { GET_CURRENT_USER } from '~/modules/users/graphql/queries/getCurrentUser';
 import { CreateProfile } from '~/pages/onboarding/CreateProfile';
 import {
   PageDecorator,
@@ -43,7 +43,7 @@ export type Story = StoryObj<typeof CreateProfile>;
 
 export const Default: Story = {
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
+    const canvas = within(canvasElement.ownerDocument.body);
     await canvas.findByText('Create profile');
   },
 };

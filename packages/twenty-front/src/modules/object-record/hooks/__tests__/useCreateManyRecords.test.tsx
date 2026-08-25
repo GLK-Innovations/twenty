@@ -1,8 +1,7 @@
-import { mocked } from '@storybook/test';
 import { act, renderHook } from '@testing-library/react';
 import { v4 } from 'uuid';
 
-import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
+import { CoreObjectNameSingular } from 'twenty-shared/types';
 import {
   query,
   response,
@@ -13,16 +12,20 @@ import { useRefetchAggregateQueries } from '@/object-record/hooks/useRefetchAggr
 import { getJestMetadataAndApolloMocksWrapper } from '~/testing/jest/getJestMetadataAndApolloMocksWrapper';
 
 jest.mock('uuid', () => ({
+  ...jest.requireActual('uuid'),
   v4: jest.fn(),
 }));
 
 jest.mock('@/object-record/hooks/useRefetchAggregateQueries');
 const mockRefetchAggregateQueries = jest.fn();
-(useRefetchAggregateQueries as jest.Mock).mockReturnValue({
+jest.mocked(useRefetchAggregateQueries).mockReturnValue({
   refetchAggregateQueries: mockRefetchAggregateQueries,
 });
 
-mocked(v4)
+jest
+  // uuid v11+ types add a Uint8Array overload to v4; pin to the string
+  // signature so the mocked return values type-check.
+  .mocked(v4 as () => string)
   .mockReturnValueOnce(variables.data[0].id)
   .mockReturnValueOnce(variables.data[1].id);
 

@@ -5,26 +5,35 @@ import {
 } from 'twenty-shared/utils';
 
 import { type FlatViewMaps } from 'src/engine/metadata-modules/flat-view/types/flat-view-maps.type';
-import { type FlatView } from 'src/engine/metadata-modules/flat-view/types/flat-view.type';
+import { findFlatEntityByIdInFlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/utils/find-flat-entity-by-id-in-flat-entity-maps.util';
+import { isCallerOverridingEntity } from 'src/engine/metadata-modules/utils/is-caller-overriding-entity.util';
 import { type DeleteViewInput } from 'src/engine/metadata-modules/view/dtos/inputs/delete-view.input';
 import {
   ViewException,
   ViewExceptionCode,
 } from 'src/engine/metadata-modules/view/exceptions/view.exception';
+import { type UniversalFlatView } from 'src/engine/workspace-manager/workspace-migration/universal-flat-entity/types/universal-flat-view.type';
 
 export const fromDeleteViewInputToFlatViewOrThrow = ({
   deleteViewInput: rawDeleteViewInput,
   flatViewMaps,
+  callerApplicationUniversalIdentifier,
+  workspaceCustomApplicationUniversalIdentifier,
 }: {
   deleteViewInput: DeleteViewInput;
   flatViewMaps: FlatViewMaps;
-}): FlatView => {
+  callerApplicationUniversalIdentifier: string;
+  workspaceCustomApplicationUniversalIdentifier: string;
+}): UniversalFlatView => {
   const { id: viewId } = extractAndSanitizeObjectStringFields(
     rawDeleteViewInput,
     ['id'],
   );
 
-  const existingFlatViewToDelete = flatViewMaps.byId[viewId];
+  const existingFlatViewToDelete = findFlatEntityByIdInFlatEntityMaps({
+    flatEntityId: viewId,
+    flatEntityMaps: flatViewMaps,
+  });
 
   if (!isDefined(existingFlatViewToDelete)) {
     throw new ViewException(
@@ -33,8 +42,26 @@ export const fromDeleteViewInputToFlatViewOrThrow = ({
     );
   }
 
+  const now = new Date().toISOString();
+
+  const shouldDeactivate = isCallerOverridingEntity({
+    callerApplicationUniversalIdentifier,
+    entityApplicationUniversalIdentifier:
+      existingFlatViewToDelete.applicationUniversalIdentifier,
+    workspaceCustomApplicationUniversalIdentifier,
+    isSystemSideEffect: existingFlatViewToDelete.isSystemSideEffect,
+  });
+
+  if (shouldDeactivate) {
+    return {
+      ...existingFlatViewToDelete,
+      isActive: false,
+      updatedAt: now,
+    };
+  }
+
   return {
     ...existingFlatViewToDelete,
-    deletedAt: new Date(),
+    deletedAt: now,
   };
 };

@@ -3,76 +3,117 @@ import { gql } from '@apollo/client';
 export const PAGE_LAYOUT_WIDGET_FRAGMENT = gql`
   fragment PageLayoutWidgetFragment on PageLayoutWidget {
     id
+    applicationId
+    universalIdentifier
+    isSystemSideEffect
     title
     type
     objectMetadataId
     createdAt
     updatedAt
+    isActive
     deletedAt
+    conditionalDisplay
+    conditionalAvailabilityExpression
     gridPosition {
       column
       columnSpan
       row
       rowSpan
     }
+    position {
+      ... on PageLayoutWidgetGridPosition {
+        layoutMode
+        row
+        column
+        rowSpan
+        columnSpan
+      }
+      ... on PageLayoutWidgetVerticalListPosition {
+        layoutMode
+        index
+      }
+      ... on PageLayoutWidgetCanvasPosition {
+        layoutMode
+      }
+    }
     configuration {
       ... on BarChartConfiguration {
-        graphType
+        configurationType
         aggregateFieldMetadataId
         aggregateOperation
         primaryAxisGroupByFieldMetadataId
         primaryAxisGroupBySubFieldName
         primaryAxisDateGranularity
         primaryAxisOrderBy
+        primaryAxisManualSortOrder
         secondaryAxisGroupByFieldMetadataId
         secondaryAxisGroupBySubFieldName
         secondaryAxisGroupByDateGranularity
         secondaryAxisOrderBy
+        secondaryAxisManualSortOrder
         omitNullValues
         axisNameDisplay
         displayDataLabel
+        displayLegend
+        numberFormat
         rangeMin
         rangeMax
         color
         description
         filter
         groupMode
+        layout
+        isCumulative
+        splitMultiValueFields
         timezone
         firstDayOfTheWeek
       }
       ... on LineChartConfiguration {
-        graphType
+        configurationType
         aggregateFieldMetadataId
         aggregateOperation
         primaryAxisGroupByFieldMetadataId
         primaryAxisGroupBySubFieldName
         primaryAxisDateGranularity
         primaryAxisOrderBy
+        primaryAxisManualSortOrder
         secondaryAxisGroupByFieldMetadataId
         secondaryAxisGroupBySubFieldName
         secondaryAxisGroupByDateGranularity
         secondaryAxisOrderBy
+        secondaryAxisManualSortOrder
         omitNullValues
         axisNameDisplay
         displayDataLabel
+        displayLegend
+        numberFormat
         rangeMin
         rangeMax
         color
         description
         filter
         isStacked
+        isCumulative
+        splitMultiValueFields
         timezone
         firstDayOfTheWeek
       }
       ... on PieChartConfiguration {
-        graphType
+        configurationType
         groupByFieldMetadataId
         aggregateFieldMetadataId
         aggregateOperation
         groupBySubFieldName
         dateGranularity
         orderBy
+        manualSortOrder
         displayDataLabel
+        showCenterMetric
+        displayLegend
+        numberFormat
+        hideEmptyCategory
+        splitMultiValueFields
         color
         description
         filter
@@ -80,30 +121,103 @@ export const PAGE_LAYOUT_WIDGET_FRAGMENT = gql`
         firstDayOfTheWeek
       }
       ... on AggregateChartConfiguration {
-        graphType
+        configurationType
         aggregateFieldMetadataId
         aggregateOperation
         label
         displayDataLabel
-        format
+        numberFormat
         description
         filter
+        prefix
+        suffix
         timezone
         firstDayOfTheWeek
-      }
-      ... on GaugeChartConfiguration {
-        graphType
-        aggregateFieldMetadataId
-        aggregateOperation
-        displayDataLabel
-        color
-        description
-        filter
-        timezone
-        firstDayOfTheWeek
+        ratioAggregateConfig {
+          fieldMetadataId
+          optionValue
+        }
       }
       ... on IframeConfiguration {
+        configurationType
         url
+      }
+      ... on StandaloneRichTextConfiguration {
+        configurationType
+        body {
+          blocknote
+          markdown
+        }
+      }
+      ... on CalendarConfiguration {
+        configurationType
+      }
+      ... on EmailsConfiguration {
+        configurationType
+      }
+      ... on EmailThreadConfiguration {
+        configurationType
+      }
+      ... on CallRecordingSummaryConfiguration {
+        configurationType
+      }
+      ... on CallRecordingTranscriptConfiguration {
+        configurationType
+      }
+      ... on MessageCampaignBodyConfiguration {
+        configurationType
+      }
+      ... on MessageCampaignDetailsConfiguration {
+        configurationType
+      }
+      ... on FieldConfiguration {
+        configurationType
+        fieldDisplayMode
+        fieldMetadataId
+        viewId
+        nestedRelationFieldMetadataId
+      }
+      ... on FieldRichTextConfiguration {
+        configurationType
+      }
+      ... on FieldsConfiguration {
+        configurationType
+        viewId
+        newFieldDefaultVisibility
+        shouldAllowUserToSeeHiddenFields
+      }
+      ... on FilesConfiguration {
+        configurationType
+      }
+      ... on NotesConfiguration {
+        configurationType
+      }
+      ... on TasksConfiguration {
+        configurationType
+      }
+      ... on TimelineConfiguration {
+        configurationType
+      }
+      ... on ViewConfiguration {
+        configurationType
+      }
+      ... on RecordTableConfiguration {
+        configurationType
+        viewId
+      }
+      ... on WorkflowConfiguration {
+        configurationType
+      }
+      ... on WorkflowRunConfiguration {
+        configurationType
+      }
+      ... on WorkflowVersionConfiguration {
+        configurationType
+      }
+      ... on FrontComponentConfiguration {
+        configurationType
+        frontComponentId
+        headerCommandMenuItemUniversalIdentifiers
       }
     }
     pageLayoutTabId

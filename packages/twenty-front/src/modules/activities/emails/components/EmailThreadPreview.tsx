@@ -1,21 +1,28 @@
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
 
 import { ActivityRow } from '@/activities/components/ActivityRow';
 import { EmailThreadNotShared } from '@/activities/emails/components/EmailThreadNotShared';
-import { useOpenEmailThreadInCommandMenu } from '@/command-menu/hooks/useOpenEmailThreadInCommandMenu';
-import { useTheme } from '@emotion/react';
-import { Avatar } from 'twenty-ui/display';
+import { getEmailParticipantAvatarColorSeed } from '@/activities/emails/utils/getEmailParticipantAvatarColorSeed';
+import { useOpenRecordInSidePanel } from '@/side-panel/hooks/useOpenRecordInSidePanel';
+import { useContext } from 'react';
+
+import { t } from '@lingui/core/macro';
+import { CoreObjectNameSingular } from 'twenty-shared/types';
+import { isDefined } from 'twenty-shared/utils';
+import { Avatar, Tag } from 'twenty-ui/data-display';
+import { ThemeContext, themeCssVariables } from 'twenty-ui/theme-constants';
 import {
   MessageChannelVisibility,
   type TimelineThread,
 } from '~/generated/graphql';
 import { formatToHumanReadableDate } from '~/utils/date-utils';
+import { getAbsoluteImageUrl } from '~/utils/image/getAbsoluteImageUrl';
 
 const StyledHeading = styled.div<{ unread: boolean }>`
   display: flex;
+  max-width: 20%;
   overflow: hidden;
   width: fit-content;
-  max-width: 20%;
 `;
 
 const StyledParticipantsContainer = styled.div`
@@ -23,57 +30,65 @@ const StyledParticipantsContainer = styled.div`
   display: flex;
 `;
 
-const StyledAvatar = styled(Avatar)`
-  margin-left: ${({ theme }) => theme.spacing(-1)};
+const StyledAvatarWrapper = styled.div`
+  margin-left: calc(-1 * ${themeCssVariables.spacing[1]});
 `;
 
 const StyledSenderNames = styled.span`
   display: flex;
-  margin: ${({ theme }) => theme.spacing(0, 1)};
+  margin: ${themeCssVariables.spacing[0]} ${themeCssVariables.spacing[1]};
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 `;
 
 const StyledThreadCount = styled.span`
-  color: ${({ theme }) => theme.font.color.tertiary};
+  color: ${themeCssVariables.font.color.tertiary};
 `;
 
 const StyledSubjectAndBody = styled.div`
   align-items: center;
   display: flex;
   flex: 1;
-  gap: ${({ theme }) => theme.spacing(2)};
+  gap: ${themeCssVariables.spacing[2]};
   overflow: hidden;
 `;
 
 const StyledSubject = styled.span`
-  color: ${({ theme }) => theme.font.color.primary};
-  white-space: nowrap;
+  color: ${themeCssVariables.font.color.primary};
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 `;
 
 const StyledBody = styled.span`
-  color: ${({ theme }) => theme.font.color.tertiary};
+  color: ${themeCssVariables.font.color.tertiary};
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex: 1;
 `;
 
 const StyledReceivedAt = styled.div`
-  font-size: ${({ theme }) => theme.font.size.sm};
-  font-weight: ${({ theme }) => theme.font.weight.regular};
-  padding: ${({ theme }) => theme.spacing(0, 1)};
+  font-size: ${themeCssVariables.font.size.sm};
+  font-weight: ${themeCssVariables.font.weight.regular};
+  padding: ${themeCssVariables.spacing[0]} ${themeCssVariables.spacing[1]};
 `;
 
 type EmailThreadPreviewProps = {
   thread: TimelineThread;
 };
 
+type LastAvatar = {
+  displayedName: string | undefined;
+  avatarUrl: string | undefined;
+  isCountIcon: boolean;
+  placeholderColorSeed: string | undefined;
+};
+
 export const EmailThreadPreview = ({ thread }: EmailThreadPreviewProps) => {
-  const { openEmailThreadInCommandMenu } = useOpenEmailThreadInCommandMenu();
+  const { theme } = useContext(ThemeContext);
+  const { openRecordInSidePanel } = useOpenRecordInSidePanel();
 
   const visibility = thread.visibility;
 
@@ -86,59 +101,82 @@ export const EmailThreadPreview = ({ thread }: EmailThreadPreviewProps) => {
       ? `, ${thread.lastTwoParticipants?.[1]?.displayName}`
       : '');
 
-  const [finalDisplayedName, finalAvatarUrl, isCountIcon] =
+  const lastParticipant = thread?.lastTwoParticipants?.[1];
+
+  const {
+    displayedName,
+    avatarUrl,
+    isCountIcon,
+    placeholderColorSeed,
+  }: LastAvatar =
     thread.participantCount > 3
-      ? [`${thread.participantCount}`, '', true]
-      : [
-          thread?.lastTwoParticipants?.[1]?.displayName,
-          thread?.lastTwoParticipants?.[1]?.avatarUrl,
-          false,
-        ];
+      ? {
+          displayedName: `${thread.participantCount}`,
+          avatarUrl: '',
+          isCountIcon: true,
+          placeholderColorSeed: undefined,
+        }
+      : {
+          displayedName: lastParticipant?.displayName,
+          avatarUrl: lastParticipant?.avatarUrl,
+          isCountIcon: false,
+          placeholderColorSeed: isDefined(lastParticipant)
+            ? getEmailParticipantAvatarColorSeed(lastParticipant)
+            : undefined,
+        };
 
   const handleThreadClick = () => {
     const canOpen =
       thread.visibility === MessageChannelVisibility.SHARE_EVERYTHING;
 
     if (canOpen) {
-      openEmailThreadInCommandMenu(thread.id);
+      openRecordInSidePanel({
+        recordId: thread.id,
+        objectNameSingular: CoreObjectNameSingular.MessageThread,
+      });
     }
   };
 
   const isDisabled = visibility !== MessageChannelVisibility.SHARE_EVERYTHING;
-  const theme = useTheme();
-
   return (
     <ActivityRow onClick={handleThreadClick} disabled={isDisabled}>
       <StyledHeading unread={!thread.read}>
         <StyledParticipantsContainer>
           <Avatar
-            avatarUrl={thread?.firstParticipant?.avatarUrl}
+            avatarUrl={getAbsoluteImageUrl(thread?.firstParticipant?.avatarUrl)}
             placeholder={thread.firstParticipant.displayName}
-            placeholderColorSeed={
-              thread.firstParticipant.workspaceMemberId ||
-              thread.firstParticipant.personId
-            }
+            placeholderColorSeed={getEmailParticipantAvatarColorSeed(
+              thread.firstParticipant,
+            )}
             type="rounded"
           />
-          {thread?.lastTwoParticipants?.[0] && (
-            <StyledAvatar
-              avatarUrl={thread.lastTwoParticipants[0].avatarUrl}
-              placeholder={thread.lastTwoParticipants[0].displayName}
-              placeholderColorSeed={
-                thread.lastTwoParticipants[0].workspaceMemberId ||
-                thread.lastTwoParticipants[0].personId
-              }
-              type="rounded"
-            />
+          {isDefined(thread?.lastTwoParticipants?.[0]) && (
+            <StyledAvatarWrapper>
+              <Avatar
+                avatarUrl={getAbsoluteImageUrl(
+                  thread.lastTwoParticipants[0].avatarUrl,
+                )}
+                placeholder={thread.lastTwoParticipants[0].displayName}
+                placeholderColorSeed={getEmailParticipantAvatarColorSeed(
+                  thread.lastTwoParticipants[0],
+                )}
+                type="rounded"
+              />
+            </StyledAvatarWrapper>
           )}
-          {finalDisplayedName && (
-            <StyledAvatar
-              avatarUrl={finalAvatarUrl}
-              placeholder={finalDisplayedName}
-              type="rounded"
-              color={isCountIcon ? theme.grayScale.gray11 : undefined}
-              backgroundColor={isCountIcon ? theme.grayScale.gray2 : undefined}
-            />
+          {displayedName && (
+            <StyledAvatarWrapper>
+              <Avatar
+                avatarUrl={getAbsoluteImageUrl(avatarUrl)}
+                placeholder={displayedName}
+                placeholderColorSeed={placeholderColorSeed}
+                type="rounded"
+                color={isCountIcon ? theme.grayScale.gray11 : undefined}
+                backgroundColor={
+                  isCountIcon ? theme.grayScale.gray2 : undefined
+                }
+              />
+            </StyledAvatarWrapper>
           )}
         </StyledParticipantsContainer>
 
@@ -158,6 +196,9 @@ export const EmailThreadPreview = ({ thread }: EmailThreadPreviewProps) => {
         )}
         {visibility === MessageChannelVisibility.SHARE_EVERYTHING && (
           <>
+            {thread.lastMessageIsDraft && (
+              <Tag color="orange" text={t`Draft`} />
+            )}
             <StyledSubject>{thread.subject}</StyledSubject>
             <StyledBody>{thread.lastMessageBody}</StyledBody>
           </>

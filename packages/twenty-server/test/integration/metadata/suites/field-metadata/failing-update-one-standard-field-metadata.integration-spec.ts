@@ -58,7 +58,6 @@ describe('Standard field metadata update should be ignored', () => {
           description
           icon
           isActive
-          isCustom
           isLabelSyncedWithName
         }
       `,
@@ -69,7 +68,7 @@ describe('Standard field metadata update should be ignored', () => {
     jestExpectToBeDefined(companyObject);
 
     const companyNameField = companyObject.fieldsList?.find(
-      (field) => field.name === 'name' && !field.isCustom,
+      (field) => field.name === 'name',
     );
 
     jestExpectToBeDefined(companyNameField);
@@ -92,7 +91,6 @@ describe('Standard field metadata update should be ignored', () => {
           description
           icon
           isActive
-          isCustom
           isLabelSyncedWithName
         `,
       });
@@ -102,4 +100,61 @@ describe('Standard field metadata update should be ignored', () => {
       });
     },
   );
+});
+
+// TODO: Enable this test once isUnique set as editable on standard fields
+
+xdescribe('Standard field with standard unique index update should fail on isUnique change', () => {
+  let companyDomainNameFieldMetadataId: string;
+
+  beforeAll(async () => {
+    const { objects } = await findManyObjectMetadata({
+      expectToFail: false,
+      input: {
+        filter: {},
+        paging: { first: 100 },
+      },
+      gqlFields: `
+        id
+        nameSingular
+        fieldsList {
+          id
+          name
+          label
+          isUnique
+        }
+      `,
+    });
+
+    const companyObject = objects.find((o) => o.nameSingular === 'company');
+
+    jestExpectToBeDefined(companyObject);
+
+    const companyDomainNameField = companyObject.fieldsList?.find(
+      (field) => field.name === 'domainName',
+    );
+
+    jestExpectToBeDefined(companyDomainNameField);
+    companyDomainNameFieldMetadataId = companyDomainNameField.id;
+  });
+
+  it('should fail when trying to remove unique constraint on standard field with standard index', async () => {
+    const { errors } = await updateOneFieldMetadata({
+      input: {
+        idToUpdate: companyDomainNameFieldMetadataId,
+        updatePayload: {
+          isUnique: false,
+        },
+      },
+      gqlFields: `
+        id
+        name
+        isUnique
+      `,
+    });
+
+    expectOneNotInternalServerErrorSnapshot({
+      errors,
+    });
+  });
 });

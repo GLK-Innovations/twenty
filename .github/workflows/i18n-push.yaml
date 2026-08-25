@@ -9,9 +9,13 @@ on:
   workflow_call:
   push:
     branches: ['main']
+    paths-ignore:
+      - 'packages/twenty-front/src/locales/**'
+      - 'packages/twenty-emails/src/locales/**'
+      - 'packages/twenty-server/src/engine/core-modules/i18n/locales/**'
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
@@ -20,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           token: ${{ github.token }}
           ref: main
@@ -31,7 +35,7 @@ jobs:
           git checkout -B i18n origin/i18n || git checkout -b i18n
 
       - name: Install dependencies
-        uses: ./.github/workflows/actions/yarn-install
+        uses: ./.github/actions/yarn-install
 
       - name: Build dependencies
         run: npx nx build twenty-shared
@@ -80,18 +84,18 @@ jobs:
 
       - name: Upload missing translations
         if: steps.check_extract_changes.outputs.changes_detected == 'true'
-        uses: crowdin/github-action@v2
+        uses: crowdin/github-action@8868a33591d21088edfc398968173a3b98d51706 # v2
         with:
           upload_sources: true
+          upload_sources_args: '--delete-obsolete'
           upload_translations: true
           download_translations: false
           localization_branch_name: i18n
           base_url: 'https://twenty.api.crowdin.com'
+          config: '.github/crowdin-app.yml'
         env:
-          # A numeric ID, found at https://crowdin.com/project/<projectName>/tools/api
-          CROWDIN_PROJECT_ID: 1
-
-          # Visit https://crowdin.com/settings#api-key to create this token
+          # App translations project
+          CROWDIN_PROJECT_ID: '1'
           CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
       - name: Create a pull request
         if: steps.check_extract_changes.outputs.changes_detected == 'true' || steps.check_compile_changes.outputs.changes_detected == 'true'
@@ -103,3 +107,21 @@ jobs:
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Mint twenty-infra dispatch token
+        id: app-token
+        if: steps.check_extract_changes.outputs.changes_detected == 'true' || steps.check_compile_changes.outputs.changes_detected == 'true'
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.TWENTY_WORKFLOW_DISPATCHER_CLIENT_ID }}
+          private-key: ${{ secrets.TWENTY_WORKFLOW_DISPATCHER_PRIVATE_KEY }}
+          owner: twentyhq
+          repositories: twenty-infra
+          permission-actions: write
+
+      - name: Trigger i18n automerge
+        if: steps.check_extract_changes.outputs.changes_detected == 'true' || steps.check_compile_changes.outputs.changes_detected == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          gh workflow run automerge-i18n.yaml --repo twentyhq/twenty-infra --ref main

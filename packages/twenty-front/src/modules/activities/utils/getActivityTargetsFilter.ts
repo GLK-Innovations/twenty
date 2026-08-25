@@ -1,25 +1,31 @@
 import { type ActivityTargetableObject } from '@/activities/types/ActivityTargetableEntity';
 import { getActivityTargetObjectFieldIdName } from '@/activities/utils/getActivityTargetObjectFieldIdName';
+import { isDefined } from 'twenty-shared/utils';
 
 export const getActivityTargetsFilter = ({
   targetableObjects,
 }: {
-  targetableObjects: ActivityTargetableObject[];
+  targetableObjects: Pick<
+    ActivityTargetableObject,
+    'id' | 'targetObjectNameSingular'
+  >[];
 }) => {
-  const findManyActivitiyTargetsQueryFilter = Object.fromEntries(
-    targetableObjects.map((targetableObject) => {
-      const targetObjectFieldName = getActivityTargetObjectFieldIdName({
-        nameSingular: targetableObject.targetObjectNameSingular,
-      });
+  const findManyActivityTargetsQueryFilter = Object.fromEntries(
+    targetableObjects
+      .map((targetableObject) => {
+        const joinColumnName = getActivityTargetObjectFieldIdName({
+          nameSingular: targetableObject.targetObjectNameSingular,
+        });
 
-      return [
-        targetObjectFieldName,
-        {
-          eq: targetableObject.id,
-        },
-      ];
-    }),
+        return [
+          joinColumnName,
+          {
+            eq: targetableObject.id,
+          },
+        ];
+      })
+      .filter(isDefined),
   );
 
-  return findManyActivitiyTargetsQueryFilter;
+  return findManyActivityTargetsQueryFilter;
 };

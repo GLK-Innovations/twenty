@@ -10,10 +10,10 @@ export const recordTableRowContextValue: RecordTableRowContextValue = {
   objectNameSingular: 'objectNameSingular',
 };
 
-export const recordTableRowDraggableContextValue: RecordTableRowDraggableContextValue = {
-  dragHandleProps: {} as any,
-  isDragging: false,
-};
+export const recordTableRowDraggableContextValue: RecordTableRowDraggableContextValue =
+  {
+    isDragging: false,
+  };
 
 export const recordTableCellContextValue: RecordTableCellContextValue = {
   recordField: {

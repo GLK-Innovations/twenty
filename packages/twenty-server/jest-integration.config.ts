@@ -3,7 +3,8 @@ import { type JestConfigWithTsJest, pathsToModuleNameMapper } from 'ts-jest';
 
 import { NodeEnvironment } from 'src/engine/core-modules/twenty-config/interfaces/node-environment.interface';
 
-// Load .env vars at jest boot time
+import testTokens from './test/integration/constants/test-tokens.json';
+
 if (process.env.NODE_ENV === 'test') {
   dotenv.config({ path: '.env.test', override: true });
 } else {
@@ -22,21 +23,32 @@ const jestConfig: JestConfigWithTsJest = {
   silent: false,
   errorOnDeprecated: true,
   maxConcurrency: 1,
-  moduleFileExtensions: ['js', 'json', 'ts'],
+  moduleFileExtensions: ['js', 'mjs', 'json', 'ts'],
   rootDir: '.',
   testEnvironment: 'node',
   testPathIgnorePatterns: [
     ...(isBillingEnabled ? [] : ['<rootDir>/test/integration/billing']),
     ...(isClickhouseEnabled ? [] : ['<rootDir>/test/integration/audit']),
+    // Requires an app booted as a secure deployment; run through
+    // jest-integration-secure.config.ts (nx test:integration:secure).
+    '<rootDir>/test/integration/secure-deployment',
   ],
   testRegex: '\\.integration-spec\\.ts$',
   modulePathIgnorePatterns: ['<rootDir>/dist'],
   globalSetup: '<rootDir>/test/integration/utils/setup-test.ts',
   globalTeardown: '<rootDir>/test/integration/utils/teardown-test.ts',
+  setupFilesAfterEnv: ['<rootDir>/test/integration/utils/setup-wait-for-all-jobs-between-tests.ts'],
   testTimeout: 20000,
   maxWorkers: 1,
+  // jsdom 29 and msw ship ESM-only transitive deps (parse5, entities,
+  // tough-cookie, @exodus/bytes via html-encoding-sniffer, @csstools/@asamuzakjp
+  // css engine, @mswjs/interceptors and friends); let swc transform them
+  // (and .mjs below) so jest can require them.
+  transformIgnorePatterns: [
+    '/node_modules/(?!(jsdom|html-encoding-sniffer|whatwg-encoding|@exodus|parse5|entities|tough-cookie|@csstools|@asamuzakjp|msw|@mswjs|until-async|@bundled-es-modules|@open-draft|strict-event-emitter|headers-polyfill|outvariant|is-node-process|path-to-regexp|statuses|cookie|digest-fetch|md5|email-reply-parser)/)',
+  ],
   transform: {
-    '^.+\\.(t|j)s$': [
+    '^.+\\.(t|j|mj)s$': [
       '@swc/jest',
       {
         jsc: {
@@ -73,28 +85,12 @@ const jestConfig: JestConfigWithTsJest = {
     }),
     '^test/(.*)$': '<rootDir>/test/$1',
   },
-  fakeTimers: {
-    enableGlobally: true,
-  },
   globals: {
     APP_PORT: 4000,
     NODE_ENV: NodeEnvironment.TEST,
-    APPLE_JANE_ADMIN_ACCESS_TOKEN:
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyMDIwMjAyMC1lNmI1LTQ2ODAtOGEzMi1iODIwOTczNzE1NmIiLCJ1c2VySWQiOiIyMDIwMjAyMC1lNmI1LTQ2ODAtOGEzMi1iODIwOTczNzE1NmIiLCJ3b3Jrc3BhY2VJZCI6IjIwMjAyMDIwLTFjMjUtNGQwMi1iZjI1LTZhZWNjZjdlYTQxOSIsIndvcmtzcGFjZU1lbWJlcklkIjoiMjAyMDIwMjAtNDYzZi00MzViLTgyOGMtMTA3ZTAwN2EyNzExIiwidXNlcldvcmtzcGFjZUlkIjoiMjAyMDIwMjAtMWU3Yy00M2Q5LWE1ZGItNjg1YjUwNjlkODE2IiwidHlwZSI6IkFDQ0VTUyIsImF1dGhQcm92aWRlciI6InBhc3N3b3JkIiwiaWF0IjoxNzUxMjgxNzA0LCJleHAiOjIwNjY4NTc3MDR9.HMGqCsVlOAPVUBhKSGlD1X86VoHKt4LIUtET3CGIdik',
-    EXPIRED_ACCESS_TOKEN:
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyMDIwMjAyMC05ZTNiLTQ2ZDQtYTU1Ni04OGI5ZGRjMmIwMzQiLCJ3b3Jrc3BhY2VJZCI6IjIwMjAyMDIwLTFjMjUtNGQwMi1iZjI1LTZhZWNjZjdlYTQxOSIsIndvcmtzcGFjZU1lbWJlcklkIjoiMjAyMDIwMjAtMDY4Ny00YzQxLWI3MDctZWQxYmZjYTk3MmE3IiwiaWF0IjoxNzM4MzIzODc5LCJleHAiOjE3MzgzMjU2Nzl9.m73hHVpnw5uGNGrSuKxn6XtKEUK3Wqkp4HsQdYfZiHo',
-    INVALID_ACCESS_TOKEN:
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyMDIwMjAyMC05ZTNiLTQ2ZDQtYTU1Ni04OGI5ZGRjMmIwMzQiLCJ3b3Jrc3BhY2VJZCI6IjIwMjAyMDIwLTFjMjUtNGQwMi1iZjI1LTZhZWNjZjdlYTQxOSIsIndvcmtzcGFjZU1lbWJlcklkIjoiMjAyMDIwMjAtMDY4Ny00YzQxLWI3MDctZWQxYmZjYTk3MmE3IiwiaWF0IjoxNzM4MzIzODc5LCJleHAiOjE3MzgzMjU2Nzl9.m73hHVpnw5uGNGrSuKxn6XtKEUK3Wqkp4HsQdYfZiHp',
-    APPLE_JONY_MEMBER_ACCESS_TOKEN:
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyMDIwMjAyMC0zOTU3LTQ5MDgtOWMzNi0yOTI5YTIzZjgzNTciLCJ3b3Jrc3BhY2VJZCI6IjIwMjAyMDIwLTFjMjUtNGQwMi1iZjI1LTZhZWNjZjdlYTQxOSIsIndvcmtzcGFjZU1lbWJlcklkIjoiMjAyMDIwMjAtNzdkNS00Y2I2LWI2MGEtZjRhODM1YTg1ZDYxIiwidXNlcldvcmtzcGFjZUlkIjoiMjAyMDIwMjAtMzk1Ny00OTA4LTljMzYtMjkyOWEyM2Y4MzUzIiwiaWF0IjoxNzM5NDU5NTcwLCJleHAiOjMzMjk3MDU5NTcwfQ.Er7EEU4IP4YlGN79jCLR_6sUBqBfKx2M3G_qGiDpPRo',
-    APPLE_PHIL_GUEST_ACCESS_TOKEN:
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyMDIwMjAyMC03MTY5LTQyY2YtYmM0Ny0xY2ZlZjE1MjY0YjgiLCJ3b3Jrc3BhY2VJZCI6IjIwMjAyMDIwLTFjMjUtNGQwMi1iZjI1LTZhZWNjZjdlYTQxOSIsIndvcmtzcGFjZU1lbWJlcklkIjoiMjAyMDIwMjAtMTU1My00NWM2LWEwMjgtNWE5MDY0Y2NlMDdmIiwidXNlcldvcmtzcGFjZUlkIjoiMjAyMDIwMjAtNzE2OS00MmNmLWJjNDctMWNmZWYxNTI2NGIxIiwiaWF0IjoxNzM5ODg4NDcwLCJleHAiOjMzMjk3NDg4NDcwfQ.0NEu-AWGv3l77rs-56Z5Gt0UTU7HDl6qUTHUcMWNrCc',
-    ACME_JONY_MEMBER_ACCESS_TOKEN:
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyMDIwMjAyMC0zOTU3LTQ5MDgtOWMzNi0yOTI5YTIzZjgzNTciLCJ1c2VySWQiOiIyMDIwMjAyMC0zOTU3LTQ5MDgtOWMzNi0yOTI5YTIzZjgzNTciLCJ3b3Jrc3BhY2VJZCI6IjNiOGU2NDU4LTVmYzEtNGU2My04NTYzLTAwOGNjZGRhYTZkYiIsIndvcmtzcGFjZU1lbWJlcklkIjoiMjAyMDIwMjAtNzdkNS00Y2I2LWI2MGEtZjRhODM1YTg1ZDYxIiwidXNlcldvcmtzcGFjZUlkIjoiMjAyMDIwMjAtZTEwYS00YzI3LWE5MGItYjA4YzU3YjAyZDQ1IiwidHlwZSI6IkFDQ0VTUyIsImF1dGhQcm92aWRlciI6InBhc3N3b3JkIiwiaWF0IjoxNzUyMDc4MDA0LCJleHAiOjMzMzA5Njc4MDA0fQ.JBtQCkNWsqAkzouxhcVjCEikV6A_-qr3IflE67NYQYY',
-    API_KEY_ACCESS_TOKEN:
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyMDIwMjAyMC0xYzI1LTRkMDItYmYyNS02YWVjY2Y3ZWE0MTkiLCJ0eXBlIjoiQVBJX0tFWSIsIndvcmtzcGFjZUlkIjoiMjAyMDIwMjAtMWMyNS00ZDAyLWJmMjUtNmFlY2NmN2VhNDE5IiwiaWF0IjoxNzQ0OTgzNzUwLCJleHAiOjQ4OTg1ODM2OTMsImp0aSI6IjIwMjAyMDIwLWY0MDEtNGQ4YS1hNzMxLTY0ZDAwN2MyN2JhZCJ9.4xkkwz_uu2xzs_V8hJSaM15fGziT5zS3vq2lM48OHr0',
-    APPLE_SARAH_IMPERSONATE_TIM_INVALID_ACCESS_TOKEN:
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyMDIwMjAyMC05ZTNiLTQ2ZDQtYTU1Ni04OGI5ZGRjMmIwMzQiLCJ1c2VySWQiOiIyMDIwMjAyMC05ZTNiLTQ2ZDQtYTU1Ni04OGI5ZGRjMmIwMzQiLCJ3b3Jrc3BhY2VJZCI6IjIwMjAyMDIwLTFjMjUtNGQwMi1iZjI1LTZhZWNjZjdlYTQxOSIsIndvcmtzcGFjZU1lbWJlcklkIjoiMjAyMDIwMjAtMDY4Ny00YzQxLWI3MDctZWQxYmZjYTk3MmE3IiwidXNlcldvcmtzcGFjZUlkIjoiMjAyMDIwMjAtOWUzYi00NmQ0LWE1NTYtODhiOWRkYzJiMDM1IiwidHlwZSI6IkFDQ0VTUyIsImF1dGhQcm92aWRlciI6ImltcGVyc29uYXRpb24iLCJpc0ltcGVyc29uYXRpbmciOnRydWUsImltcGVyc29uYXRvclVzZXJXb3Jrc3BhY2VJZCI6IjMxMzEzMTMxLTAwMDEtNDAwMC04MDAwLTAwMDAwMDAwMDAwMCIsImltcGVyc29uYXRlZFVzZXJXb3Jrc3BhY2VJZCI6IjIwMjAyMDIwLTllM2ItNDZkNC1hNTU2LTg4YjlkZGMyYjAzNSIsImlhdCI6MTc1ODU1NDY2NSwiZXhwIjoyNzA1MjgyNjY1fQ.PHXdd0RB2M4YbJRIJQY43ZxAxOE2nU7YzPG-BkdNrQc',
+    // Test tokens are loaded from a shared JSON file to ensure consistency
+    // with CI workflows and other tools that need these tokens
+    ...testTokens,
   },
 };
 

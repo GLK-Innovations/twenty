@@ -2,7 +2,7 @@ import { type OTPFormValues } from '@/auth/sign-in-up/hooks/useTwoFactorAuthenti
 import { VERIFY_TWO_FACTOR_AUTHENTICATION_METHOD_FOR_AUTHENTICATED_USER } from '@/settings/two-factor-authentication/graphql/mutations/verifyTwoFactorAuthenticationMethod';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 import { useLoadCurrentUser } from '@/users/hooks/useLoadCurrentUser';
-import { useMutation } from '@apollo/client';
+import { useMutation } from '@apollo/client/react';
 import { useLingui } from '@lingui/react/macro';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -36,10 +36,8 @@ export const useTwoFactorVerificationForSettings = () => {
       message: t`Two-factor authentication setup completed successfully!`,
     });
 
-    // Reload current user to refresh 2FA status
     await loadCurrentUser();
 
-    // Navigate back to profile page
     navigate(SettingsPath.ProfilePage);
   };
 
@@ -64,7 +62,6 @@ export const useTwoFactorVerificationForSettings = () => {
   };
 
   const handleCancel = () => {
-    // Reset form and navigate back to profile page
     formConfig.reset();
     navigate(SettingsPath.ProfilePage);
   };

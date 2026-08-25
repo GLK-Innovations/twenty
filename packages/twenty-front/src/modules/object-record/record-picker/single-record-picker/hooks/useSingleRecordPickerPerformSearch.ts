@@ -1,14 +1,17 @@
+import { useEffect, useMemo } from 'react';
+import { useStore } from 'jotai';
+
 import { useObjectMetadataItems } from '@/object-metadata/hooks/useObjectMetadataItems';
 import { DEFAULT_SEARCH_REQUEST_LIMIT } from '@/object-record/constants/DefaultSearchRequestLimit';
+import { useObjectPermissions } from '@/object-record/hooks/useObjectPermissions';
 import { useObjectRecordSearchRecords } from '@/object-record/hooks/useObjectRecordSearchRecords';
 import { searchRecordStoreFamilyState } from '@/object-record/record-picker/multiple-record-picker/states/searchRecordStoreComponentFamilyState';
 import { SingleRecordPickerComponentInstanceContext } from '@/object-record/record-picker/single-record-picker/states/contexts/SingleRecordPickerComponentInstanceContext';
 import { singleRecordPickerSearchableObjectMetadataItemsComponentState } from '@/object-record/record-picker/single-record-picker/states/singleRecordPickerSearchableObjectMetadataItemsComponentState';
 import { type RecordPickerPickableMorphItem } from '@/object-record/record-picker/types/RecordPickerPickableMorphItem';
+import { getObjectPermissionsFromMapByObjectMetadataId } from '@/settings/roles/role-permissions/objects-permissions/utils/getObjectPermissionsFromMapByObjectMetadataId';
 import { useAvailableComponentInstanceIdOrThrow } from '@/ui/utilities/state/component-state/hooks/useAvailableComponentInstanceIdOrThrow';
-import { useRecoilCallback } from 'recoil';
 import { CustomError, isDefined } from 'twenty-shared/utils';
-import { type SearchQuery } from '~/generated/graphql';
 
 export const useSingleRecordPickerPerformSearch = ({
   selectedIds,
@@ -26,56 +29,54 @@ export const useSingleRecordPickerPerformSearch = ({
   pickableMorphItems: RecordPickerPickableMorphItem[];
   loading: boolean;
 } => {
+  const store = useStore();
   const singleRecordPickerInstanceId = useAvailableComponentInstanceIdOrThrow(
     SingleRecordPickerComponentInstanceContext,
   );
 
   const { objectMetadataItems } = useObjectMetadataItems();
+  const { objectPermissionsByObjectMetadataId } = useObjectPermissions();
 
-  const onSearchRecordsCompleted = useRecoilCallback(
-    ({ set }) =>
-      (data: SearchQuery) => {
-        const searchRecords = data.search.edges.map((edge) => edge.node);
+  const readableObjectNameSingulars = objectNameSingulars.filter(
+    (objectNameSingular) => {
+      const objectMetadataItem = objectMetadataItems.find(
+        (item) => item.nameSingular === objectNameSingular,
+      );
 
-        searchRecords.forEach((searchRecord) => {
-          set(searchRecordStoreFamilyState(searchRecord.recordId), {
-            ...searchRecord,
-            record: undefined,
-          });
-        });
+      if (!isDefined(objectMetadataItem)) {
+        return false;
+      }
 
-        set(
-          singleRecordPickerSearchableObjectMetadataItemsComponentState.atomFamily(
-            { instanceId: singleRecordPickerInstanceId },
-          ),
-          objectMetadataItems.filter((objectMetadataItem) =>
-            objectNameSingulars.includes(objectMetadataItem.nameSingular),
-          ),
-        );
-      },
-    [objectMetadataItems, objectNameSingulars, singleRecordPickerInstanceId],
+      return (
+        getObjectPermissionsFromMapByObjectMetadataId({
+          objectPermissionsByObjectMetadataId,
+          objectMetadataId: objectMetadataItem.id,
+        }).canReadObjectRecords === true
+      );
+    },
   );
 
-  const selectedIdsFilter = { id: { in: selectedIds } };
+  const hasSelectedIds = selectedIds.length > 0;
+  const selectedIdsFilter = hasSelectedIds
+    ? { id: { in: selectedIds } }
+    : undefined;
 
   const { loading: selectedRecordsLoading, searchRecords: selectedRecords } =
     useObjectRecordSearchRecords({
-      objectNameSingulars,
+      objectNameSingulars: readableObjectNameSingulars,
       filter: selectedIdsFilter,
-      skip: !selectedIds.length,
+      skip: !hasSelectedIds,
       searchInput: '',
-      onCompleted: onSearchRecordsCompleted,
     });
 
   const {
     loading: filteredSelectedRecordsLoading,
     searchRecords: filteredSelectedRecords,
   } = useObjectRecordSearchRecords({
-    objectNameSingulars,
+    objectNameSingulars: readableObjectNameSingulars,
     filter: selectedIdsFilter,
-    skip: !selectedIds.length,
+    skip: !hasSelectedIds,
     searchInput: searchFilter,
-    onCompleted: onSearchRecordsCompleted,
   });
 
   const notFilterIds = [...selectedIds, ...excludedRecordIds];
@@ -84,16 +85,49 @@ export const useSingleRecordPickerPerformSearch = ({
     : undefined;
   const { loading: recordsToSelectLoading, searchRecords: recordsToSelect } =
     useObjectRecordSearchRecords({
-      objectNameSingulars,
+      objectNameSingulars: readableObjectNameSingulars,
       filter: notFilter,
       limit: limit ?? DEFAULT_SEARCH_REQUEST_LIMIT,
       searchInput: searchFilter,
       fetchPolicy: 'cache-and-network',
-      onCompleted: onSearchRecordsCompleted,
     });
 
-  const pickableMorphItems = [...selectedRecords, ...recordsToSelect].map(
-    (record) => {
+  const allSearchRecords = useMemo(
+    () => [...selectedRecords, ...filteredSelectedRecords, ...recordsToSelect],
+    [selectedRecords, filteredSelectedRecords, recordsToSelect],
+  );
+
+  // TODO: Refactor this useEffect to avoid unnecessary re-renders (see PR #18584 review)
+  useEffect(() => {
+    allSearchRecords.forEach((searchRecord) => {
+      store.set(
+        searchRecordStoreFamilyState.atomFamily(searchRecord.recordId),
+        {
+          ...searchRecord,
+          record: undefined,
+        },
+      );
+    });
+
+    store.set(
+      singleRecordPickerSearchableObjectMetadataItemsComponentState.atomFamily({
+        instanceId: singleRecordPickerInstanceId,
+      }),
+      objectMetadataItems.filter((objectMetadataItem) =>
+        readableObjectNameSingulars.includes(objectMetadataItem.nameSingular),
+      ),
+    );
+  }, [
+    allSearchRecords,
+    store,
+    objectMetadataItems,
+    readableObjectNameSingulars,
+    singleRecordPickerInstanceId,
+  ]);
+
+  const pickableMorphItems = [...selectedRecords, ...recordsToSelect]
+    .filter(isDefined)
+    .map((record) => {
       const objectMetadataItem = objectMetadataItems.find(
         (objectMetadataItem) =>
           objectMetadataItem.nameSingular === record.objectNameSingular,
@@ -111,20 +145,19 @@ export const useSingleRecordPickerPerformSearch = ({
         recordId: record.recordId,
         objectMetadataId: objectMetadataItem.id,
         isSelected: selectedRecords.some(
-          (selectedRecord) => selectedRecord.recordId === record.recordId,
+          (selectedRecord) => selectedRecord?.recordId === record.recordId,
         ),
         isMatchingSearchFilter:
           recordsToSelect.some(
             (recordsToSelectRecord) =>
-              recordsToSelectRecord.recordId === record.recordId,
+              recordsToSelectRecord?.recordId === record.recordId,
           ) ||
           filteredSelectedRecords.some(
             (filteredSelectedRecord) =>
-              filteredSelectedRecord.recordId === record.recordId,
+              filteredSelectedRecord?.recordId === record.recordId,
           ),
       };
-    },
-  );
+    });
 
   return {
     pickableMorphItems,

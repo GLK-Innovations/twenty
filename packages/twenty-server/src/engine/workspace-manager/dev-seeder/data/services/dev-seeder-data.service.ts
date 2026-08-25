@@ -4,22 +4,22 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 
-import { DataSource } from 'typeorm';
+import { STANDARD_OBJECTS } from 'twenty-shared/metadata';
+import { FeatureFlagKey, FileFolder } from 'twenty-shared/types';
+import { DataSource, type EntityManager } from 'typeorm';
 
-import { FeatureFlagKey } from 'src/engine/core-modules/feature-flag/enums/feature-flag-key.enum';
-import { FileStorageService } from 'src/engine/core-modules/file-storage/file-storage.service';
-import { ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
+import { ApplicationService } from 'src/engine/core-modules/application/application.service';
+import { FileStorageService } from 'src/engine/core-modules/file-storage/services/file-storage.service';
+import { WorkspaceManyOrAllFlatEntityMapsCacheService } from 'src/engine/metadata-modules/flat-entity/services/workspace-many-or-all-flat-entity-maps-cache.service';
+import { FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
 import { ObjectMetadataService } from 'src/engine/metadata-modules/object-metadata/object-metadata.service';
-import { type WorkspaceEntityManager } from 'src/engine/twenty-orm/entity-manager/workspace-entity-manager';
-import { computeTableName } from 'src/engine/utils/compute-table-name.util';
+import { computeObjectTargetTable } from 'src/engine/utils/compute-object-target-table.util';
 import {
   ATTACHMENT_DATA_SEED_COLUMNS,
-  ATTACHMENT_DATA_SEEDS,
+  ATTACHMENT_SAMPLE_FILES,
+  type AttachmentFileSeedMetadata,
+  generateAttachmentSeedsForWorkspace,
 } from 'src/engine/workspace-manager/dev-seeder/data/constants/attachment-data-seeds.constant';
-import {
-  CALENDAR_CHANNEL_DATA_SEED_COLUMNS,
-  CALENDAR_CHANNEL_DATA_SEEDS,
-} from 'src/engine/workspace-manager/dev-seeder/data/constants/calendar-channel-data-seeds.constant';
 import {
   CALENDAR_CHANNEL_EVENT_ASSOCIATION_DATA_SEED_COLUMNS,
   CALENDAR_CHANNEL_EVENT_ASSOCIATION_DATA_SEEDS,
@@ -37,17 +37,13 @@ import {
   COMPANY_DATA_SEEDS,
 } from 'src/engine/workspace-manager/dev-seeder/data/constants/company-data-seeds.constant';
 import {
-  CONNECTED_ACCOUNT_DATA_SEED_COLUMNS,
-  CONNECTED_ACCOUNT_DATA_SEEDS,
-} from 'src/engine/workspace-manager/dev-seeder/data/constants/connected-account-data-seeds.constant';
-import {
   DASHBOARD_DATA_SEED_COLUMNS,
   getDashboardDataSeeds,
 } from 'src/engine/workspace-manager/dev-seeder/data/constants/dashboard-data-seeds.constant';
 import {
-  MESSAGE_CHANNEL_DATA_SEED_COLUMNS,
-  MESSAGE_CHANNEL_DATA_SEEDS,
-} from 'src/engine/workspace-manager/dev-seeder/data/constants/message-channel-data-seeds.constant';
+  EMPLOYMENT_HISTORY_DATA_SEED_COLUMNS,
+  EMPLOYMENT_HISTORY_DATA_SEEDS,
+} from 'src/engine/workspace-manager/dev-seeder/data/constants/employment-history-data-seeds.constant';
 import {
   MESSAGE_CHANNEL_MESSAGE_ASSOCIATION_DATA_SEED_COLUMNS,
   MESSAGE_CHANNEL_MESSAGE_ASSOCIATION_DATA_SEEDS,
@@ -81,6 +77,10 @@ import {
   PERSON_DATA_SEEDS,
 } from 'src/engine/workspace-manager/dev-seeder/data/constants/person-data-seeds.constant';
 import {
+  PET_CARE_AGREEMENT_DATA_SEED_COLUMNS,
+  PET_CARE_AGREEMENT_DATA_SEEDS,
+} from 'src/engine/workspace-manager/dev-seeder/data/constants/pet-care-agreement-data-seeds.constant';
+import {
   PET_DATA_SEED_COLUMNS,
   PET_DATA_SEEDS,
 } from 'src/engine/workspace-manager/dev-seeder/data/constants/pet-data-seeds.constant';
@@ -105,7 +105,11 @@ import {
   WORKSPACE_MEMBER_DATA_SEED_COLUMNS,
 } from 'src/engine/workspace-manager/dev-seeder/data/constants/workspace-member-data-seeds.constant';
 import { TimelineActivitySeederService } from 'src/engine/workspace-manager/dev-seeder/data/services/timeline-activity-seeder.service';
-import { prefillWorkflows } from 'src/engine/workspace-manager/standard-objects-prefill-data/prefill-workflows';
+import { prefillFrontComponentCommandMenuItems } from 'src/engine/workspace-manager/standard-objects-prefill-data/utils/prefill-front-component-command-menu-items.util';
+import { prefillWorkflowCommandMenuItems } from 'src/engine/workspace-manager/standard-objects-prefill-data/utils/prefill-workflow-command-menu-items.util';
+import { prefillWorkflows } from 'src/engine/workspace-manager/standard-objects-prefill-data/utils/prefill-workflows.util';
+import { TWENTY_STANDARD_APPLICATION } from 'src/engine/workspace-manager/twenty-standard-application/constants/twenty-standard-applications';
+import { WorkspaceMigrationValidateBuildAndRunService } from 'src/engine/workspace-manager/workspace-migration/services/workspace-migration-validate-build-and-run-service';
 
 type RecordSeedConfig = {
   tableName: string;
@@ -113,9 +117,9 @@ type RecordSeedConfig = {
   recordSeeds: Record<string, unknown>[];
 };
 
-// Organize seeds into dependency batches for parallel insertion
 const getRecordSeedsBatches = (
   workspaceId: string,
+  attachmentSeeds: RecordSeedConfig['recordSeeds'],
   _featureFlags?: Record<FeatureFlagKey, boolean>,
 ): RecordSeedConfig[][] => {
   // Batch 1: No dependencies
@@ -145,18 +149,13 @@ const getRecordSeedsBatches = (
       recordSeeds: COMPANY_DATA_SEEDS,
     },
     {
-      tableName: 'connectedAccount',
-      pgColumns: CONNECTED_ACCOUNT_DATA_SEED_COLUMNS,
-      recordSeeds: CONNECTED_ACCOUNT_DATA_SEEDS,
-    },
-    {
       tableName: 'dashboard',
       pgColumns: DASHBOARD_DATA_SEED_COLUMNS,
       recordSeeds: getDashboardDataSeeds(workspaceId),
     },
   ];
 
-  // Batch 3: Depends on company and connectedAccount
+  // Batch 3: Depends on company
   const batch3: RecordSeedConfig[] = [
     {
       tableName: 'person',
@@ -168,19 +167,9 @@ const getRecordSeedsBatches = (
       pgColumns: PET_DATA_SEED_COLUMNS,
       recordSeeds: PET_DATA_SEEDS,
     },
-    {
-      tableName: 'calendarChannel',
-      pgColumns: CALENDAR_CHANNEL_DATA_SEED_COLUMNS,
-      recordSeeds: CALENDAR_CHANNEL_DATA_SEEDS,
-    },
-    {
-      tableName: 'messageChannel',
-      pgColumns: MESSAGE_CHANNEL_DATA_SEED_COLUMNS,
-      recordSeeds: MESSAGE_CHANNEL_DATA_SEEDS,
-    },
   ];
 
-  // Batch 4: Depends on person/company or independent
+  // Batch 4: Depends on person/company/messageChannel or independent
   const batch4: RecordSeedConfig[] = [
     {
       tableName: 'opportunity',
@@ -206,6 +195,16 @@ const getRecordSeedsBatches = (
       tableName: 'messageThread',
       pgColumns: MESSAGE_THREAD_DATA_SEED_COLUMNS,
       recordSeeds: MESSAGE_THREAD_DATA_SEEDS,
+    },
+    {
+      tableName: '_employmentHistory',
+      pgColumns: EMPLOYMENT_HISTORY_DATA_SEED_COLUMNS,
+      recordSeeds: EMPLOYMENT_HISTORY_DATA_SEEDS,
+    },
+    {
+      tableName: '_petCareAgreement',
+      pgColumns: PET_CARE_AGREEMENT_DATA_SEED_COLUMNS,
+      recordSeeds: PET_CARE_AGREEMENT_DATA_SEEDS,
     },
   ];
 
@@ -253,7 +252,7 @@ const getRecordSeedsBatches = (
     {
       tableName: 'attachment',
       pgColumns: ATTACHMENT_DATA_SEED_COLUMNS,
-      recordSeeds: ATTACHMENT_DATA_SEEDS,
+      recordSeeds: attachmentSeeds,
     },
   ];
 
@@ -268,67 +267,124 @@ export class DevSeederDataService {
     private readonly objectMetadataService: ObjectMetadataService,
     private readonly timelineActivitySeederService: TimelineActivitySeederService,
     private readonly fileStorageService: FileStorageService,
+    private readonly flatEntityMapsCacheService: WorkspaceManyOrAllFlatEntityMapsCacheService,
+    private readonly applicationService: ApplicationService,
+    private readonly workspaceMigrationValidateBuildAndRunService: WorkspaceMigrationValidateBuildAndRunService,
   ) {}
 
   public async seed({
     schemaName,
     workspaceId,
     featureFlags,
+    light = false,
   }: {
     schemaName: string;
     workspaceId: string;
     featureFlags?: Record<FeatureFlagKey, boolean>;
+    light?: boolean;
   }) {
     const objectMetadataItems =
       await this.objectMetadataService.findManyWithinWorkspace(workspaceId);
 
+    const { flatObjectMetadataMaps, flatFieldMetadataMaps } =
+      await this.flatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+        {
+          workspaceId,
+          flatMapsKeys: ['flatObjectMetadataMaps', 'flatFieldMetadataMaps'],
+        },
+      );
+
+    const { seeds: attachmentSeeds, fileSeedMetadata: attachmentFileMeta } =
+      generateAttachmentSeedsForWorkspace(workspaceId);
+
     await this.coreDataSource.transaction(
-      async (entityManager: WorkspaceEntityManager) => {
+      async (entityManager: EntityManager) => {
         await this.seedRecordsInBatches({
           entityManager,
           schemaName,
           workspaceId,
+          attachmentSeeds,
           featureFlags,
           objectMetadataItems,
+          light,
         });
 
-        await this.timelineActivitySeederService.seedTimelineActivities({
+        if (!light) {
+          await this.timelineActivitySeederService.seedTimelineActivities({
+            entityManager,
+            schemaName,
+            workspaceId,
+          });
+
+          await this.seedAttachmentFiles(
+            workspaceId,
+            entityManager,
+            attachmentFileMeta,
+          );
+        }
+
+        await prefillWorkflows(
           entityManager,
-          schemaName,
           workspaceId,
-        });
-
-        await this.seedAttachmentFiles(workspaceId);
-
-        await prefillWorkflows(entityManager, schemaName, objectMetadataItems);
+          schemaName,
+          flatObjectMetadataMaps,
+          flatFieldMetadataMaps,
+        );
       },
     );
+
+    await prefillWorkflowCommandMenuItems({
+      workspaceId,
+      applicationService: this.applicationService,
+      flatEntityMapsCacheService: this.flatEntityMapsCacheService,
+      workspaceMigrationValidateBuildAndRunService:
+        this.workspaceMigrationValidateBuildAndRunService,
+    });
+
+    await prefillFrontComponentCommandMenuItems({
+      workspaceId,
+      applicationService: this.applicationService,
+      flatEntityMapsCacheService: this.flatEntityMapsCacheService,
+      workspaceMigrationValidateBuildAndRunService:
+        this.workspaceMigrationValidateBuildAndRunService,
+    });
   }
 
   private async seedRecordsInBatches({
     entityManager,
     schemaName,
     workspaceId,
+    attachmentSeeds,
     featureFlags,
     objectMetadataItems,
+    light = false,
   }: {
-    entityManager: WorkspaceEntityManager;
+    entityManager: EntityManager;
     schemaName: string;
     workspaceId: string;
+    attachmentSeeds: RecordSeedConfig['recordSeeds'];
     featureFlags?: Record<FeatureFlagKey, boolean>;
-    objectMetadataItems: ObjectMetadataEntity[];
+    objectMetadataItems: FlatObjectMetadata[];
+    light?: boolean;
   }) {
-    const batches = getRecordSeedsBatches(workspaceId, featureFlags);
+    const batches = getRecordSeedsBatches(
+      workspaceId,
+      attachmentSeeds,
+      featureFlags,
+    );
 
     // Process batches sequentially (respecting dependencies)
     // but entities within each batch in parallel
     for (const batch of batches) {
       await Promise.all(
         batch.map(async (recordSeedsConfig) => {
+          if (light && recordSeedsConfig.tableName.startsWith('_')) {
+            return;
+          }
+
           const objectMetadata = objectMetadataItems.find(
             (item) =>
-              computeTableName(item.nameSingular, item.isCustom) ===
-              recordSeedsConfig.tableName,
+              computeObjectTargetTable(item) === recordSeedsConfig.tableName,
           );
 
           if (!objectMetadata) {
@@ -355,16 +411,14 @@ export class DevSeederDataService {
     pgColumns,
     recordSeeds,
   }: {
-    entityManager: WorkspaceEntityManager;
+    entityManager: EntityManager;
     schemaName: string;
     tableName: string;
     pgColumns: string[];
     recordSeeds: Record<string, unknown>[];
   }) {
     await entityManager
-      .createQueryBuilder(undefined, undefined, undefined, {
-        shouldBypassPermissionChecks: true,
-      })
+      .createQueryBuilder()
       .insert()
       .into(`${schemaName}.${tableName}`, pgColumns)
       .orIgnore()
@@ -372,48 +426,49 @@ export class DevSeederDataService {
       .execute();
   }
 
-  private async seedAttachmentFiles(workspaceId: string): Promise<void> {
-    // Files are copied to dist/assets during build via nest-cli.json
-    // The pattern **/dev-seeder/data/sample-files/** preserves the full path
+  private async seedAttachmentFiles(
+    workspaceId: string,
+    entityManager: EntityManager,
+    fileSeedMetadata: AttachmentFileSeedMetadata[],
+  ): Promise<void> {
     const IS_BUILT = __dirname.includes('/dist/');
     const sampleFilesDir = IS_BUILT
       ? join(
           __dirname,
-          '../../../../../../assets/engine/workspace-manager/dev-seeder/data/sample-files',
+          '../../../../../assets/engine/workspace-manager/dev-seeder/data/sample-files',
         )
       : join(__dirname, '../sample-files');
 
-    const filesToCreate = [
-      'sample-contract.pdf',
-      'budget-2024.xlsx',
-      'presentation.pptx',
-      'screenshot.png',
-      'archive.zip',
-    ];
+    const sampleFileBuffers: Buffer[] = [];
 
-    for (const filename of filesToCreate) {
-      const filePath = join(sampleFilesDir, filename);
-      const fileBuffer = await readFile(filePath);
+    for (const sampleFile of ATTACHMENT_SAMPLE_FILES) {
+      const filePath = join(sampleFilesDir, sampleFile.filename);
 
-      await this.fileStorageService.write({
-        file: fileBuffer,
-        name: filename,
-        folder: `workspace-${workspaceId}/attachment`,
-        mimeType: this.getMimeType(filename),
+      sampleFileBuffers.push(await readFile(filePath));
+    }
+
+    const fieldUniversalIdentifier =
+      STANDARD_OBJECTS.attachment.fields.file.universalIdentifier;
+    const applicationUniversalIdentifier =
+      TWENTY_STANDARD_APPLICATION.universalIdentifier;
+
+    for (const metadata of fileSeedMetadata) {
+      const resourcePath = `${metadata.fileId}.${metadata.extension}`;
+      const sourceFile = sampleFileBuffers[metadata.sampleFileIndex];
+
+      await this.fileStorageService.writeFile({
+        sourceFile,
+        fileFolder: FileFolder.FilesField,
+        applicationUniversalIdentifier,
+        workspaceId,
+        resourcePath: `${fieldUniversalIdentifier}/${resourcePath}`,
+        fileId: metadata.fileId,
+        settings: {
+          isTemporaryFile: false,
+          toDelete: false,
+        },
+        queryRunner: entityManager.queryRunner,
       });
     }
-  }
-
-  private getMimeType(filename: string): string {
-    const ext = filename.split('.').pop()?.toLowerCase();
-    const mimeTypes: Record<string, string> = {
-      pdf: 'application/pdf',
-      xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-      png: 'image/png',
-      zip: 'application/zip',
-    };
-
-    return mimeTypes[ext || ''] || 'application/octet-stream';
   }
 }

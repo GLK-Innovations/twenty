@@ -1,89 +1,204 @@
 {
   "tabs": {
+    "gettingStarted": {
+      "label": "Începeți",
+      "groups": {
+        "welcome": {
+          "label": "Bun venit"
+        },
+        "coreConcepts": {
+          "label": "Concepte cheie"
+        }
+      }
+    },
     "userGuide": {
       "label": "Ghid de utilizator",
       "groups": {
-        "gettingStarted": {
-          "label": "Noțiuni de bază"
+        "userGuideOverview": {
+          "label": "Prezentare generală"
         },
         "dataModel": {
-          "label": "Model de date"
+          "label": "Model de date",
+          "groups": {
+            "dataModelReference": {
+              "label": "Referință"
+            },
+            "dataModelHowTos": {
+              "label": "How-Tos"
+            }
+          }
         },
-        "crmEssentials": {
-          "label": "Elemente esențiale CRM"
+        "dataMigration": {
+          "label": "Migrarea Datelor",
+          "groups": {
+            "dataMigrationReference": {
+              "label": "Referință"
+            },
+            "dataMigrationHowTos": {
+              "label": "How-Tos"
+            }
+          }
         },
-        "views": {
-          "label": "Vizualizări"
+        "calendarEmails": {
+          "label": "Calendar & E-mailuri",
+          "groups": {
+            "calendarEmailsReference": {
+              "label": "Referință"
+            },
+            "calendarEmailsHowTos": {
+              "label": "How-Tos"
+            }
+          }
         },
         "workflows": {
-          "label": "Fluxuri de lucru"
+          "label": "Fluxuri de lucru",
+          "groups": {
+            "workflowsReference": {
+              "label": "Referință"
+            },
+            "workflowsHowTos": {
+              "label": "How-Tos",
+              "groups": {
+                "crmAutomations": {
+                  "label": "CRM Automate"
+                },
+                "connectToOtherTools": {
+                  "label": "Conectează-te la alte instrumente"
+                },
+                "advancedConfigurations": {
+                  "label": "Configurații avansate"
+                },
+                "needMoreHelp": {
+                  "label": "Ai nevoie de mai mult ajutor"
+                }
+              }
+            }
+          }
         },
-        "collaboration": {
-          "label": "Colaborare"
+        "ai": {
+          "label": "AI",
+          "groups": {
+            "aiReference": {
+              "label": "Referință"
+            },
+            "aiHowTos": {
+              "label": "How-Tos"
+            }
+          }
         },
-        "integrationsApi": {
-          "label": "Integrări & API"
+        "layout": {
+          "label": "Aspect",
+          "groups": {
+            "layoutReference": {
+              "label": "Referință",
+              "groups": {
+                "layoutViews": {
+                  "label": "Vizualizări"
+                }
+              }
+            },
+            "layoutHowTos": {
+              "label": "Ghiduri practice"
+            }
+          }
         },
-        "reporting": {
-          "label": "Raportare"
+        "dashboards": {
+          "label": "Tablouri de Bord",
+          "groups": {
+            "dashboardsReference": {
+              "label": "Referință"
+            },
+            "dashboardsHowTos": {
+              "label": "How-Tos"
+            }
+          }
+        },
+        "permissionsAccess": {
+          "label": "Permisiuni & Acces",
+          "groups": {
+            "permissionsAccessReference": {
+              "label": "Referință"
+            },
+            "permissionsAccessHowTos": {
+              "label": "How-Tos"
+            }
+          }
+        },
+        "billing": {
+          "label": "Facturare",
+          "groups": {
+            "billingReference": {
+              "label": "Referință"
+            },
+            "billingHowTos": {
+              "label": "How-Tos"
+            }
+          }
         },
         "settings": {
-          "label": "Setări"
+          "label": "Setări",
+          "groups": {
+            "settingsReference": {
+              "label": "Referință"
+            },
+            "settingsHowTos": {
+              "label": "How-Tos"
+            }
+          }
         },
-        "pricing": {
-          "label": "Prețuri"
-        },
-        "resources": {
-          "label": "Resurse"
+        "legal": {
+          "label": "Juridic",
+          "groups": {
+            "legalHowTos": {
+              "label": "Ghiduri practice"
+            }
+          }
         }
       }
     },
     "developers": {
       "label": "Dezvoltatori",
       "groups": {
-        "developersGroup": {
-          "label": "Dezvoltatori"
+        "developersOverview": {
+          "label": "Prezentare generală"
         },
-        "devGettingStarted": {
-          "label": "Noțiuni de bază",
+        "apps": {
+          "label": "Aplicații",
           "groups": {
-            "selfHosting": {
-              "label": "Găzduire proprie"
+            "appsGettingStarted": {
+              "label": "Începeți"
             },
-            "apiAndWebhooks": {
-              "label": "API și Webhooks"
+            "appsTutorial": {
+              "label": "Tutorial"
+            },
+            "appsConfig": {
+              "label": "Configurare"
+            },
+            "appsData": {
+              "label": "Date"
+            },
+            "appsLogic": {
+              "label": "Logică"
+            },
+            "appsLayout": {
+              "label": "Aspect"
+            },
+            "appsOperations": {
+              "label": "Operațiuni"
+            },
+            "appsTranslations": {
+              "label": "Traduceri"
             }
           }
         },
-        "contributing": {
-          "label": "Contribuții",
-          "groups": {
-            "frontendDevelopment": {
-              "label": "Dezvoltare Frontend",
-              "groups": {
-                "twentyUi": {
-                  "label": "Twenty UI",
-                  "groups": {
-                    "display": {
-                      "label": "Afișare"
-                    },
-                    "feedback": {
-                      "label": "Feedback"
-                    },
-                    "input": {
-                      "label": "Intrare"
-                    },
-                    "navigation": {
-                      "label": "Navigation"
-                    }
-                  }
-                }
-              }
-            },
-            "backendDevelopment": {
-              "label": "Dezvoltare Backend"
-            }
-          }
+        "api": {
+          "label": "API"
+        },
+        "selfHost": {
+          "label": "Autogazda"
+        },
+        "contribute": {
+          "label": "Contribuie"
         }
       }
     }

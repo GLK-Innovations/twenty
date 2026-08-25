@@ -1,31 +1,26 @@
-import { css, Global, useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
 import { Outlet } from 'react-router-dom';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
+
+import { AppErrorBoundary } from '@/error-handler/components/AppErrorBoundary';
+import { AppFullScreenErrorFallback } from '@/error-handler/components/AppFullScreenErrorFallback';
 
 const StyledLayout = styled.div`
-  background: ${({ theme }) => theme.background.noisy};
+  background: ${themeCssVariables.background.secondary};
   display: flex;
   flex-direction: column;
-  height: 100dvh;
+  height: calc(100dvh / var(--t-zoom, 1));
   position: relative;
   scrollbar-width: 4px;
   width: 100%;
 `;
 
 export const BlankLayout = () => {
-  const theme = useTheme();
   return (
-    <>
-      <Global
-        styles={css`
-          body {
-            background: ${theme.background.tertiary};
-          }
-        `}
-      />
-      <StyledLayout>
+    <StyledLayout>
+      <AppErrorBoundary FallbackComponent={AppFullScreenErrorFallback}>
         <Outlet />
-      </StyledLayout>
-    </>
+      </AppErrorBoundary>
+    </StyledLayout>
   );
 };

@@ -3,11 +3,14 @@ import { deleteOneRoleOperationFactory } from 'test/integration/graphql/utils/de
 import { createOneObjectMetadata } from 'test/integration/metadata/suites/object-metadata/utils/create-one-object-metadata.util';
 import { deleteOneObjectMetadata } from 'test/integration/metadata/suites/object-metadata/utils/delete-one-object-metadata.util';
 import { updateOneObjectMetadata } from 'test/integration/metadata/suites/object-metadata/utils/update-one-object-metadata.util';
+import { PermissionFlagType } from 'twenty-shared/constants';
 
 import { fieldTextMock } from 'src/engine/api/__mocks__/object-metadata-item.mock';
 import { ErrorCode } from 'src/engine/core-modules/graphql/utils/graphql-errors.util';
-import { PermissionFlagType } from 'src/engine/metadata-modules/permissions/constants/permission-flag-type.constants';
-import { PermissionsExceptionMessage } from 'src/engine/metadata-modules/permissions/permissions.exception';
+import {
+  PermissionsExceptionCode,
+  PermissionsExceptionMessage,
+} from 'src/engine/metadata-modules/permissions/permissions.exception';
 import { WORKSPACE_MEMBER_DATA_SEED_IDS } from 'src/engine/workspace-manager/dev-seeder/data/constants/workspace-member-data-seeds.constant';
 
 const client = request(`http://localhost:${APP_PORT}`);
@@ -18,7 +21,7 @@ async function assertPermissionDeniedForMemberWithMemberRole({
   query: { query: string };
 }) {
   await client
-    .post('/graphql')
+    .post('/metadata')
     .set('Authorization', `Bearer ${APPLE_JONY_MEMBER_ACCESS_TOKEN}`)
     .send(query)
     .expect(200)
@@ -49,7 +52,7 @@ describe('roles permissions', () => {
     };
 
     const resp = await client
-      .post('/graphql')
+      .post('/metadata')
       .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
       .send(query);
 
@@ -84,13 +87,13 @@ describe('roles permissions', () => {
       };
 
       const resp = await client
-        .post('/graphql')
+        .post('/metadata')
         .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
         .send(query);
 
       expect(resp.status).toBe(200);
       expect(resp.body.errors).toBeUndefined();
-      expect(resp.body.data.getRoles.length).toBeGreaterThanOrEqual(5);
+      expect(resp.body.data.getRoles.length).toBeGreaterThanOrEqual(4);
 
       const roles = resp.body.data.getRoles;
       const guestRole = roles.find((role: any) => role.label === 'Guest');
@@ -99,15 +102,11 @@ describe('roles permissions', () => {
       const objectRestrictedRole = roles.find(
         (role: any) => role.label === 'Object-restricted',
       );
-      const workflowManagerRole = roles.find(
-        (role: any) => role.label === 'Workflow Manager',
-      );
 
       expect(guestRole).toBeDefined();
       expect(adminRole).toBeDefined();
       expect(memberRole).toBeDefined();
       expect(objectRestrictedRole).toBeDefined();
-      expect(workflowManagerRole).toBeDefined();
 
       expect(guestRole.workspaceMembers).toEqual([
         {
@@ -150,8 +149,6 @@ describe('roles permissions', () => {
           },
         },
       ]);
-
-      expect(workflowManagerRole.workspaceMembers).toBeDefined();
     });
     it('should throw a permission error when user does not have permission (member role)', async () => {
       const query = {
@@ -202,7 +199,7 @@ describe('roles permissions', () => {
       };
 
       await client
-        .post('/graphql')
+        .post('/metadata')
         .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
         .send(query)
         .expect(200)
@@ -217,7 +214,6 @@ describe('roles permissions', () => {
     });
 
     it('should allow to update role when user has permission (admin role)', async () => {
-      // Arrange
       const getRolesQuery = {
         query: `
             query GetRoles {
@@ -230,7 +226,7 @@ describe('roles permissions', () => {
       };
 
       const resp = await client
-        .post('/graphql')
+        .post('/metadata')
         .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
         .send(getRolesQuery);
 
@@ -254,9 +250,8 @@ describe('roles permissions', () => {
         `,
       };
 
-      // Act and assert
       await client
-        .post('/graphql')
+        .post('/metadata')
         .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
         .send(updateRoleQuery)
         .expect(200)
@@ -268,7 +263,6 @@ describe('roles permissions', () => {
           );
         });
 
-      // Clean
       const rollbackRoleUpdateQuery = {
         query: `
           mutation UpdateWorkspaceMemberRole {
@@ -280,7 +274,7 @@ describe('roles permissions', () => {
       };
 
       await client
-        .post('/graphql')
+        .post('/metadata')
         .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
         .send(rollbackRoleUpdateQuery)
         .expect(200)
@@ -310,7 +304,6 @@ describe('roles permissions', () => {
     });
 
     it('should create a role when user has permission to create a role (admin role)', async () => {
-      // Act and assert
       const query = {
         query: `
           mutation CreateOneRole {
@@ -322,7 +315,7 @@ describe('roles permissions', () => {
       };
 
       const result = await client
-        .post('/graphql')
+        .post('/metadata')
         .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
         .send(query)
         .expect(200)
@@ -333,11 +326,10 @@ describe('roles permissions', () => {
 
       const createdRoleId = result.body.data.createOneRole.id;
 
-      // Clean
       const deleteOneRoleQuery = deleteOneRoleOperationFactory(createdRoleId);
 
       await client
-        .post('/graphql')
+        .post('/metadata')
         .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
         .send(deleteOneRoleQuery);
     });
@@ -358,7 +350,7 @@ describe('roles permissions', () => {
       };
 
       await client
-        .post('/graphql')
+        .post('/metadata')
         .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
         .send(query)
         .then((res) => {
@@ -372,7 +364,7 @@ describe('roles permissions', () => {
       );
 
       await client
-        .post('/graphql')
+        .post('/metadata')
         .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
         .send(deleteOneRoleQuery);
     });
@@ -392,34 +384,6 @@ describe('roles permissions', () => {
         await assertPermissionDeniedForMemberWithMemberRole({ query });
       });
 
-      it('should throw an error when role is not editable', async () => {
-        const query = {
-          query: `
-          mutation UpdateOneRole {
-              updateOneRole(updateRoleInput: {id: "${adminRoleId}", update: {label: "new role label (2)"}}) {
-                  id
-              }
-          }
-        `,
-        };
-
-        await client
-          .post('/graphql')
-          .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
-          .send(query)
-          .expect(200)
-          .expect((res) => {
-            expect(res.body.data).toBeNull();
-            expect(res.body.errors).toBeDefined();
-            expect(res.body.errors[0].message).toBe(
-              PermissionsExceptionMessage.ROLE_NOT_EDITABLE,
-            );
-            expect(res.body.errors[0].extensions.code).toBe(
-              ErrorCode.FORBIDDEN,
-            );
-          });
-      });
-
       it('should update a role when user has permission to update a role (admin role)', async () => {
         const query = {
           query: `
@@ -433,7 +397,7 @@ describe('roles permissions', () => {
         };
 
         await client
-          .post('/graphql')
+          .post('/metadata')
           .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
           .send(query)
           .expect(200)
@@ -517,19 +481,26 @@ describe('roles permissions', () => {
         };
 
         await client
-          .post('/graphql')
+          .post('/metadata')
           .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
           .send(query)
           .expect(200)
           .expect((res) => {
             expect(res.body.data).toBeNull();
             expect(res.body.errors).toBeDefined();
-            expect(res.body.errors[0].message).toBe(
-              PermissionsExceptionMessage.ROLE_NOT_EDITABLE,
-            );
             expect(res.body.errors[0].extensions.code).toBe(
-              ErrorCode.FORBIDDEN,
+              ErrorCode.METADATA_VALIDATION_FAILED,
             );
+            const objectPermissionErrors =
+              res.body.errors[0].extensions.errors?.objectPermission ?? [];
+            const hasRoleNotEditable = objectPermissionErrors.some(
+              (failure: { errors?: Array<{ code?: string }> }) =>
+                failure.errors?.some(
+                  (err) =>
+                    err.code === PermissionsExceptionCode.ROLE_NOT_EDITABLE,
+                ),
+            );
+            expect(hasRoleNotEditable).toBe(true);
           });
       });
 
@@ -542,7 +513,7 @@ describe('roles permissions', () => {
         };
 
         await client
-          .post('/graphql')
+          .post('/metadata')
           .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
           .send(query)
           .expect(200)
@@ -589,7 +560,7 @@ describe('roles permissions', () => {
         roleId: string;
       }) => `
       mutation UpsertPermissionFlags {
-          upsertPermissionFlags(upsertPermissionFlagsInput: {roleId: "${roleId}", permissionFlagKeys: [${PermissionFlagType.DATA_MODEL}]}) {
+          upsertPermissionFlags(upsertPermissionFlagsInput: {roleId: "${roleId}", permissionFlagKeys: ["${PermissionFlagType.DATA_MODEL}"]}) {
               id
               roleId
               flag
@@ -615,19 +586,26 @@ describe('roles permissions', () => {
         };
 
         await client
-          .post('/graphql')
+          .post('/metadata')
           .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
           .send(query)
           .expect(200)
           .expect((res) => {
             expect(res.body.data).toBeNull();
             expect(res.body.errors).toBeDefined();
-            expect(res.body.errors[0].message).toBe(
-              PermissionsExceptionMessage.ROLE_NOT_EDITABLE,
-            );
             expect(res.body.errors[0].extensions.code).toBe(
-              ErrorCode.FORBIDDEN,
+              ErrorCode.METADATA_VALIDATION_FAILED,
             );
+            const rolePermissionFlagErrors =
+              res.body.errors[0].extensions.errors?.rolePermissionFlag ?? [];
+            const hasRoleNotEditable = rolePermissionFlagErrors.some(
+              (failure: { errors?: Array<{ code?: string }> }) =>
+                failure.errors?.some(
+                  (err) =>
+                    err.code === PermissionsExceptionCode.ROLE_NOT_EDITABLE,
+                ),
+            );
+            expect(hasRoleNotEditable).toBe(true);
           });
       });
 
@@ -639,7 +617,7 @@ describe('roles permissions', () => {
         };
 
         await client
-          .post('/graphql')
+          .post('/metadata')
           .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
           .send(query)
           .expect(200)

@@ -1,29 +1,10 @@
 import { type RecordGqlConnection } from '@/object-record/graphql/types/RecordGqlConnection';
 
-export const getWorkflowMock = () => {
-  return workflowQueryResult.workflows.edges[0].node;
-};
-
-export const getWorkflowVersionsMock = () => {
-  return {
-    ...getWorkflowMock().versions,
-    __typename: 'WorkflowVersionConnection',
-    totalCount: 1,
-    pageInfo: {
-      __typename: 'PageInfo',
-      hasNextPage: false,
-      hasPreviousPage: false,
-      startCursor:
-        'eyJjcmVhdGVkQXQiOiIyMDI0LTA5LTE5VDEwOjEwOjA0LjcyNVoiLCJpZCI6ImY2MTg4NDNhLTI2YmUtNGE1NC1hNjBmLWY0Y2U4OGE1OTRmMCJ9',
-      endCursor:
-        'eyJjcmVhdGVkQXQiOiIyMDI0LTA5LTE5VDEwOjEwOjA0LjcyNVoiLCJpZCI6ImY2MTg4NDNhLTI2YmUtNGE1NC1hNjBmLWY0Y2U4OGE1OTRmMCJ9',
-    },
-  };
-};
-
-export const getWorkflowNodeIdMock = () => {
-  return getWorkflowMock().versions.edges[0].node.steps[0].id;
-};
+// Keep function wrappers as aliases for backward compatibility — they just
+// return the pre-computed constants so callers can be migrated gradually.
+export const getWorkflowMock = () => mockedWorkflow;
+export const getWorkflowVersionsMock = () => mockedWorkflowVersions;
+export const getWorkflowNodeIdMock = () => mockedWorkflowNodeId;
 
 export const MOCKED_STEP_ID = '04d5f3bf-9714-400d-ba27-644006a5fb1b';
 
@@ -144,13 +125,13 @@ export const workflowQueryResult = {
                               value: {
                                 amountMicros: {
                                   type: 'NUMERIC',
-                                  label: 'My Amount Micros',
+                                  label: 'My Amount',
                                   value: null,
                                   isLeaf: true,
                                 },
                                 currencyCode: {
                                   type: 'TEXT',
-                                  label: 'My Currency Code',
+                                  label: 'My Currency',
                                   value: 'My text',
                                   isLeaf: true,
                                 },
@@ -1169,7 +1150,7 @@ export const workflowQueryResult = {
                                   updatedAt: '2025-01-30T09:40:10.256Z',
                                   isNullable: true,
                                   standardId:
-                                    '20202020-cb17-4a61-8f8f-3be6730480de',
+                                    '9d7b0087-7037-55dc-bb59-456064455694',
                                   description: 'Tasks tied to the company',
                                   workspaceId:
                                     '3b8e6458-5fc1-4e63-8563-008ccddaa6db',
@@ -1196,7 +1177,7 @@ export const workflowQueryResult = {
                                   updatedAt: '2025-01-30T09:40:10.256Z',
                                   isNullable: true,
                                   standardId:
-                                    '20202020-bae0-4556-a74a-a9c686f77a88',
+                                    '0b28db77-8099-5ce3-a11f-86a5778d7740',
                                   description: 'Notes tied to the company',
                                   workspaceId:
                                     '3b8e6458-5fc1-4e63-8563-008ccddaa6db',
@@ -1279,7 +1260,7 @@ export const workflowQueryResult = {
                                   updatedAt: '2025-01-30T09:40:10.256Z',
                                   isNullable: true,
                                   standardId:
-                                    '20202020-c1b5-4120-b0f0-987ca401ed53',
+                                    'a4399ae3-fe89-59fe-a282-aec77d4e63a8',
                                   description:
                                     'Attachments linked to the company',
                                   workspaceId:
@@ -1307,7 +1288,7 @@ export const workflowQueryResult = {
                                   updatedAt: '2025-01-30T09:40:10.256Z',
                                   isNullable: true,
                                   standardId:
-                                    '20202020-0414-4daf-9c0d-64fe7b27f89f',
+                                    '28ec0f8f-ad23-5317-b2d9-1a487bcefee2',
                                   description:
                                     'Timeline Activities linked to the company',
                                   workspaceId:
@@ -1552,3 +1533,24 @@ export const workflowQueryResult = {
     ],
   },
 } satisfies { workflows: RecordGqlConnection };
+
+export const mockedWorkflow = workflowQueryResult.workflows.edges[0].node;
+
+export const mockedWorkflowVersion = mockedWorkflow.versions.edges[0].node;
+
+export const mockedWorkflowVersions = {
+  ...mockedWorkflow.versions,
+  __typename: 'WorkflowVersionConnection' as const,
+  totalCount: 1,
+  pageInfo: {
+    __typename: 'PageInfo' as const,
+    hasNextPage: false,
+    hasPreviousPage: false,
+    startCursor:
+      'eyJjcmVhdGVkQXQiOiIyMDI0LTA5LTE5VDEwOjEwOjA0LjcyNVoiLCJpZCI6ImY2MTg4NDNhLTI2YmUtNGE1NC1hNjBmLWY0Y2U4OGE1OTRmMCJ9',
+    endCursor:
+      'eyJjcmVhdGVkQXQiOiIyMDI0LTA5LTE5VDEwOjEwOjA0LjcyNVoiLCJpZCI6ImY2MTg4NDNhLTI2YmUtNGE1NC1hNjBmLWY0Y2U4OGE1OTRmMCJ9',
+  },
+};
+
+export const mockedWorkflowNodeId = mockedWorkflowVersion.steps[0].id;

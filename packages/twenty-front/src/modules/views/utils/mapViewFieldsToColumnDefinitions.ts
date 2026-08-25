@@ -5,7 +5,7 @@ import { moveArrayItem } from '~/utils/array/moveArrayItem';
 import { isUndefinedOrNull } from '~/utils/isUndefinedOrNull';
 
 import { isDefined } from 'twenty-shared/utils';
-import { type ViewField } from '../types/ViewField';
+import { type ViewField } from '@/views/types/ViewField';
 
 export const mapViewFieldsToColumnDefinitions = ({
   columnDefinitions,
@@ -46,7 +46,7 @@ export const mapViewFieldsToColumnDefinitions = ({
         isLabelIdentifier,
         isVisible: isLabelIdentifier || viewField.isVisible,
         viewFieldId: viewField.id,
-        isUIReadOnly: correspondingColumnDefinition.metadata.isUIReadOnly,
+        isUIEditable: correspondingColumnDefinition.metadata.isUIEditable,
         isSortable: correspondingColumnDefinition.isSortable,
         isFilterable: correspondingColumnDefinition.isFilterable,
         defaultValue: correspondingColumnDefinition.defaultValue,
@@ -58,7 +58,6 @@ export const mapViewFieldsToColumnDefinitions = ({
     })
     .filter(isDefined);
 
-  // No label identifier set for this object
   if (!labelIdentifierFieldMetadataId) return columnDefinitionsFromViewFields;
 
   const labelIdentifierIndex = columnDefinitionsFromViewFields.findIndex(

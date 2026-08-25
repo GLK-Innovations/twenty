@@ -24,30 +24,35 @@ export class RestApiCreateOneHandler extends RestApiBaseHandler {
 
       const {
         authContext,
-        objectMetadataItemWithFieldMaps,
-        objectMetadataMaps,
+        flatObjectMetadata,
+        flatObjectMetadataMaps,
+        flatFieldMetadataMaps,
+        flatIndexMaps,
+        objectIdByNameSingular,
       } = await this.buildCommonOptions(request);
 
       const selectedFields = await this.computeSelectedFields({
         depth,
-        objectMetadataMapItem: objectMetadataItemWithFieldMaps,
-        objectMetadataMaps,
+        flatObjectMetadata,
+        flatObjectMetadataMaps,
+        flatFieldMetadataMaps,
         authContext,
       });
 
-      const record = await this.commonCreateOneQueryRunnerService.execute(
-        { data, selectedFields, upsert },
-        {
-          authContext,
-          objectMetadataMaps,
-          objectMetadataItemWithFieldMaps,
-        },
-      );
+      const { results: record } =
+        await this.commonCreateOneQueryRunnerService.execute(
+          { data, selectedFields, upsert },
+          {
+            authContext,
+            flatObjectMetadata,
+            flatObjectMetadataMaps,
+            flatFieldMetadataMaps,
+            flatIndexMaps,
+            objectIdByNameSingular,
+          },
+        );
 
-      return this.formatRestResponse(
-        record,
-        objectMetadataItemWithFieldMaps.nameSingular,
-      );
+      return this.formatRestResponse(record, flatObjectMetadata.nameSingular);
     } catch (error) {
       return workspaceQueryRunnerRestApiExceptionHandler(error);
     }

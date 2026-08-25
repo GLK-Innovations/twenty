@@ -7,16 +7,17 @@ import {
   ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
-  Relation,
+  type Relation,
   Unique,
   UpdateDateColumn,
 } from 'typeorm';
 
-import { SyncableEntity } from 'src/engine/workspace-manager/workspace-sync/interfaces/syncable-entity.interface';
-
+import { WasIntroducedInUpgrade } from 'src/engine/core-modules/upgrade/decorators/was-introduced-in-upgrade.decorator';
+import { ADD_IS_SYSTEM_SIDE_EFFECT_UPGRADE_COMMAND_NAME } from 'src/database/commands/upgrade-version-command/2-15/is-system-side-effect-upgrade-command-name.constant';
 import { IndexFieldMetadataEntity } from 'src/engine/metadata-modules/index-metadata/index-field-metadata.entity';
 import { IndexType } from 'src/engine/metadata-modules/index-metadata/types/indexType.types';
 import { ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
+import { SyncableEntity } from 'src/engine/workspace-manager/types/syncable-entity.interface';
 
 @Unique('IDX_INDEX_METADATA_NAME_WORKSPACE_ID_OBJECT_METADATA_ID_UNIQUE', [
   'name',
@@ -43,9 +44,6 @@ export class IndexMetadataEntity
 
   @Column({ nullable: false })
   name: string;
-
-  @Column({ nullable: false, type: 'uuid' })
-  workspaceId: string;
 
   @Column({ nullable: false, type: 'uuid' })
   objectMetadataId: string;
@@ -82,4 +80,10 @@ export class IndexMetadataEntity
     nullable: false,
   })
   indexType: IndexType;
+
+  @WasIntroducedInUpgrade({
+    upgradeCommandName: ADD_IS_SYSTEM_SIDE_EFFECT_UPGRADE_COMMAND_NAME,
+  })
+  @Column({ nullable: false, default: false, type: 'boolean' })
+  isSystemSideEffect: boolean;
 }

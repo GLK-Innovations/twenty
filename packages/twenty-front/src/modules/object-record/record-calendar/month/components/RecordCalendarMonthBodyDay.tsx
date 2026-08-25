@@ -1,45 +1,49 @@
 import { RecordCalendarCardDraggableContainer } from '@/object-record/record-calendar/record-calendar-card/components/RecordCalendarCardDraggableContainer';
+import { RECORD_CALENDAR_MONTH_VISIBLE_RECORD_LIMIT } from '@/object-record/record-calendar/constants/RecordCalendarMonthVisibleRecordLimit';
 import { recordCalendarSelectedDateComponentState } from '@/object-record/record-calendar/states/recordCalendarSelectedDateComponentState';
 import { calendarDayRecordIdsComponentFamilySelector } from '@/object-record/record-calendar/states/selectors/calendarDayRecordsComponentFamilySelector';
-import { useRecoilComponentFamilyValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentFamilyValue';
-import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
-import { css } from '@emotion/react';
-import styled from '@emotion/styled';
-import { Droppable } from '@hello-pangea/dnd';
-import { format, isSameDay, isSameMonth, isWeekend } from 'date-fns';
-import { useState } from 'react';
-import { DATE_TYPE_FORMAT } from 'twenty-shared/constants';
-import { RecordCalendarAddNew } from '../../components/RecordCalendarAddNew';
+import { useUserTimezone } from '@/ui/input/components/internal/date/hooks/useUserTimezone';
+import { useAtomComponentFamilySelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentFamilySelectorValue';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import { styled } from '@linaria/react';
+import { pointerIntersection } from '@dnd-kit/collision';
+import { useDroppable } from '@dnd-kit/react';
+import { Fragment, useState } from 'react';
+import { Temporal } from 'temporal-polyfill';
+import {
+  isDefined,
+  isPlainDateInSameMonth,
+  isPlainDateInWeekend,
+  isSamePlainDate,
+} from 'twenty-shared/utils';
+import { RecordCalendarAddNew } from '@/object-record/record-calendar/components/RecordCalendarAddNew';
+import { RECORD_CALENDAR_CARD_DND_TYPE } from '@/object-record/record-calendar/month/constants/RecordCalendarCardDndType';
+import { RECORD_CALENDAR_MONTH_DAY_COLLISION_PRIORITY } from '@/object-record/record-calendar/month/constants/RecordCalendarMonthDayCollisionPriority';
+import { DragDropItemDropTarget } from '@/ui/utilities/drag-and-drop/components/DragDropItemDropTarget';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 const StyledContainer = styled.div<{
   isOtherMonth: boolean;
   isDayOfWeekend: boolean;
 }>`
+  background: ${({ isOtherMonth, isDayOfWeekend }) =>
+    isOtherMonth || isDayOfWeekend
+      ? themeCssVariables.background.secondary
+      : themeCssVariables.background.primary};
+  color: ${({ isOtherMonth }) =>
+    isOtherMonth
+      ? themeCssVariables.font.color.light
+      : themeCssVariables.font.color.primary};
   display: flex;
-  width: calc(100% / 7);
   flex-direction: column;
   min-height: 122px;
-  padding: ${({ theme }) => theme.spacing(1)};
-  background: ${({ theme }) => theme.background.primary};
   min-width: 0;
-  color: ${({ theme }) => theme.font.color.primary};
+  padding: ${themeCssVariables.spacing[1]};
+  width: calc(100% / 7);
 
   &:not(:last-child) {
-    border-right: 1px solid ${({ theme }) => theme.border.color.light};
+    border-right: 1px solid ${themeCssVariables.border.color.light};
   }
-
-  ${({ isOtherMonth, theme }) =>
-    isOtherMonth &&
-    css`
-      background: ${theme.background.secondary};
-      color: ${theme.font.color.light};
-    `}
-
-  ${({ isDayOfWeekend, theme }) =>
-    isDayOfWeekend &&
-    css`
-      background: ${theme.background.secondary};
-    `}
 `;
 
 const StyledDayHeader = styled.div`
@@ -55,108 +59,131 @@ const StyledDayHeader = styled.div`
 const StyledDayHeaderDayContainer = styled.div`
   display: flex;
   margin-left: auto;
-  padding: ${({ theme }) => theme.spacing(0.5, 0.5)};
+  padding: ${themeCssVariables.spacing['0.5']}
+    ${themeCssVariables.spacing['0.5']};
 `;
 
 const StyledDayHeaderDay = styled.span<{ isToday: boolean }>`
   align-items: center;
+  background: ${({ isToday }) =>
+    isToday ? themeCssVariables.color.blue : 'transparent'};
+  border-radius: ${({ isToday }) => (isToday ? '4px' : '0')};
+  color: ${({ isToday }) =>
+    isToday
+      ? themeCssVariables.font.color.inverted
+      : themeCssVariables.font.color.primary};
   display: flex;
-  font-size: ${({ theme }) => theme.font.size.sm};
+  font-size: ${themeCssVariables.font.size.sm};
+  font-weight: ${({ isToday }) =>
+    isToday ? themeCssVariables.font.weight.medium : 'normal'};
   justify-content: center;
   line-height: 140%;
   width: 20px;
-
-  ${({ isToday, theme }) =>
-    isToday &&
-    css`
-      border-radius: 4px;
-      background: ${theme.color.blue};
-      color: ${theme.font.color.inverted};
-      font-weight: ${theme.font.weight.medium};
-    `}
 `;
 
 const StyledCardsContainer = styled.div<{ isDraggedOver?: boolean }>`
+  background: ${({ isDraggedOver }) =>
+    isDraggedOver
+      ? themeCssVariables.background.transparent.lighter
+      : 'transparent'};
+  border: ${({ isDraggedOver }) =>
+    isDraggedOver
+      ? `1px dashed ${themeCssVariables.border.color.medium}`
+      : 'none'};
+  border-radius: ${themeCssVariables.border.radius.sm};
   display: flex;
-  flex-direction: column;
-  gap: ${({ theme }) => theme.spacing(0.5)};
   flex: 1;
+  flex-direction: column;
   min-height: 60px;
-  border-radius: ${({ theme }) => theme.border.radius.sm};
   transition: background-color 0.1s ease;
-
-  ${({ isDraggedOver, theme }) =>
-    isDraggedOver &&
-    css`
-      background: ${theme.background.transparent.lighter};
-      border: 1px dashed ${theme.border.color.medium};
-    `}
 `;
 
 type RecordCalendarMonthBodyDayProps = {
-  day: Date;
+  day: Temporal.PlainDate;
 };
 
 export const RecordCalendarMonthBodyDay = ({
   day,
 }: RecordCalendarMonthBodyDayProps) => {
-  const recordCalendarSelectedDate = useRecoilComponentValue(
+  const { userTimezone } = useUserTimezone();
+
+  const recordCalendarSelectedDate = useAtomComponentStateValue(
     recordCalendarSelectedDateComponentState,
   );
 
-  const dayKey = format(day, DATE_TYPE_FORMAT);
+  const dayKey = day.toString();
 
-  const recordIds = useRecoilComponentFamilyValue(
+  const recordIds = useAtomComponentFamilySelectorValue(
     calendarDayRecordIdsComponentFamilySelector,
-    dayKey,
+    {
+      day: day,
+      timeZone: userTimezone,
+    },
   );
+
+  const todayInUserTimeZone =
+    Temporal.Now.zonedDateTimeISO(userTimezone).toPlainDate();
 
   const [hovered, setHovered] = useState(false);
 
-  const isToday = isSameDay(day, new Date());
+  const isToday = isSamePlainDate(day, todayInUserTimeZone);
 
-  const isOtherMonth = !isSameMonth(day, recordCalendarSelectedDate);
+  const isOtherMonth = isDefined(recordCalendarSelectedDate)
+    ? !isPlainDateInSameMonth(day, recordCalendarSelectedDate)
+    : false;
 
-  const isDayOfWeekend = isWeekend(day);
+  const isDayOfWeekend = isPlainDateInWeekend(day);
 
-  const utcDate = new Date(
-    Date.UTC(day.getFullYear(), day.getMonth(), day.getDate()),
+  const { isDropTarget, ref: dropRef } = useDroppable({
+    id: dayKey,
+    collisionPriority: RECORD_CALENDAR_MONTH_DAY_COLLISION_PRIORITY,
+    collisionDetector: pointerIntersection,
+    type: RECORD_CALENDAR_CARD_DND_TYPE,
+    accept: RECORD_CALENDAR_CARD_DND_TYPE,
+  });
+
+  const visibleRecordIds = recordIds.slice(
+    0,
+    RECORD_CALENDAR_MONTH_VISIBLE_RECORD_LIMIT,
   );
 
   return (
     <StyledContainer
+      ref={dropRef}
       isOtherMonth={isOtherMonth}
       isDayOfWeekend={isDayOfWeekend}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
       <StyledDayHeader>
-        {hovered && <RecordCalendarAddNew cardDate={utcDate.toISOString()} />}
+        {hovered && <RecordCalendarAddNew cardDate={day} />}
         <StyledDayHeaderDayContainer>
-          <StyledDayHeaderDay isToday={isToday}>
-            {day.getDate()}
-          </StyledDayHeaderDay>
+          <StyledDayHeaderDay isToday={isToday}>{day.day}</StyledDayHeaderDay>
         </StyledDayHeaderDayContainer>
       </StyledDayHeader>
-      <Droppable droppableId={dayKey}>
-        {(droppableProvided, droppableSnapshot) => (
-          <StyledCardsContainer
-            // eslint-disable-next-line react/jsx-props-no-spreading
-            {...droppableProvided.droppableProps}
-            ref={droppableProvided.innerRef}
-            isDraggedOver={droppableSnapshot.isDraggingOver}
-          >
-            {recordIds.slice(0, 5).map((recordId, index) => (
-              <RecordCalendarCardDraggableContainer
-                key={recordId}
-                recordId={recordId}
-                index={index}
-              />
-            ))}
-            {droppableProvided.placeholder}
-          </StyledCardsContainer>
-        )}
-      </Droppable>
+      <StyledCardsContainer isDraggedOver={isDropTarget}>
+        {visibleRecordIds.map((recordId, index) => (
+          <Fragment key={`${recordId}-${dayKey}`}>
+            <DragDropItemDropTarget
+              index={index}
+              droppableId={dayKey}
+              orientation="horizontal"
+              compact
+            />
+            <RecordCalendarCardDraggableContainer
+              calendarDay={dayKey}
+              recordId={recordId}
+              index={index}
+            />
+          </Fragment>
+        ))}
+        <DragDropItemDropTarget
+          index={visibleRecordIds.length}
+          droppableId={dayKey}
+          orientation="horizontal"
+          compact
+        />
+      </StyledCardsContainer>
     </StyledContainer>
   );
 };

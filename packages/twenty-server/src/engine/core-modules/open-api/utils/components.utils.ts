@@ -1,22 +1,34 @@
 import { type OpenAPIV3_1 } from 'openapi-types';
-import { FieldMetadataType } from 'twenty-shared/types';
-import { capitalize } from 'twenty-shared/utils';
+import {
+  type FieldMetadataDefaultValue,
+  FieldMetadataType,
+} from 'twenty-shared/types';
+import { capitalize, isDefined } from 'twenty-shared/utils';
 
-import { type FieldMetadataDefaultValue } from 'src/engine/metadata-modules/field-metadata/interfaces/field-metadata-default-value.interface';
 import { RelationType } from 'src/engine/metadata-modules/field-metadata/interfaces/relation-type.interface';
 
 import { generateRandomFieldValue } from 'src/engine/core-modules/open-api/utils/generate-random-field-value.util';
 import {
+  computeAggregateParameters,
   computeDepthParameters,
   computeEndingBeforeParameters,
   computeFilterParameters,
+  computeGroupByParameters,
   computeIdPathParameter,
+  computeIncludeRecordsSampleParameters,
   computeLimitParameters,
+  computeOrderByForRecordsParameters,
   computeOrderByParameters,
   computeSoftDeleteParameters,
   computeStartingAfterParameters,
   computeUpsertParameters,
+  computeViewIdParameters,
 } from 'src/engine/core-modules/open-api/utils/parameters.utils';
+import { type AllFlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/all-flat-entity-maps.type';
+import { findFlatEntityByIdInFlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/utils/find-flat-entity-by-id-in-flat-entity-maps.util';
+import { findManyFlatEntityByIdInFlatEntityMapsOrThrow } from 'src/engine/metadata-modules/flat-entity/utils/find-many-flat-entity-by-id-in-flat-entity-maps-or-throw.util';
+import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
+import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
 import { type ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
 import { convertObjectMetadataToSchemaProperties } from 'src/engine/utils/convert-object-metadata-to-schema-properties.util';
 import { isFieldMetadataEntityOfType } from 'src/engine/utils/is-field-metadata-of-type.util';
@@ -31,12 +43,17 @@ type Properties = {
 type OpenApiExample = Record<string, FieldMetadataDefaultValue>;
 
 const getSchemaComponentsExample = (
-  item: ObjectMetadataEntity,
+  item: FlatObjectMetadata,
+  flatFieldMetadatas: FlatFieldMetadata[],
 ): OpenApiExample => {
-  return item.fields.reduce((node, field) => {
-    // If field is required
+  return flatFieldMetadatas.reduce((node, field) => {
     if (!field.isNullable && field.defaultValue === null) {
-      return { ...node, [field.name]: generateRandomFieldValue({ field }) };
+      return {
+        ...node,
+        [field.name]: generateRandomFieldValue({
+          field,
+        }),
+      };
     }
 
     switch (field.type) {
@@ -60,7 +77,9 @@ const getSchemaComponentsExample = (
       case FieldMetadataType.PHONES: {
         return {
           ...node,
-          [field.name]: generateRandomFieldValue({ field }),
+          [field.name]: generateRandomFieldValue({
+            field,
+          }),
         };
       }
 
@@ -72,37 +91,68 @@ const getSchemaComponentsExample = (
 };
 
 const getSchemaComponentsRelationProperties = (
-  item: ObjectMetadataEntity,
+  flatFieldMetadatas: FlatFieldMetadata[],
+  flatObjectMetadataMaps: Pick<
+    AllFlatEntityMaps,
+    'flatObjectMetadataMaps'
+  >['flatObjectMetadataMaps'],
 ): Properties => {
-  return item.fields.reduce((node, field) => {
-    if (field.type !== FieldMetadataType.RELATION) {
+  return flatFieldMetadatas.reduce((node, field) => {
+    const isRelationField =
+      isFieldMetadataEntityOfType(field, FieldMetadataType.RELATION) ||
+      isFieldMetadataEntityOfType(field, FieldMetadataType.MORPH_RELATION);
+
+    if (!isRelationField) {
       return node;
+    }
+
+    if (!isDefined(field.relationTargetObjectMetadataId)) {
+      throw new Error(
+        `Relation field "${field.name}" has no relationTargetObjectMetadataId`,
+      );
+    }
+
+    const relationType = field.settings?.relationType;
+
+    if (!isDefined(relationType)) {
+      throw new Error(
+        `Relation field "${field.name}" has no relationType in settings`,
+      );
+    }
+
+    const targetObjectMetadata = findFlatEntityByIdInFlatEntityMaps({
+      flatEntityId: field.relationTargetObjectMetadataId,
+      flatEntityMaps: flatObjectMetadataMaps,
+    });
+
+    if (!targetObjectMetadata) {
+      throw new Error(
+        `Relation field "${field.name}" target object metadata not found for id ${field.relationTargetObjectMetadataId}`,
+      );
     }
 
     let itemProperty = {} as Property;
 
-    if (isFieldMetadataEntityOfType(field, FieldMetadataType.RELATION)) {
-      if (field.settings?.relationType === RelationType.MANY_TO_ONE) {
-        itemProperty = {
-          type: 'object',
-          oneOf: [
-            {
-              $ref: `#/components/schemas/${capitalize(
-                field.relationTargetObjectMetadata.nameSingular,
-              )}ForResponse`,
-            },
-          ],
-        };
-      } else if (field.settings?.relationType === RelationType.ONE_TO_MANY) {
-        itemProperty = {
-          type: 'array',
-          items: {
+    if (relationType === RelationType.MANY_TO_ONE) {
+      itemProperty = {
+        type: 'object',
+        oneOf: [
+          {
             $ref: `#/components/schemas/${capitalize(
-              field.relationTargetObjectMetadata.nameSingular,
+              targetObjectMetadata.nameSingular,
             )}ForResponse`,
           },
-        };
-      }
+        ],
+      };
+    } else if (relationType === RelationType.ONE_TO_MANY) {
+      itemProperty = {
+        type: 'array',
+        items: {
+          $ref: `#/components/schemas/${capitalize(
+            targetObjectMetadata.nameSingular,
+          )}ForResponse`,
+        },
+      };
     }
 
     if (field.description) {
@@ -117,8 +167,10 @@ const getSchemaComponentsRelationProperties = (
   }, {} as Properties);
 };
 
-const getRequiredFields = (item: ObjectMetadataEntity): string[] => {
-  return item.fields.reduce((required, field) => {
+const getRequiredFields = (
+  flatFieldMetadatas: FlatFieldMetadata[],
+): string[] => {
+  return flatFieldMetadatas.reduce((required, field) => {
     if (!field.isNullable && field.defaultValue === null) {
       required.push(field.name);
 
@@ -131,10 +183,17 @@ const getRequiredFields = (item: ObjectMetadataEntity): string[] => {
 
 const computeSchemaComponent = ({
   item,
+  flatFieldMetadatas,
+  flatObjectMetadataMaps,
   forResponse,
   forUpdate,
 }: {
-  item: ObjectMetadataEntity;
+  item: FlatObjectMetadata;
+  flatFieldMetadatas: FlatFieldMetadata[];
+  flatObjectMetadataMaps: Pick<
+    AllFlatEntityMaps,
+    'flatObjectMetadataMaps'
+  >['flatObjectMetadataMaps'];
   forResponse: boolean;
   forUpdate: boolean;
 }): OpenAPIV3_1.SchemaObject => {
@@ -142,20 +201,30 @@ const computeSchemaComponent = ({
 
   const withRequiredFields = !forResponse && !forUpdate;
 
+  const tempItem = {
+    ...item,
+    fields: flatFieldMetadatas,
+  } as unknown as ObjectMetadataEntity;
+
   const result: OpenAPIV3_1.SchemaObject = {
     type: 'object',
     description: item.description ?? undefined,
     properties: convertObjectMetadataToSchemaProperties({
-      item,
+      item: tempItem,
       forResponse,
     }) as Properties,
-    ...(!forResponse ? { example: getSchemaComponentsExample(item) } : {}),
+    ...(!forResponse
+      ? { example: getSchemaComponentsExample(item, flatFieldMetadatas) }
+      : {}),
   };
 
   if (withRelations) {
     result.properties = {
       ...result.properties,
-      ...getSchemaComponentsRelationProperties(item),
+      ...getSchemaComponentsRelationProperties(
+        flatFieldMetadatas,
+        flatObjectMetadataMaps,
+      ),
     };
   }
 
@@ -163,7 +232,7 @@ const computeSchemaComponent = ({
     return result;
   }
 
-  const requiredFields = getRequiredFields(item);
+  const requiredFields = getRequiredFields(flatFieldMetadatas);
 
   if (requiredFields?.length) {
     result.required = requiredFields;
@@ -173,24 +242,44 @@ const computeSchemaComponent = ({
 };
 
 export const computeSchemaComponents = (
-  objectMetadataItems: ObjectMetadataEntity[],
+  flatObjectMetadataItems: FlatObjectMetadata[],
+  flatObjectMetadataMaps: Pick<
+    AllFlatEntityMaps,
+    'flatObjectMetadataMaps'
+  >['flatObjectMetadataMaps'],
+  flatFieldMetadataMaps: Pick<
+    AllFlatEntityMaps,
+    'flatFieldMetadataMaps'
+  >['flatFieldMetadataMaps'],
 ): Record<string, OpenAPIV3_1.SchemaObject> => {
-  return objectMetadataItems.reduce(
+  return flatObjectMetadataItems.reduce(
     (schemas, item) => {
+      const flatFieldMetadatas =
+        findManyFlatEntityByIdInFlatEntityMapsOrThrow<FlatFieldMetadata>({
+          flatEntityMaps: flatFieldMetadataMaps,
+          flatEntityIds: item.fieldIds,
+        });
+
       schemas[capitalize(item.nameSingular)] = computeSchemaComponent({
         item,
+        flatFieldMetadatas,
+        flatObjectMetadataMaps,
         forResponse: false,
         forUpdate: false,
       });
       schemas[capitalize(item.nameSingular) + 'ForUpdate'] =
         computeSchemaComponent({
           item,
+          flatFieldMetadatas,
+          flatObjectMetadataMaps,
           forResponse: false,
           forUpdate: true,
         });
       schemas[capitalize(item.nameSingular) + 'ForResponse'] =
         computeSchemaComponent({
           item,
+          flatFieldMetadatas,
+          flatObjectMetadataMaps,
           forResponse: true,
           forUpdate: false,
         });
@@ -201,9 +290,10 @@ export const computeSchemaComponents = (
   );
 };
 
-export const computeParameterComponents = (
-  fromMetadata = false,
-): Record<string, OpenAPIV3_1.ParameterObject> => {
+export const computeParameterComponents = (): Record<
+  string,
+  OpenAPIV3_1.ParameterObject
+> => {
   return {
     idPath: computeIdPathParameter(),
     startingAfter: computeStartingAfterParameters(),
@@ -213,7 +303,12 @@ export const computeParameterComponents = (
     upsert: computeUpsertParameters(),
     softDelete: computeSoftDeleteParameters(),
     orderBy: computeOrderByParameters(),
-    limit: computeLimitParameters(fromMetadata),
+    limit: computeLimitParameters(),
+    groupBy: computeGroupByParameters(),
+    viewId: computeViewIdParameters(),
+    aggregate: computeAggregateParameters(),
+    includeRecordsSample: computeIncludeRecordsSampleParameters(),
+    orderByForRecords: computeOrderByForRecordsParameters(),
   };
 };
 
@@ -270,19 +365,9 @@ export const computeMetadataSchemaComponents = (
               createdAt: { type: 'string', format: 'date-time' },
               updatedAt: { type: 'string', format: 'date-time' },
               fields: {
-                type: 'object',
-                properties: {
-                  edges: {
-                    type: 'object',
-                    properties: {
-                      node: {
-                        type: 'array',
-                        items: {
-                          $ref: '#/components/schemas/FieldForResponse',
-                        },
-                      },
-                    },
-                  },
+                type: 'array',
+                items: {
+                  $ref: '#/components/schemas/FieldForResponse',
                 },
               },
             },
@@ -1004,7 +1089,12 @@ export const computeMetadataSchemaComponents = (
               name: { type: 'string' },
               type: {
                 type: 'string',
-                enum: ['RECORD_INDEX', 'RECORD_PAGE', 'DASHBOARD'],
+                enum: [
+                  'RECORD_INDEX',
+                  'RECORD_PAGE',
+                  'DASHBOARD',
+                  'STANDALONE_PAGE',
+                ],
                 default: 'RECORD_PAGE',
               },
               objectMetadataId: { type: 'string', format: 'uuid' },
@@ -1025,7 +1115,12 @@ export const computeMetadataSchemaComponents = (
               name: { type: 'string' },
               type: {
                 type: 'string',
-                enum: ['RECORD_INDEX', 'RECORD_PAGE', 'DASHBOARD'],
+                enum: [
+                  'RECORD_INDEX',
+                  'RECORD_PAGE',
+                  'DASHBOARD',
+                  'STANDALONE_PAGE',
+                ],
               },
               objectMetadataId: { type: 'string', format: 'uuid' },
             },
@@ -1038,7 +1133,12 @@ export const computeMetadataSchemaComponents = (
               name: { type: 'string' },
               type: {
                 type: 'string',
-                enum: ['RECORD_INDEX', 'RECORD_PAGE', 'DASHBOARD'],
+                enum: [
+                  'RECORD_INDEX',
+                  'RECORD_PAGE',
+                  'DASHBOARD',
+                  'STANDALONE_PAGE',
+                ],
               },
               objectMetadataId: { type: 'string', format: 'uuid' },
               tabs: {

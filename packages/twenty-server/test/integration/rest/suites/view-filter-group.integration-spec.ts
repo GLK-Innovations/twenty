@@ -4,6 +4,7 @@ import { deleteOneObjectMetadata } from 'test/integration/metadata/suites/object
 import { updateOneObjectMetadata } from 'test/integration/metadata/suites/object-metadata/utils/update-one-object-metadata.util';
 import { makeRestAPIRequest } from 'test/integration/rest/utils/make-rest-api-request.util';
 import {
+  assertMetadataRestListResponse,
   assertRestApiErrorNotFoundResponse,
   assertRestApiErrorResponse,
   assertRestApiSuccessfulResponse,
@@ -15,10 +16,12 @@ import {
 } from 'test/integration/rest/utils/view-rest-api.util';
 import { assertViewFilterGroupStructure } from 'test/integration/utils/view-test.util';
 import { jestExpectToBeDefined } from 'test/utils/jest-expect-to-be-defined.util.test';
-import { FieldMetadataType } from 'twenty-shared/types';
+import {
+  FieldMetadataType,
+  ViewFilterGroupLogicalOperator,
+} from 'twenty-shared/types';
 
 import { type ViewFilterGroupDTO } from 'src/engine/metadata-modules/view-filter-group/dtos/view-filter-group.dto';
-import { ViewFilterGroupLogicalOperator } from 'src/engine/metadata-modules/view-filter-group/enums/view-filter-group-logical-operator';
 import {
   generateViewFilterGroupExceptionMessage,
   ViewFilterGroupExceptionMessageKey,
@@ -102,8 +105,10 @@ describe('View Filter Group REST API', () => {
         bearer: APPLE_JANE_ADMIN_ACCESS_TOKEN,
       });
 
-      assertRestApiSuccessfulResponse(response);
-      expect(response.body).toEqual([]);
+      expect(
+        assertMetadataRestListResponse<ViewFilterGroupDTO>(response),
+      ).toEqual([]);
+      expect(response.body.totalCount).toBe(0);
     });
 
     it('should return all view filter groups for workspace when no viewId provided', async () => {
@@ -113,8 +118,7 @@ describe('View Filter Group REST API', () => {
         bearer: APPLE_JANE_ADMIN_ACCESS_TOKEN,
       });
 
-      assertRestApiSuccessfulResponse(response);
-      expect(Array.isArray(response.body)).toBe(true);
+      assertMetadataRestListResponse<ViewFilterGroupDTO>(response);
     });
 
     it('should return view filter groups for a specific view after creating one', async () => {
@@ -131,10 +135,9 @@ describe('View Filter Group REST API', () => {
         bearer: APPLE_JANE_ADMIN_ACCESS_TOKEN,
       });
 
-      assertRestApiSuccessfulResponse(response);
-      expect(Array.isArray(response.body)).toBe(true);
-
-      const returnedViewFilterGroup = response.body.find(
+      const viewFilterGroups =
+        assertMetadataRestListResponse<ViewFilterGroupDTO>(response);
+      const returnedViewFilterGroup = viewFilterGroups.find(
         (el: ViewFilterGroupDTO) => el.id === viewFilterGroup.id,
       );
 
@@ -187,22 +190,22 @@ describe('View Filter Group REST API', () => {
         bearer: APPLE_JANE_ADMIN_ACCESS_TOKEN,
       });
 
-      assertRestApiSuccessfulResponse(response);
-      expect(Array.isArray(response.body)).toBe(true);
-      expect(response.body).toHaveLength(2);
+      const viewFilterGroups =
+        assertMetadataRestListResponse<ViewFilterGroupDTO>(response);
+      expect(viewFilterGroups).toHaveLength(2);
 
-      const parentGroup = response.body.find(
-        (group: any) => group.parentViewFilterGroupId === null,
+      const parentGroup = viewFilterGroups.find(
+        (group) => group.parentViewFilterGroupId === null,
       );
-      const childGroup = response.body.find(
-        (group: any) => group.parentViewFilterGroupId !== null,
+      const childGroup = viewFilterGroups.find(
+        (group) => group.parentViewFilterGroupId !== null,
       );
 
-      expect(parentGroup).toBeDefined();
+      jestExpectToBeDefined(parentGroup);
       expect(parentGroup.logicalOperator).toBe('AND');
       expect(parentGroup.parentViewFilterGroupId).toBeNull();
 
-      expect(childGroup).toBeDefined();
+      jestExpectToBeDefined(childGroup);
       expect(childGroup.parentViewFilterGroupId).toBe(parentId);
       expect(childGroup.logicalOperator).toBe('OR');
 

@@ -1,41 +1,32 @@
-import {
-  type EventRowDynamicComponentProps,
-  StyledEventRowItemAction,
-  StyledEventRowItemColumn,
-} from '@/activities/timeline-activities/rows/components/EventRowDynamicComponent';
+import { EventRowDate } from '@/activities/timeline-activities/rows/components/EventRowDate';
+import { type EventRowNativeComponentProps } from '@/activities/timeline-activities/rows/components/EventRowDynamicComponent.types';
+import { EventRowItem } from '@/activities/timeline-activities/rows/components/EventRowItem';
 import { EventRowMainObjectUpdated } from '@/activities/timeline-activities/rows/main-object/components/EventRowMainObjectUpdated';
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
 import { t } from '@lingui/core/macro';
-import { MOBILE_VIEWPORT } from 'twenty-ui/theme';
+import { isDefined } from 'twenty-shared/utils';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
 
-type EventRowMainObjectProps = EventRowDynamicComponentProps;
+type EventRowMainObjectProps = EventRowNativeComponentProps;
 
 const StyledMainContainer = styled.div`
   display: flex;
   flex-direction: column;
-  gap: ${({ theme }) => theme.spacing(1)};
+  gap: ${themeCssVariables.spacing[1]};
   width: 100%;
 `;
 
 const StyledRowContainer = styled.div`
   align-items: center;
   display: flex;
-  gap: ${({ theme }) => theme.spacing(1)};
+  gap: ${themeCssVariables.spacing[1]};
   justify-content: space-between;
-`;
-
-const StyledItemTitleDate = styled.div`
-  @media (max-width: ${MOBILE_VIEWPORT}px) {
-    display: none;
-  }
-  color: ${({ theme }) => theme.font.color.tertiary};
-  padding: 0 ${({ theme }) => theme.spacing(1)};
 `;
 
 const StyledRow = styled.div`
   align-items: center;
   display: flex;
-  gap: ${({ theme }) => theme.spacing(1)};
+  gap: ${themeCssVariables.spacing[1]};
   overflow: hidden;
 `;
 
@@ -43,28 +34,25 @@ export const EventRowMainObject = ({
   authorFullName,
   labelIdentifierValue,
   event,
+  eventAction,
+  eventTypeLabel,
   mainObjectMetadataItem,
-  createdAt,
+  happensAt,
+  hasRenderer,
 }: EventRowMainObjectProps) => {
-  const [, eventAction] = event.name.split('.');
-
   switch (eventAction) {
     case 'created': {
       return (
         <StyledMainContainer>
           <StyledRowContainer>
             <StyledRow>
-              <StyledEventRowItemColumn>
-                {labelIdentifierValue}
-              </StyledEventRowItemColumn>
-              <StyledEventRowItemAction>
-                {t`was created by`}
-              </StyledEventRowItemAction>
-              <StyledEventRowItemColumn>
-                {authorFullName}
-              </StyledEventRowItemColumn>
+              <EventRowItem>{labelIdentifierValue}</EventRowItem>
+              <EventRowItem variant="action">
+                {eventTypeLabel ?? t`was created by`}
+              </EventRowItem>
+              <EventRowItem>{authorFullName}</EventRowItem>
             </StyledRow>
-            <StyledItemTitleDate>{createdAt}</StyledItemTitleDate>
+            <EventRowDate happensAt={happensAt} />
           </StyledRowContainer>
         </StyledMainContainer>
       );
@@ -75,8 +63,10 @@ export const EventRowMainObject = ({
           authorFullName={authorFullName}
           labelIdentifierValue={labelIdentifierValue}
           event={event}
+          eventTypeLabel={eventTypeLabel}
           mainObjectMetadataItem={mainObjectMetadataItem}
-          createdAt={createdAt}
+          happensAt={happensAt}
+          hasRenderer={hasRenderer}
         />
       );
     }
@@ -85,17 +75,13 @@ export const EventRowMainObject = ({
         <StyledMainContainer>
           <StyledRowContainer>
             <StyledRow>
-              <StyledEventRowItemColumn>
-                {labelIdentifierValue}
-              </StyledEventRowItemColumn>
-              <StyledEventRowItemAction>
-                {t`was deleted by`}
-              </StyledEventRowItemAction>
-              <StyledEventRowItemColumn>
-                {authorFullName}
-              </StyledEventRowItemColumn>
+              <EventRowItem>{labelIdentifierValue}</EventRowItem>
+              <EventRowItem variant="action">
+                {eventTypeLabel ?? t`was deleted by`}
+              </EventRowItem>
+              <EventRowItem>{authorFullName}</EventRowItem>
             </StyledRow>
-            <StyledItemTitleDate>{createdAt}</StyledItemTitleDate>
+            <EventRowDate happensAt={happensAt} />
           </StyledRowContainer>
         </StyledMainContainer>
       );
@@ -105,22 +91,34 @@ export const EventRowMainObject = ({
         <StyledMainContainer>
           <StyledRowContainer>
             <StyledRow>
-              <StyledEventRowItemColumn>
-                {labelIdentifierValue}
-              </StyledEventRowItemColumn>
-              <StyledEventRowItemAction>
-                {t`was restored by`}
-              </StyledEventRowItemAction>
-              <StyledEventRowItemColumn>
-                {authorFullName}
-              </StyledEventRowItemColumn>
+              <EventRowItem>{labelIdentifierValue}</EventRowItem>
+              <EventRowItem variant="action">
+                {eventTypeLabel ?? t`was restored by`}
+              </EventRowItem>
+              <EventRowItem>{authorFullName}</EventRowItem>
             </StyledRow>
-            <StyledItemTitleDate>{createdAt}</StyledItemTitleDate>
+            <EventRowDate happensAt={happensAt} />
           </StyledRowContainer>
         </StyledMainContainer>
       );
     }
-    default:
-      return null;
+    default: {
+      if (!isDefined(eventTypeLabel)) {
+        return null;
+      }
+
+      return (
+        <StyledMainContainer>
+          <StyledRowContainer>
+            <StyledRow>
+              <EventRowItem>{authorFullName}</EventRowItem>
+              <EventRowItem variant="action">{eventTypeLabel}</EventRowItem>
+              <EventRowItem>{labelIdentifierValue}</EventRowItem>
+            </StyledRow>
+            <EventRowDate happensAt={happensAt} />
+          </StyledRowContainer>
+        </StyledMainContainer>
+      );
+    }
   }
 };

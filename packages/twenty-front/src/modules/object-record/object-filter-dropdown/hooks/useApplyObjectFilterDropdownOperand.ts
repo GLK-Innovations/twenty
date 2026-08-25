@@ -1,32 +1,33 @@
-import { DATE_OPERANDS_THAT_SHOULD_BE_INITIALIZED_WITH_NOW } from '@/object-record/object-filter-dropdown/constants/DateOperandsThatShouldBeInitializedWithNow';
-import { useGetInitialFilterValue } from '@/object-record/object-filter-dropdown/hooks/useGetInitialFilterValue';
+import { isNonEmptyString } from '@sniptt/guards';
+import { Temporal } from 'temporal-polyfill';
+
 import { useUpsertObjectFilterDropdownCurrentFilter } from '@/object-record/object-filter-dropdown/hooks/useUpsertObjectFilterDropdownCurrentFilter';
 import { fieldMetadataItemUsedInDropdownComponentSelector } from '@/object-record/object-filter-dropdown/states/fieldMetadataItemUsedInDropdownComponentSelector';
 import { objectFilterDropdownCurrentRecordFilterComponentState } from '@/object-record/object-filter-dropdown/states/objectFilterDropdownCurrentRecordFilterComponentState';
 import { selectedOperandInDropdownComponentState } from '@/object-record/object-filter-dropdown/states/selectedOperandInDropdownComponentState';
-import { getRelativeDateDisplayValue } from '@/object-record/object-filter-dropdown/utils/getRelativeDateDisplayValue';
 import { useCreateEmptyRecordFilterFromFieldMetadataItem } from '@/object-record/record-filter/hooks/useCreateEmptyRecordFilterFromFieldMetadataItem';
+import { useGetRelativeDateFilterWithUserTimezone } from '@/object-record/record-filter/hooks/useGetRelativeDateFilterWithUserTimezone';
 import { type RecordFilter } from '@/object-record/record-filter/types/RecordFilter';
 import { RecordFilterOperand } from '@/object-record/record-filter/types/RecordFilterOperand';
 import { useUserTimezone } from '@/ui/input/components/internal/date/hooks/useUserTimezone';
-
-import { useRecoilComponentValue } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentValue';
-import { useSetRecoilComponentState } from '@/ui/utilities/state/component-state/hooks/useSetRecoilComponentState';
+import { useAtomComponentSelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentSelectorValue';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import { useSetAtomComponentState } from '@/ui/utilities/state/jotai/hooks/useSetAtomComponentState';
 import { stringifyRelativeDateFilter } from '@/views/view-filter-value/utils/stringifyRelativeDateFilter';
 
+import { DEFAULT_RELATIVE_DATE_FILTER_VALUE } from 'twenty-shared/constants';
 import {
   isDefined,
-  type RelativeDateFilter,
-  type RelativeDateFilterDirection,
-  type RelativeDateFilterUnit,
+  relativeDateFilterStringifiedSchema,
 } from 'twenty-shared/utils';
 
 export const useApplyObjectFilterDropdownOperand = () => {
-  const objectFilterDropdownCurrentRecordFilter = useRecoilComponentValue(
+  const { userTimezone } = useUserTimezone();
+  const objectFilterDropdownCurrentRecordFilter = useAtomComponentStateValue(
     objectFilterDropdownCurrentRecordFilterComponentState,
   );
 
-  const setSelectedOperandInDropdown = useSetRecoilComponentState(
+  const setSelectedOperandInDropdown = useSetAtomComponentState(
     selectedOperandInDropdownComponentState,
   );
 
@@ -34,7 +35,7 @@ export const useApplyObjectFilterDropdownOperand = () => {
     objectFilterDropdownCurrentRecordFilter,
   );
 
-  const fieldMetadataItemUsedInDropdown = useRecoilComponentValue(
+  const fieldMetadataItemUsedInDropdown = useAtomComponentSelectorValue(
     fieldMetadataItemUsedInDropdownComponentSelector,
   );
 
@@ -44,9 +45,8 @@ export const useApplyObjectFilterDropdownOperand = () => {
   const { createEmptyRecordFilterFromFieldMetadataItem } =
     useCreateEmptyRecordFilterFromFieldMetadataItem();
 
-  const { getInitialFilterValue } = useGetInitialFilterValue();
-
-  const { userTimezone } = useUserTimezone();
+  const { getRelativeDateFilterWithUserTimezone } =
+    useGetRelativeDateFilterWithUserTimezone();
 
   const applyObjectFilterDropdownOperand = (
     newOperand: RecordFilterOperand,
@@ -89,39 +89,61 @@ export const useApplyObjectFilterDropdownOperand = () => {
       (recordFilterToUpsert.type === 'DATE' ||
         recordFilterToUpsert.type === 'DATE_TIME')
     ) {
-      if (
-        DATE_OPERANDS_THAT_SHOULD_BE_INITIALIZED_WITH_NOW.includes(newOperand)
-      ) {
-        // TODO: allow to keep same value when switching between is after, is before, is and is not
-        // For now we reset with now each time we switch operand
-
-        const dateToUseAsISOString = new Date().toISOString();
-
-        const { displayValue, value } = getInitialFilterValue(
-          recordFilterToUpsert.type,
-          newOperand,
-          dateToUseAsISOString,
+      if (newOperand === RecordFilterOperand.IS_RELATIVE) {
+        const newRelativeDateFilter = getRelativeDateFilterWithUserTimezone(
+          DEFAULT_RELATIVE_DATE_FILTER_VALUE,
         );
 
-        recordFilterToUpsert.value = value;
-
-        recordFilterToUpsert.displayValue = displayValue;
-      } else if (newOperand === RecordFilterOperand.IS_RELATIVE) {
-        const defaultRelativeDate: RelativeDateFilter = {
-          direction: 'THIS' as RelativeDateFilterDirection,
-          amount: 1,
-          unit: 'DAY' as RelativeDateFilterUnit,
-          timezone: userTimezone,
-        };
-
-        recordFilterToUpsert.value =
-          stringifyRelativeDateFilter(defaultRelativeDate);
-
-        recordFilterToUpsert.displayValue =
-          getRelativeDateDisplayValue(defaultRelativeDate);
+        recordFilterToUpsert.value = stringifyRelativeDateFilter(
+          newRelativeDateFilter,
+        );
       } else {
-        recordFilterToUpsert.value = '';
-        recordFilterToUpsert.displayValue = '';
+        const filterValueIsEmpty = !isNonEmptyString(
+          recordFilterToUpsert.value,
+        );
+
+        const isStillRelativeFilterValue =
+          relativeDateFilterStringifiedSchema.safeParse(
+            recordFilterToUpsert.value,
+          );
+
+        const previousOperand =
+          objectFilterDropdownCurrentRecordFilter?.operand;
+
+        const isDateTimeOperandFormatChange =
+          recordFilterToUpsert.type === 'DATE_TIME' &&
+          !filterValueIsEmpty &&
+          !isStillRelativeFilterValue.success &&
+          (previousOperand === RecordFilterOperand.IS ||
+            newOperand === RecordFilterOperand.IS);
+
+        if (isDateTimeOperandFormatChange) {
+          recordFilterToUpsert.value = convertDateTimeFilterValue(
+            recordFilterToUpsert.value,
+            newOperand,
+            userTimezone,
+          );
+        } else if (filterValueIsEmpty || isStillRelativeFilterValue.success) {
+          const zonedDateToUse = Temporal.Now.zonedDateTimeISO(userTimezone);
+
+          if (recordFilterToUpsert.type === 'DATE') {
+            const initialNowDateFilterValue = zonedDateToUse
+              .toPlainDate()
+              .toString();
+
+            recordFilterToUpsert.value = initialNowDateFilterValue;
+          } else {
+            if (newOperand === RecordFilterOperand.IS) {
+              recordFilterToUpsert.value = zonedDateToUse
+                .toPlainDate()
+                .toString();
+            } else {
+              recordFilterToUpsert.value = zonedDateToUse
+                .toInstant()
+                .toString();
+            }
+          }
+        }
       }
     }
 
@@ -135,4 +157,36 @@ export const useApplyObjectFilterDropdownOperand = () => {
   return {
     applyObjectFilterDropdownOperand,
   };
+};
+
+const convertDateTimeFilterValue = (
+  currentValue: string,
+  targetOperand: RecordFilterOperand,
+  userTimezone: string,
+): string => {
+  const zonedDateToUse = Temporal.Now.zonedDateTimeISO(userTimezone);
+
+  if (targetOperand === RecordFilterOperand.IS) {
+    try {
+      const existingZoned = currentValue.includes('T')
+        ? Temporal.Instant.from(currentValue).toZonedDateTimeISO(userTimezone)
+        : Temporal.PlainDate.from(currentValue).toZonedDateTime(userTimezone);
+
+      return existingZoned.toPlainDate().toString();
+    } catch {
+      return zonedDateToUse.toPlainDate().toString();
+    }
+  } else {
+    try {
+      const existingPlainDate = Temporal.PlainDate.from(currentValue);
+      const currentTime = zonedDateToUse.toPlainTime();
+      const zonedFromPlain = existingPlainDate.toZonedDateTime({
+        timeZone: userTimezone,
+        plainTime: currentTime,
+      });
+      return zonedFromPlain.toInstant().toString();
+    } catch {
+      return zonedDateToUse.toInstant().toString();
+    }
+  }
 };

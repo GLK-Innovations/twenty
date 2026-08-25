@@ -1,9 +1,16 @@
-import { type AuthContext } from 'src/engine/core-modules/auth/types/auth-context.type';
-import { type ObjectMetadataItemWithFieldMaps } from 'src/engine/metadata-modules/types/object-metadata-item-with-field-maps';
-import { type ObjectMetadataMaps } from 'src/engine/metadata-modules/types/object-metadata-maps';
+import { type WorkspaceAuthContext } from 'src/engine/core-modules/auth/types/workspace-auth-context.type';
+import { type FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/flat-entity-maps.type';
+import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
+import { type FlatIndexMetadata } from 'src/engine/metadata-modules/flat-index-metadata/types/flat-index-metadata.type';
+import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
+import { type RolePermissionConfig } from 'src/engine/twenty-orm/types/role-permission-config';
 
 export type CommonBaseQueryRunnerContext = {
-  authContext: AuthContext;
-  objectMetadataItemWithFieldMaps: ObjectMetadataItemWithFieldMaps;
-  objectMetadataMaps: ObjectMetadataMaps;
+  authContext: WorkspaceAuthContext;
+  flatObjectMetadata: FlatObjectMetadata;
+  flatObjectMetadataMaps: FlatEntityMaps<FlatObjectMetadata>;
+  flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
+  flatIndexMaps?: FlatEntityMaps<FlatIndexMetadata>;
+  objectIdByNameSingular: Record<string, string>;
+  rolePermissionConfig?: RolePermissionConfig;
 };

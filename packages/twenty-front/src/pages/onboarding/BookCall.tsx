@@ -1,87 +1,94 @@
-import Cal from '@calcom/embed-react';
-import styled from '@emotion/styled';
-import { Link } from 'react-router-dom';
+import { isNonEmptyString } from '@sniptt/guards';
+import { Link, Navigate } from 'react-router-dom';
 
-import { currentUserState } from '@/auth/states/currentUserState';
 import { calendarBookingPageIdState } from '@/client-config/states/calendarBookingPageIdState';
-import { useSetNextOnboardingStatus } from '@/onboarding/hooks/useSetNextOnboardingStatus';
-import { Modal } from '@/ui/layout/modal/components/Modal';
-import { ScrollWrapper } from '@/ui/utilities/scroll/components/ScrollWrapper';
-import { useTheme } from '@emotion/react';
+import { BookCallEmbed } from '@/onboarding/components/BookCallEmbed';
+import { BookCallOnboardingStepActions } from '@/onboarding/components/BookCallOnboardingStepActions';
+import { OnboardingStepAnimatedItem } from '@/onboarding/components/OnboardingStepAnimatedItem';
+import { StyledOnboardingStepHeading } from '@/onboarding/components/StyledOnboardingStepHeading';
+import { StyledOnboardingStepPage } from '@/onboarding/components/StyledOnboardingStepPage';
+import { StyledOnboardingStepSubtitle } from '@/onboarding/components/StyledOnboardingStepSubtitle';
+import { StyledOnboardingStepTitle } from '@/onboarding/components/StyledOnboardingStepTitle';
+import { useOnboardingStatus } from '@/onboarding/hooks/useOnboardingStatus';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { styled } from '@linaria/react';
 import { useLingui } from '@lingui/react/macro';
-import { useRecoilValue } from 'recoil';
 import { AppPath } from 'twenty-shared/types';
-import { IconChevronLeft, IconChevronRightPipe } from 'twenty-ui/display';
+import { IconChevronLeft } from 'twenty-ui/icon';
 import { LightButton } from 'twenty-ui/input';
-import { useIsMobile } from 'twenty-ui/utilities';
-import {
-  OnboardingStatus,
-  useSkipBookOnboardingStepMutation,
-} from '~/generated-metadata/graphql';
+import { MOBILE_VIEWPORT, themeCssVariables } from 'twenty-ui/theme-constants';
+import { OnboardingStatus } from '~/generated-metadata/graphql';
 
-const StyledModalFooter = styled(Modal.Footer)`
-  height: auto;
+const StyledPage = styled(StyledOnboardingStepPage)`
+  gap: ${themeCssVariables.spacing[5]};
+  padding: ${themeCssVariables.spacing[6]} ${themeCssVariables.spacing[8]};
+
+  @media (max-width: ${MOBILE_VIEWPORT}px) {
+    padding: ${themeCssVariables.spacing[6]} ${themeCssVariables.spacing[4]};
+  }
+`;
+
+const StyledEmbed = styled(OnboardingStepAnimatedItem)`
+  display: flex;
+  flex: 1;
   justify-content: center;
-  padding: ${({ theme }) => theme.spacing(3)};
-`;
-
-const StyledModalContent = styled(Modal.Content)`
+  min-height: 0;
   overflow: hidden;
-  padding: 0;
+  width: 100%;
 `;
 
-const StyledScrollWrapper = styled(ScrollWrapper)<{ isMobile: boolean }>`
-  ${({ isMobile }) => !isMobile && 'height: auto;'}
+const StyledFooter = styled.div`
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  padding: ${themeCssVariables.spacing[2]};
+  width: 100%;
 `;
 
 export const BookCall = () => {
   const { t } = useLingui();
-  const theme = useTheme();
-  const calendarBookingPageId = useRecoilValue(calendarBookingPageIdState);
-  const setNextOnboardingStatus = useSetNextOnboardingStatus();
-  const currentUser = useRecoilValue(currentUserState);
-  const [skipBookOnboardingStepMutation] = useSkipBookOnboardingStepMutation();
+  const onboardingStatus = useOnboardingStatus();
+  const calendarBookingPageId = useAtomStateValue(calendarBookingPageIdState);
 
-  const isMobile = useIsMobile();
-  const isPlanRequired =
-    currentUser?.onboardingStatus === OnboardingStatus.PLAN_REQUIRED;
+  const isOnboardingStep = onboardingStatus === OnboardingStatus.BOOK_CALL;
+  const hasBookingPage = isNonEmptyString(calendarBookingPageId);
 
-  const handleCompleteOnboarding = async () => {
-    await skipBookOnboardingStepMutation();
-    setNextOnboardingStatus();
-  };
+  // Never redirect out of the step itself: the page-change effect routes
+  // BOOK_CALL back here, so the two would bounce off each other.
+  if (!hasBookingPage && !isOnboardingStep) {
+    return <Navigate to={AppPath.PlanRequired} replace />;
+  }
 
   return (
-    <>
-      <StyledModalContent isHorizontalCentered isVerticalCentered>
-        <StyledScrollWrapper
-          componentInstanceId="scroll-wrapper-modal-content"
-          isMobile={isMobile}
-        >
-          <Cal
-            calLink={calendarBookingPageId ?? ''}
-            config={{
-              layout: 'month_view',
-              theme: theme.name === 'light' ? 'light' : 'dark',
-              email: currentUser?.email ?? '',
-              name: `${currentUser?.firstName} ${currentUser?.lastName}`,
-            }}
-          />
-        </StyledScrollWrapper>
-      </StyledModalContent>
-      <StyledModalFooter>
-        {isPlanRequired ? (
-          <Link to={AppPath.PlanRequired}>
-            <LightButton Icon={IconChevronLeft} title={t`Back`} />
-          </Link>
-        ) : (
-          <LightButton
-            Icon={IconChevronRightPipe}
-            title={t`Skip`}
-            onClick={handleCompleteOnboarding}
-          />
-        )}
-      </StyledModalFooter>
-    </>
+    <StyledPage>
+      <StyledOnboardingStepHeading>
+        <OnboardingStepAnimatedItem index={0}>
+          <StyledOnboardingStepTitle>{t`Talk to our team`}</StyledOnboardingStepTitle>
+        </OnboardingStepAnimatedItem>
+        <OnboardingStepAnimatedItem index={1}>
+          <StyledOnboardingStepSubtitle>
+            {t`Book a 30-minute call and we'll help you get your workspace production-ready.`}
+          </StyledOnboardingStepSubtitle>
+        </OnboardingStepAnimatedItem>
+      </StyledOnboardingStepHeading>
+
+      {hasBookingPage && (
+        <StyledEmbed index={2}>
+          <BookCallEmbed calendarBookingPageId={calendarBookingPageId} />
+        </StyledEmbed>
+      )}
+
+      <OnboardingStepAnimatedItem index={3}>
+        <StyledFooter>
+          {isOnboardingStep ? (
+            <BookCallOnboardingStepActions />
+          ) : (
+            <Link to={AppPath.PlanRequired}>
+              <LightButton Icon={IconChevronLeft} title={t`Back`} />
+            </Link>
+          )}
+        </StyledFooter>
+      </OnboardingStepAnimatedItem>
+    </StyledPage>
   );
 };

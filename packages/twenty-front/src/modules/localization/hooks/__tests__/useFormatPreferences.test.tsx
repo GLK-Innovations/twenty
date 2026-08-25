@@ -1,24 +1,26 @@
 import { act, renderHook } from '@testing-library/react';
 import { type ReactNode } from 'react';
-import { RecoilRoot, type MutableSnapshot } from 'recoil';
+import { Provider as JotaiProvider } from 'jotai';
 
 import { currentWorkspaceMemberState } from '@/auth/states/currentWorkspaceMemberState';
-import { CalendarStartDay } from 'twenty-shared';
 import { DateFormat } from '@/localization/constants/DateFormat';
 import { NumberFormat } from '@/localization/constants/NumberFormat';
 import { TimeFormat } from '@/localization/constants/TimeFormat';
 import { useFormatPreferences } from '@/localization/hooks/useFormatPreferences';
 import { workspaceMemberFormatPreferencesState } from '@/localization/states/workspaceMemberFormatPreferencesState';
+import { jotaiStore } from '@/ui/utilities/state/jotai/jotaiStore';
 import { detectCalendarStartDay } from '@/localization/utils/detection/detectCalendarStartDay';
 import { detectDateFormat } from '@/localization/utils/detection/detectDateFormat';
 import { detectNumberFormat } from '@/localization/utils/detection/detectNumberFormat';
 import { detectTimeFormat } from '@/localization/utils/detection/detectTimeFormat';
 import { detectTimeZone } from '@/localization/utils/detection/detectTimeZone';
 import { getWorkspaceMemberUpdateFromFormatPreferences } from '@/localization/utils/format-preferences/getWorkspaceMemberUpdateFromFormatPreferences';
-import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
+import { useUpdateWorkspaceMemberSettings } from '@/settings/profile/hooks/useUpdateWorkspaceMemberSettings';
+import { CalendarStartDay } from 'twenty-shared/constants';
+import { FirstDayOfTheWeek } from 'twenty-shared/types';
 
-jest.mock('@/object-record/hooks/useUpdateOneRecord', () => ({
-  useUpdateOneRecord: jest.fn(),
+jest.mock('@/settings/profile/hooks/useUpdateWorkspaceMemberSettings', () => ({
+  useUpdateWorkspaceMemberSettings: jest.fn(),
 }));
 jest.mock('@/localization/utils/detection/detectTimeZone');
 jest.mock('@/localization/utils/detection/detectDateFormat');
@@ -29,9 +31,10 @@ jest.mock(
   '@/localization/utils/format-preferences/getWorkspaceMemberUpdateFromFormatPreferences',
 );
 
-const mockUseUpdateOneRecord = useUpdateOneRecord as jest.MockedFunction<
-  typeof useUpdateOneRecord
->;
+const mockUseUpdateWorkspaceMemberSettings =
+  useUpdateWorkspaceMemberSettings as jest.MockedFunction<
+    typeof useUpdateWorkspaceMemberSettings
+  >;
 const mockDetectTimeZone = detectTimeZone as jest.MockedFunction<
   typeof detectTimeZone
 >;
@@ -51,7 +54,7 @@ const mockGetWorkspaceMemberUpdateFromFormatPreferences =
     typeof getWorkspaceMemberUpdateFromFormatPreferences
   >;
 
-const mockUpdateOneRecord = jest.fn();
+const mockUpdateWorkspaceMemberSettingsFn = jest.fn();
 
 const mockCurrentWorkspaceMember = {
   id: 'workspace-member-1',
@@ -72,31 +75,38 @@ const mockInitialPreferences = {
   calendarStartDay: CalendarStartDay.MONDAY,
 };
 
-const Wrapper = ({ children }: { children: ReactNode }) => {
-  const initializeState = ({ set }: MutableSnapshot) => {
-    set(currentWorkspaceMemberState, mockCurrentWorkspaceMember);
-    set(workspaceMemberFormatPreferencesState, mockInitialPreferences);
+const createWrapper =
+  () =>
+  ({ children }: { children: ReactNode }) => {
+    return <JotaiProvider store={jotaiStore}>{children}</JotaiProvider>;
   };
-
-  return <RecoilRoot initializeState={initializeState}>{children}</RecoilRoot>;
-};
 
 describe('useFormatPreferences', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    mockUseUpdateOneRecord.mockReturnValue({
-      updateOneRecord: mockUpdateOneRecord,
+    jotaiStore.set(
+      workspaceMemberFormatPreferencesState.atom,
+      mockInitialPreferences,
+    );
+
+    jotaiStore.set(
+      currentWorkspaceMemberState.atom,
+      mockCurrentWorkspaceMember,
+    );
+
+    mockUseUpdateWorkspaceMemberSettings.mockReturnValue({
+      updateWorkspaceMemberSettings: mockUpdateWorkspaceMemberSettingsFn,
     });
 
     mockDetectTimeZone.mockReturnValue('America/New_York');
     mockDetectDateFormat.mockReturnValue('MONTH_FIRST');
     mockDetectTimeFormat.mockReturnValue('HOUR_24');
     mockDetectNumberFormat.mockReturnValue('COMMAS_AND_DOT');
-    mockDetectCalendarStartDay.mockReturnValue('MONDAY');
+    mockDetectCalendarStartDay.mockReturnValue(FirstDayOfTheWeek.MONDAY);
     mockGetWorkspaceMemberUpdateFromFormatPreferences.mockReturnValue({});
 
-    mockUpdateOneRecord.mockResolvedValue({});
+    mockUpdateWorkspaceMemberSettingsFn.mockResolvedValue(undefined);
   });
 
   it('should be a function', () => {
@@ -105,7 +115,7 @@ describe('useFormatPreferences', () => {
 
   it('should return format preferences and update functions', () => {
     const { result } = renderHook(() => useFormatPreferences(), {
-      wrapper: Wrapper,
+      wrapper: createWrapper(),
     });
 
     expect(result.current).toHaveProperty('formatPreferences');
@@ -122,7 +132,7 @@ describe('useFormatPreferences', () => {
 
   it('should return current format preferences', () => {
     const { result } = renderHook(() => useFormatPreferences(), {
-      wrapper: Wrapper,
+      wrapper: createWrapper(),
     });
 
     expect(result.current.formatPreferences).toEqual(mockInitialPreferences);
@@ -130,7 +140,7 @@ describe('useFormatPreferences', () => {
 
   it('should update single format preference successfully', async () => {
     const { result } = renderHook(() => useFormatPreferences(), {
-      wrapper: Wrapper,
+      wrapper: createWrapper(),
     });
 
     const newTimeZone = 'Europe/London';
@@ -142,15 +152,15 @@ describe('useFormatPreferences', () => {
       await result.current.updateFormatPreference('timeZone', newTimeZone);
     });
 
-    expect(mockUpdateOneRecord).toHaveBeenCalledWith({
-      idToUpdate: mockCurrentWorkspaceMember.id,
-      updateOneRecordInput: { timeZone: newTimeZone },
+    expect(mockUpdateWorkspaceMemberSettingsFn).toHaveBeenCalledWith({
+      workspaceMemberId: mockCurrentWorkspaceMember.id,
+      update: { timeZone: newTimeZone },
     });
   });
 
   it('should handle SYSTEM values by detecting actual format', async () => {
     const { result } = renderHook(() => useFormatPreferences(), {
-      wrapper: Wrapper,
+      wrapper: createWrapper(),
     });
 
     mockDetectTimeZone.mockReturnValue('America/Chicago');
@@ -163,15 +173,15 @@ describe('useFormatPreferences', () => {
     });
 
     expect(mockDetectTimeZone).toHaveBeenCalled();
-    expect(mockUpdateOneRecord).toHaveBeenCalledWith({
-      idToUpdate: mockCurrentWorkspaceMember.id,
-      updateOneRecordInput: { timeZone: 'SYSTEM' },
+    expect(mockUpdateWorkspaceMemberSettingsFn).toHaveBeenCalledWith({
+      workspaceMemberId: mockCurrentWorkspaceMember.id,
+      update: { timeZone: 'SYSTEM' },
     });
   });
 
   it('should update multiple format preferences successfully', async () => {
     const { result } = renderHook(() => useFormatPreferences(), {
-      wrapper: Wrapper,
+      wrapper: createWrapper(),
     });
 
     const updates = {
@@ -187,40 +197,33 @@ describe('useFormatPreferences', () => {
       await result.current.updateMultipleFormatPreferences(updates);
     });
 
-    expect(mockUpdateOneRecord).toHaveBeenCalledWith({
-      idToUpdate: mockCurrentWorkspaceMember.id,
-      updateOneRecordInput: { timeZone: 'Europe/Paris' },
+    expect(mockUpdateWorkspaceMemberSettingsFn).toHaveBeenCalledWith({
+      workspaceMemberId: mockCurrentWorkspaceMember.id,
+      update: { timeZone: 'Europe/Paris' },
     });
   });
 
   it('should not update preferences when user is not logged in', async () => {
-    const { result } = renderHook(() => useFormatPreferences(), {
-      wrapper: ({ children }: { children: ReactNode }) => {
-        const initializeState = ({ set }: MutableSnapshot) => {
-          set(currentWorkspaceMemberState, null);
-          set(workspaceMemberFormatPreferencesState, mockInitialPreferences);
-        };
+    jotaiStore.set(currentWorkspaceMemberState.atom, null);
 
-        return (
-          <RecoilRoot initializeState={initializeState}>{children}</RecoilRoot>
-        );
-      },
+    const { result } = renderHook(() => useFormatPreferences(), {
+      wrapper: createWrapper(),
     });
 
     await act(async () => {
       await result.current.updateFormatPreference('timeZone', 'Europe/London');
     });
 
-    expect(mockUpdateOneRecord).not.toHaveBeenCalled();
+    expect(mockUpdateWorkspaceMemberSettingsFn).not.toHaveBeenCalled();
   });
 
   it('should handle update errors gracefully', async () => {
     const { result } = renderHook(() => useFormatPreferences(), {
-      wrapper: Wrapper,
+      wrapper: createWrapper(),
     });
 
     const error = new Error('Update failed');
-    mockUpdateOneRecord.mockRejectedValue(error);
+    mockUpdateWorkspaceMemberSettingsFn.mockRejectedValue(error);
 
     await expect(
       act(async () => {
@@ -234,7 +237,7 @@ describe('useFormatPreferences', () => {
 
   it('should initialize format preferences from workspace member', () => {
     const { result } = renderHook(() => useFormatPreferences(), {
-      wrapper: Wrapper,
+      wrapper: createWrapper(),
     });
 
     act(() => {
@@ -246,7 +249,7 @@ describe('useFormatPreferences', () => {
 
   it('should not initialize format preferences when workspace member is null', () => {
     const { result } = renderHook(() => useFormatPreferences(), {
-      wrapper: Wrapper,
+      wrapper: createWrapper(),
     });
 
     act(() => {

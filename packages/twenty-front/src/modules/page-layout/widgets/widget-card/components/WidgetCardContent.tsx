@@ -1,58 +1,88 @@
-import { type PageLayoutTabLayoutMode } from '@/page-layout/types/PageLayoutTabLayoutMode';
-import { css } from '@emotion/react';
-import styled from '@emotion/styled';
-import { type ReactNode } from 'react';
-import { type PageLayoutType } from '~/generated/graphql';
+import { type WidgetContentPadding } from '@/page-layout/widgets/utils/getWidgetContentPadding';
+import { isWidgetCardFlushInViewMode } from '@/page-layout/widgets/utils/isWidgetCardFlushInViewMode';
+import { styled } from '@linaria/react';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
+import { type WidgetCardVariant } from '~/modules/page-layout/widgets/types/WidgetCardVariant';
 
-export type WidgetCardContentProps = {
-  children?: ReactNode;
-  pageLayoutType: PageLayoutType;
-  isInPinnedTab: boolean;
-  isPageLayoutInEditMode: boolean;
-  layoutMode: PageLayoutTabLayoutMode;
-  className?: string;
+const VERTICAL_LIST_IFRAME_HEIGHT = '40rem';
+
+type WidgetCardContentStyledProps = {
+  variant: WidgetCardVariant;
+  hasHeader: boolean;
+  isEditable: boolean;
+  isFixedHeight: boolean;
+  contentPadding: WidgetContentPadding;
 };
 
-const StyledWidgetCardContent = styled.div<WidgetCardContentProps>`
-  align-items: center;
-  display: flex;
-  height: 100%;
-  width: 100%;
-  justify-content: center;
+const StyledWidgetCardContent = styled.div<WidgetCardContentStyledProps>`
   box-sizing: border-box;
-  padding: ${({ theme }) => theme.spacing(2)};
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
 
-  ${({
-    theme,
-    pageLayoutType,
-    layoutMode,
-    isPageLayoutInEditMode,
-    isInPinnedTab,
-  }) => {
-    if (layoutMode === 'canvas') {
-      return css`
-        padding: 0;
-      `;
-    }
+  height: ${({ isFixedHeight }) =>
+    isFixedHeight ? VERTICAL_LIST_IFRAME_HEIGHT : 'var(--widget-height, 100%)'};
 
-    switch (pageLayoutType) {
-      case 'RECORD_PAGE':
-        return css`
-          border: 1px solid ${theme.border.color.medium};
-          border-radius: ${theme.border.radius.md};
+  margin-top: ${({ hasHeader, variant }) =>
+    hasHeader && variant === 'framed' ? themeCssVariables.spacing[2] : '0'};
 
-          ${isInPinnedTab &&
-          !isPageLayoutInEditMode &&
-          css`
-            border: none;
-            padding: 0;
-          `}
-        `;
+  min-height: ${({ isFixedHeight }) =>
+    isFixedHeight ? VERTICAL_LIST_IFRAME_HEIGHT : '0'};
 
-      default:
-        return '';
-    }
-  }}
+  overflow: ${({ isFixedHeight }) =>
+    isFixedHeight ? 'clip' : 'var(--widget-card-content-overflow, hidden)'};
+
+  padding-block: ${({ contentPadding, hasHeader, isEditable, variant }) =>
+    contentPadding === 'none'
+      ? '0'
+      : hasHeader && isWidgetCardFlushInViewMode({ isEditable, variant })
+        ? `${themeCssVariables.spacing[3]} ${themeCssVariables.spacing[2]}`
+        : themeCssVariables.spacing[2]};
+  padding-inline: ${({ contentPadding }) =>
+    contentPadding === 'none' ? '0' : 'var(--widget-card-padding-inline)'};
+
+  &:empty {
+    margin-top: 0;
+    padding: 0;
+  }
 `;
 
-export { StyledWidgetCardContent as WidgetCardContent };
+type WidgetCardContentProps = {
+  variant: WidgetCardVariant;
+  hasHeader: boolean;
+  isEditable: boolean;
+  hasInteractiveContent?: boolean;
+  isFixedHeight?: boolean;
+  contentPadding?: WidgetContentPadding;
+  children?: React.ReactNode;
+};
+
+export const WidgetCardContent = ({
+  variant,
+  hasHeader,
+  isEditable,
+  hasInteractiveContent = false,
+  isFixedHeight = false,
+  contentPadding = 'default',
+  children,
+}: WidgetCardContentProps) => {
+  const handleContentClick = (event: React.MouseEvent) => {
+    if (!isEditable || !hasInteractiveContent) {
+      return;
+    }
+
+    event.stopPropagation();
+  };
+
+  return (
+    <StyledWidgetCardContent
+      variant={variant}
+      hasHeader={hasHeader}
+      isEditable={isEditable}
+      isFixedHeight={isFixedHeight}
+      contentPadding={contentPadding}
+      onClick={handleContentClick}
+    >
+      {children}
+    </StyledWidgetCardContent>
+  );
+};

@@ -1,9 +1,17 @@
-import { SidePanelHeader } from '@/command-menu/components/SidePanelHeader';
-import { useFilteredObjectMetadataItems } from '@/object-metadata/hooks/useFilteredObjectMetadataItems';
-import { Select } from '@/ui/input/components/Select';
-import { type WorkflowFindRecordsAction } from '@/workflow/types/Workflow';
+import { styled } from '@linaria/react';
+import { i18n } from '@lingui/core';
+import { msg } from '@lingui/core/macro';
+import { useLingui } from '@lingui/react/macro';
+import { isNumber } from '@sniptt/guards';
 import { useEffect, useState } from 'react';
+import { QUERY_MAX_RECORDS } from 'twenty-shared/constants';
+import { isDefined } from 'twenty-shared/utils';
+import { HorizontalSeparator } from 'twenty-ui/layout';
+import { type JsonValue } from 'type-fest';
+import { useDebouncedCallback } from 'use-debounce';
 
+import { useFilteredObjectMetadataItems } from '@/object-metadata/hooks/useFilteredObjectMetadataItems';
+import { useObjectMetadataSelectHelpers } from '@/object-metadata/hooks/useObjectMetadataSelectHelpers';
 import { useObjectPermissions } from '@/object-record/hooks/useObjectPermissions';
 import { turnSortsIntoOrderBy } from '@/object-record/object-sort-dropdown/utils/turnSortsIntoOrderBy';
 import { FormNumberFieldInput } from '@/object-record/record-field/ui/form-types/components/FormNumberFieldInput';
@@ -14,22 +22,34 @@ import { type RecordFilter } from '@/object-record/record-filter/types/RecordFil
 import { RecordIndexContextProvider } from '@/object-record/record-index/contexts/RecordIndexContext';
 import { useRecordIndexFieldMetadataDerivedStates } from '@/object-record/record-index/hooks/useRecordIndexFieldMetadataDerivedStates';
 import { type RecordSort } from '@/object-record/record-sort/types/RecordSort';
-import { InputLabel } from '@/ui/input/components/InputLabel';
+import { InputLabel } from 'twenty-ui/input';
+import { SelectControl } from '@/ui/input/components/SelectControl';
+import { Dropdown } from '@/ui/layout/dropdown/components/Dropdown';
+import { useCloseDropdown } from '@/ui/layout/dropdown/hooks/useCloseDropdown';
+import { type WorkflowFindRecordsAction } from '@/workflow/types/Workflow';
 import { WorkflowStepBody } from '@/workflow/workflow-steps/components/WorkflowStepBody';
 import { WorkflowStepFooter } from '@/workflow/workflow-steps/components/WorkflowStepFooter';
-import { FIND_RECORDS_ACTION } from '@/workflow/workflow-steps/workflow-actions/constants/actions/FindRecordsAction';
 import { WorkflowFindRecordsFilters } from '@/workflow/workflow-steps/workflow-actions/find-records-action/components/WorkflowFindRecordsFilters';
 import { WorkflowFindRecordsFiltersEffect } from '@/workflow/workflow-steps/workflow-actions/find-records-action/components/WorkflowFindRecordsFiltersEffect';
 import { WorkflowFindRecordsSorts } from '@/workflow/workflow-steps/workflow-actions/find-records-action/components/WorkflowFindRecordsSorts';
-import { useWorkflowActionHeader } from '@/workflow/workflow-steps/workflow-actions/hooks/useWorkflowActionHeader';
-import { useLingui } from '@lingui/react/macro';
-import { isNumber } from '@sniptt/guards';
-import { QUERY_MAX_RECORDS } from 'twenty-shared/constants';
-import { isDefined } from 'twenty-shared/utils';
-import { HorizontalSeparator, useIcons } from 'twenty-ui/display';
-import { type SelectOption } from 'twenty-ui/input';
-import { type JsonValue } from 'type-fest';
-import { useDebouncedCallback } from 'use-debounce';
+import { WorkflowObjectDropdownContent } from '@/workflow/workflow-steps/workflow-actions/find-records-action/components/WorkflowObjectDropdownContent';
+import { isStandaloneVariableString } from 'twenty-shared/workflow';
+import { WorkflowVariablePicker } from '@/workflow/workflow-variables/components/WorkflowVariablePicker';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
+
+const StyledLabel = styled.span`
+  color: ${themeCssVariables.font.color.light};
+  display: block;
+  font-size: ${themeCssVariables.font.size.xs};
+  font-weight: ${themeCssVariables.font.weight.semiBold};
+  margin-bottom: ${themeCssVariables.spacing[1]};
+`;
+
+const StyledRecordTypeSelectContainer = styled.div<{ fullWidth?: boolean }>`
+  width: ${({ fullWidth }) => (fullWidth ? '100%' : 'auto')};
+`;
+
+const defaultSelectedOptionMessage = msg`Select an option`;
 
 type WorkflowEditActionFindRecordsProps = {
   action: WorkflowFindRecordsAction;
@@ -47,13 +67,13 @@ type FindRecordsFormData = {
   objectNameSingular: string;
   filter?: FindRecordsActionFilter;
   orderBy?: FindRecordsActionOrderBy;
-  limit?: number;
+  limit?: number | string;
+  offset?: number | string;
 };
 
 export type FindRecordsActionFilter = {
   recordFilterGroups?: RecordFilterGroup[];
   recordFilters?: RecordFilter[];
-  gqlOperationFilter?: JsonValue;
 };
 
 export type FindRecordsActionOrderBy = {
@@ -65,40 +85,48 @@ export const WorkflowEditActionFindRecords = ({
   action,
   actionOptions,
 }: WorkflowEditActionFindRecordsProps) => {
-  const { getIcon } = useIcons();
   const { t } = useLingui();
+  const { getSelectIconPropsFromObjectMetadataItem } =
+    useObjectMetadataSelectHelpers();
   const maxRecordsFormatted = QUERY_MAX_RECORDS.toLocaleString();
 
-  const { activeNonSystemObjectMetadataItems } =
-    useFilteredObjectMetadataItems();
+  const dropdownId = 'workflow-edit-action-record-find-records-object-name';
 
-  const availableMetadata: Array<SelectOption<string>> =
-    activeNonSystemObjectMetadataItems.map((item) => ({
-      Icon: getIcon(item.icon),
-      label: item.labelPlural,
-      value: item.nameSingular,
-    }));
+  const { closeDropdown } = useCloseDropdown();
+
+  const { objectMetadataItems } = useFilteredObjectMetadataItems();
 
   const [formData, setFormData] = useState<FindRecordsFormData>(() => ({
     objectNameSingular: action.settings.input.objectName,
-    limit:
-      isNumber(action.settings.input.limit) &&
-      action.settings.input.limit > QUERY_MAX_RECORDS
-        ? QUERY_MAX_RECORDS
-        : (action.settings.input.limit ?? 1),
+    limit: isNumber(action.settings.input.limit)
+      ? Math.min(action.settings.input.limit, QUERY_MAX_RECORDS)
+      : isStandaloneVariableString(action.settings.input.limit)
+        ? action.settings.input.limit
+        : 1,
+    offset: isNumber(action.settings.input.offset)
+      ? Math.max(0, Math.floor(action.settings.input.offset))
+      : isStandaloneVariableString(action.settings.input.offset)
+        ? action.settings.input.offset
+        : 0,
     filter: action.settings.input.filter as FindRecordsActionFilter,
     orderBy: action.settings.input.orderBy as FindRecordsActionOrderBy,
   }));
+
   const [limitError, setLimitError] = useState<string | undefined>(undefined);
+  const [offsetError, setOffsetError] = useState<string | undefined>(undefined);
   const isFormDisabled = actionOptions.readonly ?? false;
   const instanceId = `workflow-edit-action-record-find-records-${action.id}-${formData.objectNameSingular}`;
 
-  const selectedObjectMetadataItem = activeNonSystemObjectMetadataItems.find(
+  const selectedObjectMetadataItem = objectMetadataItems.find(
     (item) => item.nameSingular === formData.objectNameSingular,
   );
-
-  const selectedObjectMetadataItemNameSingular =
-    selectedObjectMetadataItem?.nameSingular ?? '';
+  const selectedOption = selectedObjectMetadataItem
+    ? {
+        label: selectedObjectMetadataItem.labelPlural,
+        value: selectedObjectMetadataItem.nameSingular,
+        ...getSelectIconPropsFromObjectMetadataItem(selectedObjectMetadataItem),
+      }
+    : { label: i18n._(defaultSelectedOptionMessage), value: '' };
 
   const { objectPermissionsByObjectMetadataId } = useObjectPermissions();
 
@@ -121,6 +149,7 @@ export const WorkflowEditActionFindRecords = ({
       const {
         objectNameSingular: updatedObjectName,
         limit: updatedLimit,
+        offset: updatedOffset,
         filter: updatedFilter,
         orderBy: updatedOrderBy,
       } = formData;
@@ -132,6 +161,9 @@ export const WorkflowEditActionFindRecords = ({
           input: {
             objectName: updatedObjectName,
             limit: updatedLimit ?? 1,
+            offset: isNumber(updatedOffset)
+              ? Math.max(0, Math.floor(updatedOffset))
+              : (updatedOffset ?? 0),
             filter: updatedFilter,
             orderBy: updatedOrderBy as Record<string, any[]> | undefined,
           },
@@ -147,53 +179,47 @@ export const WorkflowEditActionFindRecords = ({
     };
   }, [saveAction]);
 
-  const { headerTitle, headerIcon, headerIconColor, headerType } =
-    useWorkflowActionHeader({
-      action,
-      defaultTitle: FIND_RECORDS_ACTION.defaultLabel,
-    });
+  const handleOptionClick = (value: string) => {
+    if (actionOptions.readonly === true) {
+      return;
+    }
+
+    const newFormData: FindRecordsFormData = {
+      objectNameSingular: value,
+      limit: formData.limit,
+      offset: formData.offset,
+    };
+
+    setFormData(newFormData);
+    saveAction(newFormData);
+    closeDropdown(dropdownId);
+  };
 
   return (
     <>
-      <SidePanelHeader
-        onTitleChange={(newName: string) => {
-          if (actionOptions.readonly === true) {
-            return;
-          }
-
-          actionOptions.onActionUpdate({
-            ...action,
-            name: newName,
-          });
-        }}
-        Icon={getIcon(headerIcon)}
-        iconColor={headerIconColor}
-        initialTitle={headerTitle}
-        headerType={headerType}
-        disabled={isFormDisabled}
-        iconTooltip={FIND_RECORDS_ACTION.defaultLabel}
-      />
       <WorkflowStepBody>
-        <Select
-          dropdownId="workflow-edit-action-record-find-records-object-name"
-          label="Object"
-          fullWidth
-          disabled={isFormDisabled}
-          value={selectedObjectMetadataItemNameSingular}
-          emptyOption={{ label: 'Select an option', value: '' }}
-          options={availableMetadata}
-          onChange={(objectNameSingular) => {
-            const newFormData: FindRecordsFormData = {
-              objectNameSingular,
-              limit: 1,
-            };
-
-            setFormData(newFormData);
-
-            saveAction(newFormData);
-          }}
-          withSearchInput
-        />
+        <StyledRecordTypeSelectContainer fullWidth>
+          <StyledLabel>{t`Object`}</StyledLabel>
+          <Dropdown
+            dropdownId={dropdownId}
+            dropdownPlacement="bottom-start"
+            clickableComponent={
+              <SelectControl
+                isDisabled={isFormDisabled}
+                selectedOption={selectedOption}
+              />
+            }
+            dropdownComponents={
+              !isFormDisabled && (
+                <WorkflowObjectDropdownContent
+                  dropdownId={dropdownId}
+                  onOptionClick={handleOptionClick}
+                />
+              )
+            }
+            dropdownOffset={{ y: 4 }}
+          />
+        </StyledRecordTypeSelectContainer>
 
         <HorizontalSeparator noMargin />
         {isDefined(selectedObjectMetadataItem) && (
@@ -262,7 +288,11 @@ export const WorkflowEditActionFindRecords = ({
 
                   const gqlOperationOrderBy =
                     sorts.length > 0
-                      ? turnSortsIntoOrderBy(selectedObjectMetadataItem, sorts)
+                      ? turnSortsIntoOrderBy(
+                          selectedObjectMetadataItem,
+                          sorts,
+                          objectMetadataItems,
+                        )
                       : undefined;
 
                   const newFormData: FindRecordsFormData = {
@@ -290,12 +320,26 @@ export const WorkflowEditActionFindRecords = ({
           readonly={isFormDisabled}
           hint={t`This action can return up to ${maxRecordsFormatted} records.`}
           error={limitError}
+          VariablePicker={WorkflowVariablePicker}
           onChange={(limit) => {
-            if (isFormDisabled === true || !isNumber(limit)) {
+            if (isFormDisabled === true) {
               return;
             }
 
-            const normalizedLimit = Math.floor(limit);
+            if (isStandaloneVariableString(limit)) {
+              setLimitError(undefined);
+
+              const newFormData: FindRecordsFormData = {
+                ...formData,
+                limit,
+              };
+
+              setFormData(newFormData);
+              saveAction(newFormData);
+              return;
+            }
+
+            const normalizedLimit = isNumber(limit) ? Math.floor(limit) : 1;
 
             if (normalizedLimit <= 0) {
               setLimitError(t`Limit must be greater than 0.`);
@@ -313,6 +357,52 @@ export const WorkflowEditActionFindRecords = ({
             const newFormData: FindRecordsFormData = {
               ...formData,
               limit: cappedLimit,
+            };
+
+            setFormData(newFormData);
+
+            saveAction(newFormData);
+          }}
+        />
+
+        <FormNumberFieldInput
+          label={t`Offset`}
+          defaultValue={formData.offset}
+          placeholder={t`Enter offset`}
+          readonly={isFormDisabled}
+          hint={t`Number of records to skip. Combine with Limit to page through results.`}
+          error={offsetError}
+          VariablePicker={WorkflowVariablePicker}
+          onChange={(offset) => {
+            if (isFormDisabled === true) {
+              return;
+            }
+
+            if (isStandaloneVariableString(offset)) {
+              setOffsetError(undefined);
+
+              const newFormData: FindRecordsFormData = {
+                ...formData,
+                offset,
+              };
+
+              setFormData(newFormData);
+              saveAction(newFormData);
+              return;
+            }
+
+            const normalizedOffset = isNumber(offset) ? Math.floor(offset) : 0;
+
+            if (normalizedOffset < 0) {
+              setOffsetError(t`Offset cannot be negative.`);
+              return;
+            }
+
+            setOffsetError(undefined);
+
+            const newFormData: FindRecordsFormData = {
+              ...formData,
+              offset: normalizedOffset,
             };
 
             setFormData(newFormData);

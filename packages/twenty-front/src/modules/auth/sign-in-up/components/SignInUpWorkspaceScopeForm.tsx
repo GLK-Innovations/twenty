@@ -1,3 +1,4 @@
+import { StyledOnboardingContentContainer } from '@/auth/components/StyledOnboardingContentContainer';
 import { SignInUpWithCredentials } from '@/auth/sign-in-up/components/internal/SignInUpWithCredentials';
 import { SignInUpWithGoogle } from '@/auth/sign-in-up/components/internal/SignInUpWithGoogle';
 import { SignInUpWithMicrosoft } from '@/auth/sign-in-up/components/internal/SignInUpWithMicrosoft';
@@ -9,22 +10,15 @@ import { useWorkspaceBypass } from '@/auth/sign-in-up/hooks/useWorkspaceBypass';
 import { SignInUpStep } from '@/auth/states/signInUpStepState';
 import { workspaceAuthBypassProvidersState } from '@/workspace/states/workspaceAuthBypassProvidersState';
 import { workspaceAuthProvidersState } from '@/workspace/states/workspaceAuthProvidersState';
-import styled from '@emotion/styled';
 import { Trans } from '@lingui/react/macro';
 import { FormProvider } from 'react-hook-form';
-import { useRecoilValue } from 'recoil';
-import { HorizontalSeparator } from 'twenty-ui/display';
+import { HorizontalSeparator } from 'twenty-ui/layout';
 import { ClickToActionLink } from 'twenty-ui/navigation';
-
-const StyledContentContainer = styled.div`
-  margin-bottom: ${({ theme }) => theme.spacing(8)};
-  margin-top: ${({ theme }) => theme.spacing(4)};
-  min-width: 200px;
-`;
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 
 export const SignInUpWorkspaceScopeForm = () => {
-  const workspaceAuthProviders = useRecoilValue(workspaceAuthProvidersState);
-  const workspaceAuthBypassProviders = useRecoilValue(
+  const workspaceAuthProviders = useAtomStateValue(workspaceAuthProvidersState);
+  const workspaceAuthBypassProviders = useAtomStateValue(
     workspaceAuthBypassProvidersState,
   );
   const { shouldOfferBypass, shouldUseBypass } = useWorkspaceBypass();
@@ -49,7 +43,7 @@ export const SignInUpWorkspaceScopeForm = () => {
 
   return (
     <>
-      <StyledContentContainer>
+      <StyledOnboardingContentContainer>
         {providers.google && <SignInUpWithGoogle action="join-workspace" />}
 
         {providers.microsoft && (
@@ -65,12 +59,12 @@ export const SignInUpWorkspaceScopeForm = () => {
           <HorizontalSeparator />
         ) : null}
         {providers.password && (
-          // eslint-disable-next-line react/jsx-props-no-spreading
+          // oxlint-disable-next-line react/jsx-props-no-spreading
           <FormProvider {...form}>
             <SignInUpWithCredentials />
           </FormProvider>
         )}
-      </StyledContentContainer>
+      </StyledOnboardingContentContainer>
       {signInUpStep === SignInUpStep.Password && (
         <ClickToActionLink
           onClick={handleResetPassword(form.getValues('email'))}

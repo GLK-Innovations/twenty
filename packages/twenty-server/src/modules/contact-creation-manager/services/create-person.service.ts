@@ -1,16 +1,16 @@
 import { Injectable } from '@nestjs/common';
 
+import { type FullNameMetadata } from 'twenty-shared/types';
 import { DeepPartial } from 'typeorm';
 
-import { type WorkspaceRepository } from 'src/engine/twenty-orm/repository/workspace.repository';
-import { TwentyORMGlobalManager } from 'src/engine/twenty-orm/twenty-orm-global.manager';
+import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
+import { type WorkspaceRepository } from 'src/engine/twenty-orm/repository/workspace-repository';
+import { buildSystemAuthContext } from 'src/engine/twenty-orm/utils/build-system-auth-context.util';
 import { PersonWorkspaceEntity } from 'src/modules/person/standard-objects/person.workspace-entity';
 
 @Injectable()
 export class CreatePersonService {
-  constructor(
-    private readonly twentyORMGlobalManager: TwentyORMGlobalManager,
-  ) {}
+  constructor(private readonly workspaceOrmManager: WorkspaceOrmManager) {}
 
   public async createPeople(
     peopleToCreate: Partial<PersonWorkspaceEntity>[],
@@ -18,28 +18,26 @@ export class CreatePersonService {
   ): Promise<DeepPartial<PersonWorkspaceEntity>[]> {
     if (peopleToCreate.length === 0) return [];
 
-    const personRepository =
-      await this.twentyORMGlobalManager.getRepositoryForWorkspace(
-        workspaceId,
+    const authContext = buildSystemAuthContext(workspaceId);
+
+    return this.workspaceOrmManager.executeInWorkspaceContext(async () => {
+      const personRepository = this.workspaceOrmManager.getRepository(
         PersonWorkspaceEntity,
-        {
-          shouldBypassPermissionChecks: true,
-        },
+        { shouldBypassPermissionChecks: true },
       );
 
-    const lastPersonPosition =
-      await this.getLastPersonPosition(personRepository);
+      const lastPersonPosition =
+        await this.getLastPersonPosition(personRepository);
 
-    const createdPeople = await personRepository.insert(
-      peopleToCreate.map((person, index) => ({
-        ...person,
-        position: lastPersonPosition + index,
-      })),
-      undefined,
-      ['companyId', 'id'],
-    );
+      const createdPeople = await personRepository.insert(
+        peopleToCreate.map((person, index) => ({
+          ...person,
+          position: lastPersonPosition + index,
+        })),
+      );
 
-    return createdPeople.raw;
+      return createdPeople.raw;
+    }, authContext);
   }
 
   public async restorePeople(
@@ -50,28 +48,57 @@ export class CreatePersonService {
       return [];
     }
 
-    const personRepository =
-      await this.twentyORMGlobalManager.getRepositoryForWorkspace(
-        workspaceId,
+    const authContext = buildSystemAuthContext(workspaceId);
+
+    return this.workspaceOrmManager.executeInWorkspaceContext(async () => {
+      const personRepository = this.workspaceOrmManager.getRepository(
         PersonWorkspaceEntity,
         {
           shouldBypassPermissionChecks: true,
         },
       );
 
-    const restoredPeople = await personRepository.updateMany(
-      people.map(({ personId, companyId }) => ({
-        criteria: personId,
-        partialEntity: {
-          deletedAt: null,
-          companyId,
-        },
-      })),
-      undefined,
-      ['companyId', 'id'],
-    );
+      const restoredPeople = await personRepository.updateMany(
+        people.map(({ personId, companyId }) => ({
+          criteria: personId,
+          partialEntity: {
+            deletedAt: null,
+            companyId,
+          },
+        })),
+      );
 
-    return restoredPeople.raw;
+      return restoredPeople.raw;
+    }, authContext);
+  }
+
+  public async enrichPeopleNames(
+    peopleToEnrich: { personId: string; name: FullNameMetadata }[],
+    workspaceId: string,
+  ): Promise<DeepPartial<PersonWorkspaceEntity>[]> {
+    if (peopleToEnrich.length === 0) {
+      return [];
+    }
+
+    const authContext = buildSystemAuthContext(workspaceId);
+
+    return this.workspaceOrmManager.executeInWorkspaceContext(async () => {
+      const personRepository = this.workspaceOrmManager.getRepository(
+        PersonWorkspaceEntity,
+        {
+          shouldBypassPermissionChecks: true,
+        },
+      );
+
+      const enrichedPeople = await personRepository.updateMany(
+        peopleToEnrich.map(({ personId, name }) => ({
+          criteria: personId,
+          partialEntity: { name },
+        })),
+      );
+
+      return enrichedPeople.raw;
+    }, authContext);
   }
 
   private async getLastPersonPosition(

@@ -1,4 +1,9 @@
+import { useCallback, useRef } from 'react';
+import { useStore } from 'jotai';
+
+import { useObjectMetadataItems } from '@/object-metadata/hooks/useObjectMetadataItems';
 import { useObjectPermissionsForObject } from '@/object-record/hooks/useObjectPermissionsForObject';
+import { canCreateRecordsForObjectMetadataItem } from '@/object-record/utils/canCreateRecordsForObjectMetadataItem';
 import { MultipleRecordPickerItemsDisplay } from '@/object-record/record-picker/multiple-record-picker/components/MultipleRecordPickerItemsDisplay';
 import { MultipleRecordPickerOnClickOutsideEffect } from '@/object-record/record-picker/multiple-record-picker/components/MultipleRecordPickerOnClickOutsideEffect';
 import { MultipleRecordPickerSearchInput } from '@/object-record/record-picker/multiple-record-picker/components/MultipleRecordPickerSearchInput';
@@ -13,12 +18,11 @@ import { DropdownContent } from '@/ui/layout/dropdown/components/DropdownContent
 import { DropdownMenuItemsContainer } from '@/ui/layout/dropdown/components/DropdownMenuItemsContainer';
 import { useSelectableList } from '@/ui/layout/selectable-list/hooks/useSelectableList';
 import { useHotkeysOnFocusedElement } from '@/ui/utilities/hotkey/hooks/useHotkeysOnFocusedElement';
-import { useRecoilComponentCallbackState } from '@/ui/utilities/state/component-state/hooks/useRecoilComponentCallbackState';
-import { useRef } from 'react';
-import { useRecoilCallback } from 'recoil';
+import { useAtomComponentStateCallbackState } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateCallbackState';
 import { Key } from 'ts-key-enum';
 import { isDefined } from 'twenty-shared/utils';
-import { IconPlus } from 'twenty-ui/display';
+import { t } from '@lingui/core/macro';
+import { IconPlus } from 'twenty-ui/icon';
 
 type MultipleRecordPickerProps = {
   onChange?: (morphItem: RecordPickerPickableMorphItem) => void;
@@ -50,29 +54,28 @@ export const MultipleRecordPicker = ({
     selectableListComponentInstanceId,
   );
 
-  const multipleRecordPickerSearchFilterState = useRecoilComponentCallbackState(
-    multipleRecordPickerSearchFilterComponentState,
-    componentInstanceId,
-  );
+  const multipleRecordPickerSearchFilterState =
+    useAtomComponentStateCallbackState(
+      multipleRecordPickerSearchFilterComponentState,
+      componentInstanceId,
+    );
 
   const multipleRecordPickerPickableMorphItemsState =
-    useRecoilComponentCallbackState(
+    useAtomComponentStateCallbackState(
       multipleRecordPickerPickableMorphItemsComponentState,
       componentInstanceId,
     );
 
-  const resetState = useRecoilCallback(
-    ({ set }) => {
-      return () => {
-        set(multipleRecordPickerPickableMorphItemsState, []);
-        set(multipleRecordPickerSearchFilterState, '');
-      };
-    },
-    [
-      multipleRecordPickerPickableMorphItemsState,
-      multipleRecordPickerSearchFilterState,
-    ],
-  );
+  const store = useStore();
+
+  const resetState = useCallback(() => {
+    store.set(multipleRecordPickerPickableMorphItemsState, []);
+    store.set(multipleRecordPickerSearchFilterState, '');
+  }, [
+    multipleRecordPickerPickableMorphItemsState,
+    multipleRecordPickerSearchFilterState,
+    store,
+  ]);
 
   const handleSubmit = () => {
     onSubmit?.();
@@ -96,29 +99,38 @@ export const MultipleRecordPicker = ({
 
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const handleCreateNewButtonClick = useRecoilCallback(
-    ({ snapshot }) => {
-      return () => {
-        const recordPickerSearchFilter = snapshot
-          .getLoadable(multipleRecordPickerSearchFilterState)
-          .getValue();
-        onCreate?.(recordPickerSearchFilter);
-      };
-    },
-    [multipleRecordPickerSearchFilterState, onCreate],
+  const handleCreateNewButtonClick = useCallback(() => {
+    const recordPickerSearchFilter = store.get(
+      multipleRecordPickerSearchFilterState,
+    );
+    onCreate?.(recordPickerSearchFilter);
+  }, [multipleRecordPickerSearchFilterState, onCreate, store]);
+
+  const objectPermissionsForCreate = useObjectPermissionsForObject(
+    objectMetadataItemIdForCreate ?? '',
   );
 
-  const hasCreatePermissionOnObjectForCreate = useObjectPermissionsForObject(
-    objectMetadataItemIdForCreate ?? '',
-  ).canUpdateObjectRecords;
+  const { objectMetadataItems } = useObjectMetadataItems();
+
+  const objectMetadataItemForCreate = objectMetadataItems.find(
+    (objectMetadataItem) =>
+      objectMetadataItem.id === objectMetadataItemIdForCreate,
+  );
+
+  const canCreateRecordForCreate =
+    isDefined(objectMetadataItemForCreate) &&
+    canCreateRecordsForObjectMetadataItem({
+      objectPermissions: objectPermissionsForCreate,
+      objectMetadataItem: objectMetadataItemForCreate,
+    });
 
   const createNewButtonSection =
-    isDefined(onCreate) && hasCreatePermissionOnObjectForCreate ? (
+    isDefined(onCreate) && canCreateRecordForCreate ? (
       <DropdownMenuItemsContainer scrollable={false}>
         <CreateNewButton
           onClick={handleCreateNewButtonClick}
           LeftIcon={IconPlus}
-          text="Add New"
+          text={t`Add New`}
         />
       </DropdownMenuItemsContainer>
     ) : null;

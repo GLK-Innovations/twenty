@@ -1,5 +1,5 @@
-import styled from '@emotion/styled';
-import { type DropResult } from '@hello-pangea/dnd';
+import { styled } from '@linaria/react';
+import { type DraggableListDropResult } from '@/ui/layout/draggable-list/types/DraggableListDropResult';
 import { type MouseEvent, useCallback } from 'react';
 
 import { useContextStoreObjectMetadataItemOrThrow } from '@/context-store/hooks/useContextStoreObjectMetadataItemOrThrow';
@@ -10,25 +10,26 @@ import { DropdownMenuItemsContainer } from '@/ui/layout/dropdown/components/Drop
 import { DropdownMenuSectionLabel } from '@/ui/layout/dropdown/components/DropdownMenuSectionLabel';
 import { DropdownMenuSeparator } from '@/ui/layout/dropdown/components/DropdownMenuSeparator';
 import { useCloseDropdown } from '@/ui/layout/dropdown/hooks/useCloseDropdown';
-import { useSetRecoilComponentState } from '@/ui/utilities/state/component-state/hooks/useSetRecoilComponentState';
-import { usePersistView } from '@/views/hooks/internal/usePersistView';
+import { useSetAtomComponentState } from '@/ui/utilities/state/jotai/hooks/useSetAtomComponentState';
+import { useAtomFamilySelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomFamilySelectorValue';
+import { usePerformViewAPIUpdate } from '@/views/hooks/internal/usePerformViewAPIUpdate';
 import { useChangeView } from '@/views/hooks/useChangeView';
 import { useGetCurrentViewOnly } from '@/views/hooks/useGetCurrentViewOnly';
 import { useOpenCreateViewDropdown } from '@/views/hooks/useOpenCreateViewDropown';
-import { coreViewsFromObjectMetadataItemFamilySelector } from '@/views/states/selectors/coreViewsFromObjectMetadataItemFamilySelector';
+import { viewsFromObjectMetadataItemFamilySelector } from '@/views/states/selectors/viewsFromObjectMetadataItemFamilySelector';
 import { ViewPickerOptionDropdown } from '@/views/view-picker/components/ViewPickerOptionDropdown';
 import { VIEW_PICKER_DROPDOWN_ID } from '@/views/view-picker/constants/ViewPickerDropdownId';
 import { useViewPickerMode } from '@/views/view-picker/hooks/useViewPickerMode';
 import { viewPickerReferenceViewIdComponentState } from '@/views/view-picker/states/viewPickerReferenceViewIdComponentState';
 import { useLingui } from '@lingui/react/macro';
-import { useRecoilValue } from 'recoil';
-import { IconPlus } from 'twenty-ui/display';
+import { IconPlus } from 'twenty-ui/icon';
 import { MenuItem } from 'twenty-ui/navigation';
+import { themeCssVariables } from 'twenty-ui/theme-constants';
 import { ViewVisibility } from '~/generated-metadata/graphql';
 import { moveArrayItem } from '~/utils/array/moveArrayItem';
 
-const StyledBoldDropdownMenuItemsContainer = styled(DropdownMenuItemsContainer)`
-  font-weight: ${({ theme }) => theme.font.weight.regular};
+const StyledBoldDropdownMenuItemsContainerWrapper = styled.div`
+  font-weight: ${themeCssVariables.font.weight.regular};
 `;
 
 export const ViewPickerListContent = () => {
@@ -36,10 +37,9 @@ export const ViewPickerListContent = () => {
 
   const { objectMetadataItem } = useContextStoreObjectMetadataItemOrThrow();
 
-  const viewsOnCurrentObject = useRecoilValue(
-    coreViewsFromObjectMetadataItemFamilySelector({
-      objectMetadataItemId: objectMetadataItem.id,
-    }),
+  const viewsOnCurrentObject = useAtomFamilySelectorValue(
+    viewsFromObjectMetadataItemFamilySelector,
+    { objectMetadataItemId: objectMetadataItem.id },
   );
 
   const workspaceViews = viewsOnCurrentObject.filter(
@@ -50,18 +50,20 @@ export const ViewPickerListContent = () => {
     (view) => view.visibility === ViewVisibility.UNLISTED,
   );
 
+  const isLastView = viewsOnCurrentObject.length <= 1;
+
   const shouldShowSectionLabels =
     workspaceViews.length > 0 && unlistedViews.length > 0;
 
   const { currentView } = useGetCurrentViewOnly();
 
-  const setViewPickerReferenceViewId = useSetRecoilComponentState(
+  const setViewPickerReferenceViewId = useSetAtomComponentState(
     viewPickerReferenceViewIdComponentState,
   );
 
   const { setViewPickerMode } = useViewPickerMode();
 
-  const { updateView } = usePersistView();
+  const { performViewAPIUpdate } = usePerformViewAPIUpdate();
   const { changeView } = useChangeView();
 
   const { closeDropdown } = useCloseDropdown();
@@ -87,7 +89,7 @@ export const ViewPickerListContent = () => {
   };
 
   const handleWorkspaceDragEnd = useCallback(
-    async (result: DropResult) => {
+    async (result: DraggableListDropResult) => {
       if (!result.destination) return;
 
       const viewsReordered = moveArrayItem(workspaceViews, {
@@ -98,16 +100,19 @@ export const ViewPickerListContent = () => {
       Promise.all(
         viewsReordered.map(async (view, index) => {
           if (view.position !== index) {
-            await updateView({ id: view.id, input: { position: index } });
+            await performViewAPIUpdate({
+              id: view.id,
+              input: { position: index },
+            });
           }
         }),
       );
     },
-    [updateView, workspaceViews],
+    [performViewAPIUpdate, workspaceViews],
   );
 
   const handleUnlistedDragEnd = useCallback(
-    async (result: DropResult) => {
+    async (result: DraggableListDropResult) => {
       if (!result.destination) return;
 
       const viewsReordered = moveArrayItem(unlistedViews, {
@@ -118,12 +123,15 @@ export const ViewPickerListContent = () => {
       Promise.all(
         viewsReordered.map(async (view, index) => {
           if (view.position !== index) {
-            await updateView({ id: view.id, input: { position: index } });
+            await performViewAPIUpdate({
+              id: view.id,
+              input: { position: index },
+            });
           }
         }),
       );
     },
-    [updateView, unlistedViews],
+    [performViewAPIUpdate, unlistedViews],
   );
 
   return (
@@ -138,6 +146,7 @@ export const ViewPickerListContent = () => {
               onDragEnd={handleWorkspaceDragEnd}
               draggableItems={workspaceViews.map((view, index) => {
                 const isIndexView = view.key === 'INDEX';
+                const isCurrentView = currentView?.id === view.id;
                 return (
                   <DraggableItem
                     key={view.id}
@@ -146,10 +155,12 @@ export const ViewPickerListContent = () => {
                     isDragDisabled={workspaceViews.length === 1}
                     itemComponent={
                       <ViewPickerOptionDropdown
-                        view={{ ...view, __typename: 'View' }}
+                        view={view}
                         handleViewSelect={handleViewSelect}
                         isIndexView={isIndexView}
+                        isLastView={isLastView}
                         onEdit={handleEditViewButtonClick}
+                        isCurrentView={isCurrentView}
                       />
                     }
                   />
@@ -170,6 +181,7 @@ export const ViewPickerListContent = () => {
               onDragEnd={handleUnlistedDragEnd}
               draggableItems={unlistedViews.map((view, index) => {
                 const isIndexView = view.key === 'INDEX';
+                const isCurrentView = currentView?.id === view.id;
                 return (
                   <DraggableItem
                     key={view.id}
@@ -178,10 +190,12 @@ export const ViewPickerListContent = () => {
                     isDragDisabled={unlistedViews.length === 1}
                     itemComponent={
                       <ViewPickerOptionDropdown
-                        view={{ ...view, __typename: 'View' }}
+                        view={view}
                         handleViewSelect={handleViewSelect}
                         isIndexView={isIndexView}
+                        isLastView={isLastView}
                         onEdit={handleEditViewButtonClick}
+                        isCurrentView={isCurrentView}
                       />
                     }
                   />
@@ -192,13 +206,15 @@ export const ViewPickerListContent = () => {
         </>
       )}
       <DropdownMenuSeparator />
-      <StyledBoldDropdownMenuItemsContainer scrollable={false}>
-        <MenuItem
-          onClick={handleAddViewButtonClick}
-          LeftIcon={IconPlus}
-          text={t`Add view`}
-        />
-      </StyledBoldDropdownMenuItemsContainer>
+      <StyledBoldDropdownMenuItemsContainerWrapper>
+        <DropdownMenuItemsContainer scrollable={false}>
+          <MenuItem
+            onClick={handleAddViewButtonClick}
+            LeftIcon={IconPlus}
+            text={t`Add view`}
+          />
+        </DropdownMenuItemsContainer>
+      </StyledBoldDropdownMenuItemsContainerWrapper>
     </DropdownContent>
   );
 };

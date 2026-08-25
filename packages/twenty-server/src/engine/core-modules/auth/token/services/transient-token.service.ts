@@ -4,12 +4,14 @@ import { addMilliseconds } from 'date-fns';
 import ms from 'ms';
 
 import { type AuthToken } from 'src/engine/core-modules/auth/dto/auth-token.dto';
+import {
+  AuthException,
+  AuthExceptionCode,
+} from 'src/engine/core-modules/auth/auth.exception';
 import { JwtWrapperService } from 'src/engine/core-modules/jwt/services/jwt-wrapper.service';
 import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
-import {
-  type TransientTokenJwtPayload,
-  JwtTokenTypeEnum,
-} from 'src/engine/core-modules/auth/types/auth-context.type';
+import { type TransientTokenJwtPayload } from 'src/engine/core-modules/auth/types/transient-token-jwt-payload.type';
+import { JwtTokenTypeEnum } from 'src/engine/core-modules/auth/types/jwt-token-type.enum';
 
 @Injectable()
 export class TransientTokenService {
@@ -31,10 +33,6 @@ export class TransientTokenService {
       type: JwtTokenTypeEnum.LOGIN,
     };
 
-    const secret = this.jwtWrapperService.generateAppSecret(
-      jwtPayload.type,
-      workspaceId,
-    );
     const expiresIn = this.twentyConfigService.get(
       'SHORT_TERM_TOKEN_EXPIRES_IN',
     );
@@ -42,8 +40,7 @@ export class TransientTokenService {
     const expiresAt = addMilliseconds(new Date().getTime(), ms(expiresIn));
 
     return {
-      token: this.jwtWrapperService.sign(jwtPayload, {
-        secret,
+      token: await this.jwtWrapperService.signAsyncOrThrow(jwtPayload, {
         expiresIn,
       }),
       expiresAt,
@@ -53,13 +50,17 @@ export class TransientTokenService {
   async verifyTransientToken(
     transientToken: string,
   ): Promise<Omit<TransientTokenJwtPayload, 'type' | 'sub'>> {
-    await this.jwtWrapperService.verifyJwtToken(
-      transientToken,
-      JwtTokenTypeEnum.LOGIN,
-    );
+    await this.jwtWrapperService.verifyJwtToken(transientToken);
 
-    const { type: _type, ...payload } =
+    const { type, ...payload } =
       this.jwtWrapperService.decode<TransientTokenJwtPayload>(transientToken);
+
+    if (type !== JwtTokenTypeEnum.LOGIN) {
+      throw new AuthException(
+        'Expected a transient token',
+        AuthExceptionCode.INVALID_JWT_TOKEN_TYPE,
+      );
+    }
 
     return payload;
   }

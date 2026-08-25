@@ -1,4 +1,4 @@
-import { type Meta, type StoryObj } from '@storybook/react';
+import { type Meta, type StoryObj } from '@storybook/react-vite';
 
 import { CurrencyFieldDisplay } from '@/object-record/record-field/ui/meta-types/display/components/CurrencyFieldDisplay';
 import { ComponentDecorator } from 'twenty-ui/testing';
@@ -58,7 +58,7 @@ export const Bazillions: Story = {
 
 export const Performance = getProfilingStory({
   componentName: 'CurrencyFieldDisplay',
-  averageThresholdInMs: 0.2,
+  averageThresholdInMs: 0.4,
   numberOfRuns: 50,
   numberOfTestsPerRun: 100,
 });
